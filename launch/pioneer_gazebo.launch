@@ -1,0 +1,4 @@
+<launch>
+  <include file="$(find pioneer_gazebo)/launch/frontier_exploration_world.launch"/>
+  <include file="$(find pioneer_description)/launch/frontier_map.launch"/>
+</launch>

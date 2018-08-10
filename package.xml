@@ -1,0 +1,17 @@
+<package>
+  <name>crowdbot_active_slam</name>
+  <version>0.1.0</version>
+  <description>crowdbot_active_slam</description>
+  <maintainer email="dmammolo@student.ethz.ch">Dario Mammolo</maintainer>
+
+  <license>BSD</license>
+
+  <author email="dmammolo@student.ethz.ch">Dario Mammolo</author>
+
+  <buildtool_depend>catkin</buildtool_depend>
+
+  <run_depend>pioneer_description</run_depend>
+
+  <export>
+  </export>
+</package>
