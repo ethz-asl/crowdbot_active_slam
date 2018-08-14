@@ -6,6 +6,13 @@
 
 #include <ros/ros.h>
 #include <geometry_msgs/Pose2D.h>
+#include <geometry_msgs/PoseStamped.h>
+#include <geometry_msgs/Pose.h>
+#include <geometry_msgs/Point.h>
+#include <geometry_msgs/Quaternion.h>
+#include <tf/tf.h>
+#include <tf/transform_datatypes.h>
+#include <nav_msgs/Path.h>
 
 #include <gtsam/nonlinear/NonlinearFactorGraph.h>
 #include <gtsam/slam/PriorFactor.h>
@@ -20,6 +27,7 @@ public:
   GraphOptimiser(ros::NodeHandle nh);
   ~GraphOptimiser();
   void initParams();
+  geometry_msgs::PoseStamped createPoseStamped(gtsam::Pose2 pose2);
   void scanMatcherCallback(const geometry_msgs::Pose2D::ConstPtr& pose_msg);
 
 private:
@@ -29,9 +37,11 @@ private:
   double dist_linear_sq_;
   bool first_scan_pose_;
   int node_counter_;
-  geometry_msgs::Pose2D prev_pose_;
-  geometry_msgs::Pose2D current_pose_;
-  ros::Subscriber pose_sub;
+  gtsam::Pose2 prev_pose2_;
+  gtsam::Pose2 current_pose2_;
+  nav_msgs::Path graph_path_;
+  ros::Subscriber pose_sub_;
+  ros::Publisher path_pub_;
 
   gtsam::NonlinearFactorGraph graph_;
   gtsam::noiseModel::Diagonal::shared_ptr scan_match_noise_;
