@@ -15,6 +15,8 @@
 #include <geometry_msgs/Point.h>
 #include <geometry_msgs/Quaternion.h>
 #include <tf/tf.h>
+#include <tf/transform_broadcaster.h>
+#include <tf/transform_listener.h>
 #include <tf/transform_datatypes.h>
 #include <nav_msgs/Path.h>
 
@@ -31,7 +33,7 @@ public:
   /**
    *  Class Constructor
    */
-  GraphOptimiser(ros::NodeHandle nh);
+  GraphOptimiser(ros::NodeHandle nh, ros::NodeHandle nh_);
 
   /**
    *  Class Destructor
@@ -57,6 +59,7 @@ public:
 private:
   // Node handler
   ros::NodeHandle nh_;
+  ros::NodeHandle nh_private_;
 
   // Ros msgs
   nav_msgs::Path graph_path_;
@@ -64,6 +67,11 @@ private:
   // Publisher and Subscriber
   ros::Subscriber pose_sub_;
   ros::Publisher path_pub_;
+
+  // TF
+  tf::Transform map_to_odom_tf_;
+  tf::TransformBroadcaster map_br_;
+  tf::TransformListener odom_listener_;
 
   // gtsam objects
   gtsam::Pose2 prev_pose2_;

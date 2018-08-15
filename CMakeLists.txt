@@ -3,13 +3,14 @@ project(crowdbot_active_slam)
 
 find_package(catkin REQUIRED COMPONENTS
   roscpp
+  tf
   std_msgs
   geometry_msgs)
 find_package(GTSAM REQUIRED)
 
 catkin_package(
 INCLUDE_DIRS include
-CATKIN_DEPENDS roscpp std_msgs geometry_msgs)
+CATKIN_DEPENDS roscpp tf std_msgs geometry_msgs)
 
 include_directories(include ${catkin_INCLUDE_DIRS})
 
