@@ -14,6 +14,7 @@
 #include <geometry_msgs/Pose.h>
 #include <geometry_msgs/Point.h>
 #include <geometry_msgs/Quaternion.h>
+#include <sensor_msgs/LaserScan.h>
 #include <tf/tf.h>
 #include <tf/transform_broadcaster.h>
 #include <tf/transform_listener.h>
@@ -26,6 +27,10 @@
 #include <gtsam/nonlinear/LevenbergMarquardtOptimizer.h>
 #include <gtsam/geometry/Pose2.h>
 #include <gtsam/nonlinear/Values.h>
+
+#include <csm/csm_all.h>
+#undef min
+#undef max
 
 
 class GraphOptimiser{
@@ -40,7 +45,7 @@ public:
    */
   ~GraphOptimiser();
 
-  /*
+  /**
    *  Helper function which initialises some parameters
    */
   void initParams();
@@ -51,7 +56,17 @@ public:
   geometry_msgs::PoseStamped createPoseStamped(gtsam::Pose2 pose2);
 
   /**
-   *  A Callback function on Pose2D scans from the laser scan matcher
+   *  A helper function which creates LDP from laser scans.
+   */
+  void laserScanToLDP(sensor_msgs::LaserScan& scan_msg, LDP& ldp);
+
+  /**
+   *  A callback function on laser scans.
+   */
+  void scanCallback(const sensor_msgs::LaserScan::ConstPtr& scan_msg);
+
+  /**
+   *  A callback function on Pose2D scans from the laser scan matcher
    *  which does Graph construction and optimisation.
    */
   void scanMatcherCallback(const geometry_msgs::Pose2D::ConstPtr& pose_msg);
@@ -63,6 +78,7 @@ private:
 
   // Ros msgs
   nav_msgs::Path graph_path_;
+  sensor_msgs::LaserScan latest_scan_msg_;
 
   // Publisher and Subscriber
   ros::Subscriber pose_sub_;
@@ -85,7 +101,10 @@ private:
   double node_dist_angular_;
   double dist_linear_sq_;
   bool first_scan_pose_;
+  bool scan_callback_initialized_;
   int node_counter_;
+  LDP current_ldp_;
+  std::vector<LDP> keyframe_ldp_vec_;
 };
 
 #endif  // GRAPH_OPTIMISATION_H

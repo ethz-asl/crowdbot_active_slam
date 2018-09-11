@@ -43,6 +43,7 @@ void GraphOptimiser::initParams(){
   // Initialise other parameters
   dist_linear_sq_ = node_dist_linear_ * node_dist_linear_;
   first_scan_pose_ = true;
+  scan_callback_initialized_ = false;
   node_counter_ = 0;
 }
 
@@ -65,7 +66,46 @@ geometry_msgs::PoseStamped GraphOptimiser::createPoseStamped(Pose2 pose2){
   return posestamped;
 }
 
+void GraphOptimiser::laserScanToLDP(sensor_msgs::LaserScan& scan_msg, LDP& ldp){
+  unsigned int n = scan_msg.ranges.size();
+  ldp = ld_alloc_new(n);
+
+  for (int i = 0; i < n; i++){
+    double r = scan_msg.ranges[i];
+
+    if (r > scan_msg.range_min && r < scan_msg.range_max){
+      ldp->valid[i] = 1;
+      ldp->readings[i] = r;
+    }
+    else{
+      ldp->valid[i] = 0;
+      ldp->readings[i] = -1;
+    }
+    ldp->theta[i] = scan_msg.angle_min + i * scan_msg.angle_increment;
+    ldp->cluster[i] = -1;
+  }
+
+  ldp->min_theta = ldp->theta[0];
+  ldp->max_theta = ldp->theta[n - 1];
+
+  ldp->odometry[0] = 0.0;
+  ldp->odometry[1] = 0.0;
+  ldp->odometry[2] = 0.0;
+
+  ldp->true_pose[0] = 0.0;
+  ldp->true_pose[1] = 0.0;
+  ldp->true_pose[2] = 0.0;
+}
+
+void GraphOptimiser::scanCallback(const sensor_msgs::LaserScan::ConstPtr& scan_msg){
+  latest_scan_msg_ = *scan_msg;
+  scan_callback_initialized_ = true;
+}
+
 void GraphOptimiser::scanMatcherCallback(const geometry_msgs::Pose2D::ConstPtr& pose2D_msg){
+  // Check if scan callback initialized
+  if (!scan_callback_initialized_) return;
+
   // Get newest transform from odom to base_link for later use
   tf::StampedTransform odom_stamped_transform;
   odom_listener_.lookupTransform("/odom", "/base_link", ros::Time(0),
@@ -83,6 +123,9 @@ void GraphOptimiser::scanMatcherCallback(const geometry_msgs::Pose2D::ConstPtr& 
     noiseModel::Diagonal::shared_ptr prior_noise =
       noiseModel::Diagonal::Sigmas((Vector(3) << 0.01, 0.01, 0.01));
     graph_.add(PriorFactor<Pose2>(node_counter_, current_pose2_, prior_noise));
+
+    // Save scan as LDP
+    //scan_tools::LaserScanMatcher::laserScanToLDP(&latest_scan_msg_, current_ldp_);
 
     // Update variables
     first_scan_pose_ = false;
