@@ -82,12 +82,16 @@ private:
 
   // Publisher and Subscriber
   ros::Subscriber pose_sub_;
+  ros::Subscriber scan_sub_;
   ros::Publisher path_pub_;
 
   // TF
   tf::Transform map_to_odom_tf_;
   tf::TransformBroadcaster map_br_;
   tf::TransformListener odom_listener_;
+  tf::TransformListener base_to_laser_listener_;
+  tf::Transform base_to_laser_;
+  tf::Transform laser_to_base_;
 
   // gtsam objects
   gtsam::Pose2 prev_pose2_;
@@ -96,15 +100,21 @@ private:
   gtsam::noiseModel::Diagonal::shared_ptr scan_match_noise_;
   gtsam::Values pose_estimates_;
 
+  // CSM
+  sm_params sm_icp_params_;
+  sm_result sm_icp_result_;
+  LDP current_ldp_;
+  std::vector<LDP> keyframe_ldp_vec_;
+
   // Other variables
   double node_dist_linear_;
   double node_dist_angular_;
   double dist_linear_sq_;
+  double lc_radius_;
   bool first_scan_pose_;
   bool scan_callback_initialized_;
   int node_counter_;
-  LDP current_ldp_;
-  std::vector<LDP> keyframe_ldp_vec_;
+
 };
 
 #endif  // GRAPH_OPTIMISATION_H
