@@ -14,6 +14,7 @@
 #include <geometry_msgs/Pose.h>
 #include <geometry_msgs/Point.h>
 #include <geometry_msgs/Quaternion.h>
+#include <sensor_msgs/LaserScan.h>
 #include <tf/tf.h>
 #include <tf/transform_broadcaster.h>
 #include <tf/transform_listener.h>
@@ -26,6 +27,10 @@
 #include <gtsam/nonlinear/LevenbergMarquardtOptimizer.h>
 #include <gtsam/geometry/Pose2.h>
 #include <gtsam/nonlinear/Values.h>
+
+#include <csm/csm_all.h>
+#undef min
+#undef max
 
 
 class GraphOptimiser{
@@ -40,7 +45,7 @@ public:
    */
   ~GraphOptimiser();
 
-  /*
+  /**
    *  Helper function which initialises some parameters
    */
   void initParams();
@@ -51,7 +56,17 @@ public:
   geometry_msgs::PoseStamped createPoseStamped(gtsam::Pose2 pose2);
 
   /**
-   *  A Callback function on Pose2D scans from the laser scan matcher
+   *  A helper function which creates LDP from laser scans.
+   */
+  void laserScanToLDP(sensor_msgs::LaserScan& scan_msg, LDP& ldp);
+
+  /**
+   *  A callback function on laser scans.
+   */
+  void scanCallback(const sensor_msgs::LaserScan::ConstPtr& scan_msg);
+
+  /**
+   *  A callback function on Pose2D scans from the laser scan matcher
    *  which does Graph construction and optimisation.
    */
   void scanMatcherCallback(const geometry_msgs::Pose2D::ConstPtr& pose_msg);
@@ -63,15 +78,20 @@ private:
 
   // Ros msgs
   nav_msgs::Path graph_path_;
+  sensor_msgs::LaserScan latest_scan_msg_;
 
   // Publisher and Subscriber
   ros::Subscriber pose_sub_;
+  ros::Subscriber scan_sub_;
   ros::Publisher path_pub_;
 
   // TF
   tf::Transform map_to_odom_tf_;
   tf::TransformBroadcaster map_br_;
   tf::TransformListener odom_listener_;
+  tf::TransformListener base_to_laser_listener_;
+  tf::Transform base_to_laser_;
+  tf::Transform laser_to_base_;
 
   // gtsam objects
   gtsam::Pose2 prev_pose2_;
@@ -80,12 +100,21 @@ private:
   gtsam::noiseModel::Diagonal::shared_ptr scan_match_noise_;
   gtsam::Values pose_estimates_;
 
+  // CSM
+  sm_params sm_icp_params_;
+  sm_result sm_icp_result_;
+  LDP current_ldp_;
+  std::vector<LDP> keyframe_ldp_vec_;
+
   // Other variables
   double node_dist_linear_;
   double node_dist_angular_;
   double dist_linear_sq_;
+  double lc_radius_;
   bool first_scan_pose_;
+  bool scan_callback_initialized_;
   int node_counter_;
+
 };
 
 #endif  // GRAPH_OPTIMISATION_H
