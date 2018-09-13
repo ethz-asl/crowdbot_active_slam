@@ -61,7 +61,7 @@ void GraphOptimiser::initParams(){
   sm_icp_params_.laser[2] = 0.0;
 
   sm_icp_params_.max_angular_correction_deg = 180.0;
-  sm_icp_params_.max_linear_correction = lc_radius_;
+  sm_icp_params_.max_linear_correction = 3 * lc_radius_;
   sm_icp_params_.max_iterations = 10;
   sm_icp_params_.epsilon_xy = 0.000001;
   sm_icp_params_.epsilon_theta = 0.000001;
@@ -88,7 +88,7 @@ void GraphOptimiser::initParams(){
   sm_icp_params_.sigma = 0.01;
 
   // Initialise noise on scan matching nodes
-  scan_match_noise_ = noiseModel::Diagonal::Sigmas((Vector(3) << 0.1, 0.1, 0.05));
+  scan_match_noise_ = noiseModel::Diagonal::Sigmas((Vector(3) << 0.1, 0.1, 0.2));
 
   // Initialise other parameters
   dist_linear_sq_ = node_dist_linear_ * node_dist_linear_;
@@ -190,6 +190,7 @@ void GraphOptimiser::scanMatcherCallback(const geometry_msgs::Pose2D::ConstPtr& 
   }
 
   // Calculate some variables for decision if to add a new node
+  // TODO: Pose2 next_mean = prev_pose2_.between(current_pose2_); does the same
   double x_diff = current_pose2_.x() - prev_pose2_.x();
   double y_diff = current_pose2_.y() - prev_pose2_.y();
   double diff_dist_linear_sq = x_diff * x_diff + y_diff * y_diff;
@@ -206,30 +207,32 @@ void GraphOptimiser::scanMatcherCallback(const geometry_msgs::Pose2D::ConstPtr& 
     keyframe_ldp_vec_.push_back(current_ldp_);
 
     // Add new node to graph
-    pose_estimates_.insert(node_counter_, current_pose2_);
     Pose2 next_mean = prev_pose2_.between(current_pose2_);
+    Pose2 prev_pose2_estimate = *dynamic_cast<const Pose2*>(&pose_estimates_.at(node_counter_ - 1));
+    Pose2 current_pose2_estimate = prev_pose2_estimate * next_mean;
+    pose_estimates_.insert(node_counter_, current_pose2_estimate);
     graph_.add(BetweenFactor<Pose2>(node_counter_ - 1, node_counter_,
       next_mean, scan_match_noise_));
 
     // look for loop closings factors
-    double x_high = current_pose2_.x() + lc_radius_;
-    double x_low = current_pose2_.x() - lc_radius_;
-    double y_high = current_pose2_.y() + lc_radius_;
-    double y_low = current_pose2_.y() - lc_radius_;
+    double x_high = current_pose2_estimate.x() + lc_radius_;
+    double x_low = current_pose2_estimate.x() - lc_radius_;
+    double y_high = current_pose2_estimate.y() + lc_radius_;
+    double y_low = current_pose2_estimate.y() - lc_radius_;
     double lc_radius_squared = lc_radius_ * lc_radius_;
 
     for (int i = 0; i < node_counter_ - 1; i++){
       Pose2 tmp_pose2 = *dynamic_cast<const Pose2*>(&pose_estimates_.at(i));
       if (tmp_pose2.x() <= x_high && tmp_pose2.x() >= x_low &&
           tmp_pose2.y() <= y_high && tmp_pose2.y() >= y_low){
-        double x_diff = current_pose2_.x() - tmp_pose2.x();
-        double y_diff = current_pose2_.y() - tmp_pose2.y();
+        double x_diff = current_pose2_estimate.x() - tmp_pose2.x();
+        double y_diff = current_pose2_estimate.y() - tmp_pose2.y();
         if (x_diff * x_diff + y_diff * y_diff <= lc_radius_squared){
           // Add new factor between current_pose2_ and node i
           sm_icp_params_.laser_ref = current_ldp_;
           sm_icp_params_.laser_sens = keyframe_ldp_vec_[i];
 
-          Pose2 diff_pose2 = current_pose2_.between(tmp_pose2);
+          Pose2 diff_pose2 = current_pose2_estimate.between(tmp_pose2);
           tf::Transform diff_tf;
           diff_tf.setOrigin(tf::Vector3(diff_pose2.x(), diff_pose2.y(), 0.0));
           tf::Quaternion diff_q;
