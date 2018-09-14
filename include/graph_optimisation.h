@@ -20,6 +20,7 @@
 #include <tf/transform_listener.h>
 #include <tf/transform_datatypes.h>
 #include <nav_msgs/Path.h>
+#include <nav_msgs/OccupancyGrid.h>
 
 #include <gtsam/nonlinear/NonlinearFactorGraph.h>
 #include <gtsam/slam/PriorFactor.h>
@@ -61,6 +62,11 @@ public:
   void laserScanToLDP(sensor_msgs::LaserScan& scan_msg, LDP& ldp);
 
   /**
+   *  Calculates map with current factor graph and keyframe scans and draws map.
+   */
+  void drawMap(gtsam::Values pose_estimates, std::vector<LDP> keyframe_ldp_vec);
+
+  /**
    *  A callback function on laser scans.
    */
   void scanCallback(const sensor_msgs::LaserScan::ConstPtr& scan_msg);
@@ -84,6 +90,7 @@ private:
   ros::Subscriber pose_sub_;
   ros::Subscriber scan_sub_;
   ros::Publisher path_pub_;
+  ros::Publisher map_pub_;
 
   // TF
   tf::Transform map_to_odom_tf_;
@@ -105,6 +112,11 @@ private:
   sm_result sm_icp_result_;
   LDP current_ldp_;
   std::vector<LDP> keyframe_ldp_vec_;
+
+  // Map parameters
+  float map_resolution_;
+  unsigned int map_width_;
+  unsigned int map_height_;
 
   // Other variables
   double node_dist_linear_;
