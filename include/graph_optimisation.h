@@ -52,11 +52,6 @@ public:
   void initParams();
 
   /**
-   *  A helper function which creates PoseStamped msg from Pose2.
-   */
-  geometry_msgs::PoseStamped createPoseStamped(gtsam::Pose2 pose2);
-
-  /**
    *  A helper function which creates LDP from laser scans.
    */
   void laserScanToLDP(sensor_msgs::LaserScan& scan_msg, LDP& ldp);

@@ -6,6 +6,7 @@
  */
 
 #include <graph_optimisation.h>
+#include "helper.cpp"
 
 using namespace gtsam;
 
@@ -103,25 +104,6 @@ void GraphOptimiser::initParams(){
   node_counter_ = 0;
 }
 
-geometry_msgs::PoseStamped GraphOptimiser::createPoseStamped(Pose2 pose2){
-  geometry_msgs::Point pose_position;
-  pose_position.x = pose2.x();
-  pose_position.y = pose2.y();
-
-  tf::Quaternion q = tf::createQuaternionFromRPY(0, 0, pose2.theta());
-  geometry_msgs::Quaternion pose_orientation;
-  quaternionTFToMsg(q, pose_orientation);
-
-  geometry_msgs::Pose pose;
-  pose.position = pose_position;
-  pose.orientation = pose_orientation;
-
-  geometry_msgs::PoseStamped posestamped;
-  posestamped.pose = pose;
-
-  return posestamped;
-}
-
 void GraphOptimiser::laserScanToLDP(sensor_msgs::LaserScan& scan_msg, LDP& ldp){
   unsigned int n = scan_msg.ranges.size();
   ldp = ld_alloc_new(n);
@@ -151,25 +133,6 @@ void GraphOptimiser::laserScanToLDP(sensor_msgs::LaserScan& scan_msg, LDP& ldp){
   ldp->true_pose[0] = 0.0;
   ldp->true_pose[1] = 0.0;
   ldp->true_pose[2] = 0.0;
-}
-
-tf::Transform xythetaToTF(double x, double y, double theta){
-  tf::Transform xytheta_tf;
-  xytheta_tf.setOrigin(tf::Vector3(x, y, 0.0));
-  tf::Quaternion q;
-  q.setRPY(0.0, 0.0, theta);
-  xytheta_tf.setRotation(q);
-
-  return xytheta_tf;
-}
-
-std::vector<int> positionToMapIndex(double x, double y,
-   unsigned int width, unsigned int height, float resolution){
-  std::vector<int> index(2);
-  index[0] = (x - resolution / 2) / resolution + width / 2;
-  index[1] = (y - resolution / 2) / resolution + height / 2;
-
-  return index;
 }
 
 void GraphOptimiser::drawMap(gtsam::Values pose_estimates,
@@ -227,19 +190,23 @@ void GraphOptimiser::drawMap(gtsam::Values pose_estimates,
       hits_array[x1][y1]++;
       misses_array[x0][y0]++;
 
-      // Bresenham's line algorithm
+      // Bresenham's line algorithm (Get indexes between robot pose and scans)
       // starting from "https://github.com/lama-imr/lama_utilities/blob/indigo-devel/map_ray_caster/src/map_ray_caster.cpp"
       // "https://csustan.csustan.edu/~tom/Lecture-Notes/Graphics/Bresenham-Line/Bresenham-Line.pdf"
       int dx = x1 - x0;
       int dy = y1 - y0;
       int xstep = 1;
       int ystep = 1;
+
+      // Check if dx, dy are negative (direction changes)
       if (dx < 0) {dx = -dx; xstep = -1;};
       if (dy < 0) {dy = -dy; ystep = -1;};
 
+      // Calculate variable for performance improvement
       int twodx = 2 * dx;
       int twody = 2 * dy;
 
+      // Check if gradient > 1
       if (dx > dy){
         int fraction_increment = 2 * dy;
         int fraction = 2 * dy - dx;
@@ -271,6 +238,7 @@ void GraphOptimiser::drawMap(gtsam::Values pose_estimates,
     }
   }
 
+  // Calculate and save probability to occupancy array
   int occupancy_probability_array[map_width_][map_height_];
   for (int i = 0; i < map_width_; i++){
     for (int j = 0; j < map_height_; j++){
@@ -278,12 +246,14 @@ void GraphOptimiser::drawMap(gtsam::Values pose_estimates,
         occupancy_probability_array[i][j] = 100.0*(float(hits_array[i][j]) /
                                   float(hits_array[i][j] + misses_array[i][j]));
       }
+      // If unknown probability is 0.5
       else{
         occupancy_probability_array[i][j] = 50;
       }
     }
   }
 
+  // Init OccupancyGrid msg
   nav_msgs::OccupancyGrid occupancy_grid_msg;
   occupancy_grid_msg.header.frame_id = "map";
   occupancy_grid_msg.info.resolution = map_resolution_;
@@ -291,30 +261,22 @@ void GraphOptimiser::drawMap(gtsam::Values pose_estimates,
   occupancy_grid_msg.info.height = map_height_;
 
   // Origin
-  geometry_msgs::Point pose_position;
-  pose_position.x = -(map_width_ * map_resolution_ / 2);
-  pose_position.y = -(map_height_ * map_resolution_ / 2);
-  pose_position.z = 0;
-
-  tf::Quaternion q = tf::createQuaternionFromRPY(0, 0, 0);
-  geometry_msgs::Quaternion pose_orientation;
-  quaternionTFToMsg(q, pose_orientation);
-
   geometry_msgs::Pose origin_pose;
-  origin_pose.position = pose_position;
-  origin_pose.orientation = pose_orientation;
-
+  origin_pose = xythetaToPose(-(map_width_ * map_resolution_ / 2),
+                              -(map_height_ * map_resolution_ / 2),
+                              0);
   occupancy_grid_msg.info.origin = origin_pose;
 
+  // Transform occupancy_probability_array to ROS msg
   std::vector<int8_t> data;
   for (int i = 0; i < map_width_; i++){
     for (int j = 0; j < map_height_; j++){
       data.push_back(occupancy_probability_array[j][i]);
-      //data.push_back(hits_array[i][j] / (hits_array[i][j] + misses_array[i][j]));
-      //data.push_back(0);
     }
   }
   occupancy_grid_msg.data = data;
+
+  // Publish map
   map_pub_.publish(occupancy_grid_msg);
 }
 
@@ -361,7 +323,6 @@ void GraphOptimiser::scanMatcherCallback(const geometry_msgs::Pose2D::ConstPtr& 
   }
 
   // Calculate some variables for decision if to add a new node
-  // TODO: Pose2 next_mean = prev_pose2_.between(current_pose2_); does the same
   double x_diff = current_pose2_.x() - prev_pose2_.x();
   double y_diff = current_pose2_.y() - prev_pose2_.y();
   double diff_dist_linear_sq = x_diff * x_diff + y_diff * y_diff;
@@ -385,7 +346,7 @@ void GraphOptimiser::scanMatcherCallback(const geometry_msgs::Pose2D::ConstPtr& 
     graph_.add(BetweenFactor<Pose2>(node_counter_ - 1, node_counter_,
       next_mean, scan_match_noise_));
 
-    // look for loop closings factors
+    // look for loop closing factors
     double x_high = current_pose2_estimate.x() + lc_radius_;
     double x_low = current_pose2_estimate.x() - lc_radius_;
     double y_high = current_pose2_estimate.y() + lc_radius_;
@@ -394,15 +355,20 @@ void GraphOptimiser::scanMatcherCallback(const geometry_msgs::Pose2D::ConstPtr& 
 
     for (int i = 0; i < node_counter_ - 1; i++){
       Pose2 tmp_pose2 = *dynamic_cast<const Pose2*>(&pose_estimates_.at(i));
+
+      // Check if tmp_pose2 is in square region around current pose estimate
       if (tmp_pose2.x() <= x_high && tmp_pose2.x() >= x_low &&
           tmp_pose2.y() <= y_high && tmp_pose2.y() >= y_low){
         double x_diff = current_pose2_estimate.x() - tmp_pose2.x();
         double y_diff = current_pose2_estimate.y() - tmp_pose2.y();
+
+        // Check if tmp_pose2 is in circle around current pose estimate
         if (x_diff * x_diff + y_diff * y_diff <= lc_radius_squared){
-          // Add new factor between current_pose2_ and node i
+          // Save laser scans for mapping
           sm_icp_params_.laser_ref = current_ldp_;
           sm_icp_params_.laser_sens = keyframe_ldp_vec_[i];
 
+          // Get Pose tf between current and new Pose as first guess for icp
           Pose2 diff_pose2 = current_pose2_estimate.between(tmp_pose2);
           tf::Transform diff_tf;
           diff_tf = xythetaToTF(diff_pose2.x(), diff_pose2.y(), diff_pose2.theta());
@@ -414,22 +380,26 @@ void GraphOptimiser::scanMatcherCallback(const geometry_msgs::Pose2D::ConstPtr& 
           sm_icp_params_.first_guess[1] = first_guess_tf.getOrigin().getY();
           sm_icp_params_.first_guess[2] = tf::getYaw(first_guess_tf.getRotation());
 
+          // Do scan matching for new factor
           sm_icp(&sm_icp_params_, &sm_icp_result_);
 
+          // Get tf of scan matching result and transform to map frame
           tf::Transform pose_diff_tf;
           pose_diff_tf = xythetaToTF(sm_icp_result_.x[0],
                                      sm_icp_result_.x[1],
                                      sm_icp_result_.x[2]);
 
+          // Transform to map frame
           pose_diff_tf = base_to_laser_ * pose_diff_tf * laser_to_base_;
 
+          // Save loop closing tf as Pose2
           Pose2 lc_mean(pose_diff_tf.getOrigin().getX(),
                         pose_diff_tf.getOrigin().getY(),
                         tf::getYaw(pose_diff_tf.getRotation()));
-          lc_mean.print();
+
+          // Add new factor between current_pose2_ and node i
           graph_.add(BetweenFactor<Pose2>(node_counter_, i, lc_mean,
                      scan_match_noise_));
-          std::cout << "Found loop closing and added to graph" << std::endl;
         }
       }
     }
@@ -446,7 +416,6 @@ void GraphOptimiser::scanMatcherCallback(const geometry_msgs::Pose2D::ConstPtr& 
     graph_path_ = new_path;
     graph_path_.header.frame_id = "/map";
     Pose2 tmp_pose2;
-    geometry_msgs::PoseStamped tmp_posestamped;
 
     // Iterate over all node estimates
     for (int i = 0; i < pose_estimates_.size(); i++){
@@ -454,8 +423,7 @@ void GraphOptimiser::scanMatcherCallback(const geometry_msgs::Pose2D::ConstPtr& 
       tmp_pose2 = *dynamic_cast<const Pose2*>(&pose_estimates_.at(i));
 
       // Create PoseStamped variables from Pose 2 and add to path
-      tmp_posestamped = createPoseStamped(tmp_pose2);
-      graph_path_.poses.push_back(tmp_posestamped);
+      graph_path_.poses.push_back(pose2ToPoseStamped(tmp_pose2));
     }
 
     // Publish the graph
