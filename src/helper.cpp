@@ -51,8 +51,8 @@ tf::Transform xythetaToTF(double x, double y, double theta){
 std::vector<int> positionToMapIndex(double x, double y,
    unsigned int width, unsigned int height, float resolution){
   std::vector<int> index(2);
-  index[0] = (x - resolution / 2) / resolution + width / 2;
-  index[1] = (y - resolution / 2) / resolution + height / 2;
+  index[0] = (x - resolution / 2.0) / resolution + width / 2;
+  index[1] = (y - resolution / 2.0) / resolution + height / 2;
 
   return index;
 }

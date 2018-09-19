@@ -93,9 +93,9 @@ void GraphOptimiser::initParams(){
   scan_match_noise_ = noiseModel::Diagonal::Sigmas((Vector(3) << 0.1, 0.1, 0.2));
 
   // Map paramters
-  map_resolution_ = 0.1;
-  map_width_ = 500;
-  map_height_ = 500;
+  map_resolution_ = 0.05;
+  map_width_ = 1000;
+  map_height_ = 1000;
 
   // Initialise other parameters
   dist_linear_sq_ = node_dist_linear_ * node_dist_linear_;
@@ -138,14 +138,30 @@ void GraphOptimiser::laserScanToLDP(sensor_msgs::LaserScan& scan_msg, LDP& ldp){
 void GraphOptimiser::drawMap(gtsam::Values pose_estimates,
                              std::vector<LDP> keyframe_ldp_vec){
   // Init arrays to count hits and misses
-  int hits_array[map_width_][map_height_];
-  int misses_array[map_width_][map_height_];
+  // int hits_array[map_width_][map_height_];
+  // int misses_array[map_width_][map_height_];
+  // for (int i = 0; i < map_width_; i++){
+  //   for (int j = 0; j < map_height_; j++){
+  //     hits_array[i][j] = 0;
+  //     misses_array[i][j] = 0;
+  //   }
+  // }
+
+  //
+  float log_odds_array[map_width_][map_height_];
+  float l_0 = log(0.5 / 0.5);
   for (int i = 0; i < map_width_; i++){
     for (int j = 0; j < map_height_; j++){
-      hits_array[i][j] = 0;
-      misses_array[i][j] = 0;
+      log_odds_array[i][j] = l_0;
     }
   }
+
+  // How to choose these values??
+  float p_occ = 0.9;
+  float p_free = 0.1;
+
+  float l_occ = log(p_occ / (1.0 - p_occ));
+  float l_free = log(p_free / (1.0 - p_free));
 
   // Loop over each keyframe
   for (int i = 0; i < keyframe_ldp_vec.size(); i++){
@@ -187,8 +203,11 @@ void GraphOptimiser::drawMap(gtsam::Values pose_estimates,
       int y1 = end_point_index[1];
 
       // Add the endpoint to the hits_array
-      hits_array[x1][y1]++;
-      misses_array[x0][y0]++;
+      // hits_array[x1][y1]++;
+      // misses_array[x0][y0]++;
+
+      // Update log odds of scan points
+      log_odds_array[x1][y1] += l_occ - l_0;
 
       // Bresenham's line algorithm (Get indexes between robot pose and scans)
       // starting from "https://github.com/lama-imr/lama_utilities/blob/indigo-devel/map_ray_caster/src/map_ray_caster.cpp"
@@ -218,7 +237,8 @@ void GraphOptimiser::drawMap(gtsam::Values pose_estimates,
             y += ystep;
             fraction -= twodx;
           }
-          misses_array[x][y]++;
+          // misses_array[x][y]++;
+          log_odds_array[x][y] += l_free - l_0;
         }
       }
       else {
@@ -232,26 +252,27 @@ void GraphOptimiser::drawMap(gtsam::Values pose_estimates,
             x += xstep;
             fraction -= twody;
           }
-          misses_array[x][y]++;
+          // misses_array[x][y]++;
+          log_odds_array[x][y] += l_free - l_0;
         }
       }
     }
   }
 
-  // Calculate and save probability to occupancy array
-  int occupancy_probability_array[map_width_][map_height_];
-  for (int i = 0; i < map_width_; i++){
-    for (int j = 0; j < map_height_; j++){
-      if (hits_array[i][j] > 0 || misses_array[i][j] > 0){
-        occupancy_probability_array[i][j] = 100.0*(float(hits_array[i][j]) /
-                                  float(hits_array[i][j] + misses_array[i][j]));
-      }
-      // If unknown probability is 0.5
-      else{
-        occupancy_probability_array[i][j] = 50;
-      }
-    }
-  }
+  // // Calculate and save probability to occupancy array
+  // int occupancy_probability_array[map_width_][map_height_];
+  // for (int i = 0; i < map_width_; i++){
+  //   for (int j = 0; j < map_height_; j++){
+  //     if (hits_array[i][j] > 0 || misses_array[i][j] > 0){
+  //       occupancy_probability_array[i][j] = 100.0*(float(hits_array[i][j]) /
+  //                                 float(hits_array[i][j] + misses_array[i][j]));
+  //     }
+  //     // If unknown probability is 0.5
+  //     else{
+  //       occupancy_probability_array[i][j] = 50;
+  //     }
+  //   }
+  // }
 
   // Init OccupancyGrid msg
   nav_msgs::OccupancyGrid occupancy_grid_msg;
@@ -271,7 +292,8 @@ void GraphOptimiser::drawMap(gtsam::Values pose_estimates,
   std::vector<int8_t> data;
   for (int i = 0; i < map_width_; i++){
     for (int j = 0; j < map_height_; j++){
-      data.push_back(occupancy_probability_array[j][i]);
+      // data.push_back(occupancy_probability_array[j][i]);
+      data.push_back(100 * (1.0 - 1.0 / (1.0 + exp(log_odds_array[j][i]))));
     }
   }
   occupancy_grid_msg.data = data;

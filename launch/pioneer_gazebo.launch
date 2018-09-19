@@ -1,4 +1,20 @@
 <launch>
+  <!-- Gazebo -->
   <include file="$(find pioneer_gazebo)/launch/frontier_exploration_world.launch"/>
-  <include file="$(find pioneer_description)/launch/frontier_map.launch"/>
+
+  <!-- Gazebo -->
+  <arg name="rviz_name" default="crowdbot_active_slam"/>
+  <param name="robot_description"
+    command="$(find xacro)/xacro.py '$(find pioneer_description)/urdf/pioneer3dx.xacro'" />
+
+  <!-- send fake joint values -->
+  <node name="joint_state_publisher" pkg="joint_state_publisher" type="joint_state_publisher">
+    <param name="use_gui" value="FALSE"/>
+  </node>
+
+  <!-- Combine joint values -->
+  <node name="robot_state_publisher" pkg="robot_state_publisher" type="state_publisher"/>
+
+  <!-- Show in Rviz -->
+  <node name="rviz" pkg="rviz" type="rviz" args="-d $(find crowdbot_active_slam)/rviz/$(arg rviz_name).rviz"/>
 </launch>
