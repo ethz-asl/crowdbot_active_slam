@@ -17,5 +17,5 @@ TrajectoryPlannerROS:
   heading_lookahead: 0.325
   pdist_scale: 1.8
   gdist_scale: 1.0
-controller_frequency: 1
+controller_frequency: 2
 planner_frequency: 0.5
