@@ -426,12 +426,14 @@ void GraphOptimiser::scanMatcherCallback(const geometry_msgs::Pose2D::ConstPtr& 
       }
     }
 
-    // Optimize the graph
-    LevenbergMarquardtOptimizer optimizer(graph_, pose_estimates_);
-    ROS_INFO("Optimisation started!");
-    pose_estimates_ = optimizer.optimize();
-    ROS_INFO("Optimisation finished!");
-    pose_estimates_.print("Pose estimates:\n");
+    if (node_counter_ % 5 == 0){
+      // Optimize the graph
+      LevenbergMarquardtOptimizer optimizer(graph_, pose_estimates_);
+      ROS_INFO("Optimisation started!");
+      pose_estimates_ = optimizer.optimize();
+      ROS_INFO("Optimisation finished!");
+      // pose_estimates_.print("Pose estimates:\n");
+    }
 
     // Create a path msg of the graph node estimates
     nav_msgs::Path new_path;
@@ -468,8 +470,10 @@ void GraphOptimiser::scanMatcherCallback(const geometry_msgs::Pose2D::ConstPtr& 
   map_br_.sendTransform(tf::StampedTransform(map_to_odom_tf_, ros::Time::now(),
                         "map", "odom"));
 
-  // Draw the map
-  drawMap(pose_estimates_, keyframe_ldp_vec_);
+  if ((node_counter_ - 1) % 5 == 0){
+    // Draw the map
+    drawMap(pose_estimates_, keyframe_ldp_vec_);
+  }
 }
 
 

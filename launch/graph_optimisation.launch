@@ -1,8 +1,8 @@
 <launch>
   <node name="graph_optimisation" pkg="crowdbot_active_slam"
     type="graph_optimisation" output="screen">
-    <param name="node_dist_linear" value="0.3"/>
-    <param name="node_dist_angular" value="0.5"/>
-    <param name="loop_closing_radius" value="1.0"/>
+    <param name="node_dist_linear" value="0.15"/>
+    <param name="node_dist_angular" value="0.4"/>
+    <param name="loop_closing_radius" value="0.5"/>
   </node>
 </launch>
