@@ -96,6 +96,12 @@ void GraphOptimiser::initParams(){
   map_resolution_ = 0.05;
   map_width_ = 1000;
   map_height_ = 1000;
+  log_odds_array_ = Eigen::MatrixXf(map_width_, map_height_);
+  l_0_ = log(0.5 / 0.5);
+  p_occ_ = 0.9; // How to choose?
+  p_free_ = 0.1; // How to choose?
+  l_occ_ = log(p_occ_ / (1.0 - p_occ_));
+  l_free_ = log(p_free_ / (1.0 - p_free_));
 
   // Initialise other parameters
   dist_linear_sq_ = node_dist_linear_ * node_dist_linear_;
@@ -137,31 +143,12 @@ void GraphOptimiser::laserScanToLDP(sensor_msgs::LaserScan& scan_msg, LDP& ldp){
 
 void GraphOptimiser::drawMap(gtsam::Values pose_estimates,
                              std::vector<LDP> keyframe_ldp_vec){
-  // Init arrays to count hits and misses
-  // int hits_array[map_width_][map_height_];
-  // int misses_array[map_width_][map_height_];
-  // for (int i = 0; i < map_width_; i++){
-  //   for (int j = 0; j < map_height_; j++){
-  //     hits_array[i][j] = 0;
-  //     misses_array[i][j] = 0;
-  //   }
-  // }
-
-  //
-  float log_odds_array[map_width_][map_height_];
-  float l_0 = log(0.5 / 0.5);
+  // Init arrays to l_0_
   for (int i = 0; i < map_width_; i++){
     for (int j = 0; j < map_height_; j++){
-      log_odds_array[i][j] = l_0;
+      log_odds_array_(i, j) = l_0_;
     }
   }
-
-  // How to choose these values??
-  float p_occ = 0.9;
-  float p_free = 0.1;
-
-  float l_occ = log(p_occ / (1.0 - p_occ));
-  float l_free = log(p_free / (1.0 - p_free));
 
   // Loop over each keyframe
   for (int i = 0; i < keyframe_ldp_vec.size(); i++){
@@ -202,12 +189,8 @@ void GraphOptimiser::drawMap(gtsam::Values pose_estimates,
       int x1 = end_point_index[0];
       int y1 = end_point_index[1];
 
-      // Add the endpoint to the hits_array
-      // hits_array[x1][y1]++;
-      // misses_array[x0][y0]++;
-
       // Update log odds of scan points
-      log_odds_array[x1][y1] += l_occ - l_0;
+      log_odds_array_(x1, y1) += l_occ_ - l_0_;
 
       // Bresenham's line algorithm (Get indexes between robot pose and scans)
       // starting from "https://github.com/lama-imr/lama_utilities/blob/indigo-devel/map_ray_caster/src/map_ray_caster.cpp"
@@ -237,8 +220,7 @@ void GraphOptimiser::drawMap(gtsam::Values pose_estimates,
             y += ystep;
             fraction -= twodx;
           }
-          // misses_array[x][y]++;
-          log_odds_array[x][y] += l_free - l_0;
+          log_odds_array_(x, y) += l_free_ - l_0_;
         }
       }
       else {
@@ -252,27 +234,11 @@ void GraphOptimiser::drawMap(gtsam::Values pose_estimates,
             x += xstep;
             fraction -= twody;
           }
-          // misses_array[x][y]++;
-          log_odds_array[x][y] += l_free - l_0;
+          log_odds_array_(x, y) += l_free_ - l_0_;
         }
       }
     }
   }
-
-  // // Calculate and save probability to occupancy array
-  // int occupancy_probability_array[map_width_][map_height_];
-  // for (int i = 0; i < map_width_; i++){
-  //   for (int j = 0; j < map_height_; j++){
-  //     if (hits_array[i][j] > 0 || misses_array[i][j] > 0){
-  //       occupancy_probability_array[i][j] = 100.0*(float(hits_array[i][j]) /
-  //                                 float(hits_array[i][j] + misses_array[i][j]));
-  //     }
-  //     // If unknown probability is 0.5
-  //     else{
-  //       occupancy_probability_array[i][j] = 50;
-  //     }
-  //   }
-  // }
 
   // Init OccupancyGrid msg
   nav_msgs::OccupancyGrid occupancy_grid_msg;
@@ -292,8 +258,125 @@ void GraphOptimiser::drawMap(gtsam::Values pose_estimates,
   std::vector<int8_t> data;
   for (int i = 0; i < map_width_; i++){
     for (int j = 0; j < map_height_; j++){
-      // data.push_back(occupancy_probability_array[j][i]);
-      data.push_back(100 * (1.0 - 1.0 / (1.0 + exp(log_odds_array[j][i]))));
+      data.push_back(100 * (1.0 - 1.0 / (1.0 + exp(log_odds_array_(j, i)))));
+    }
+  }
+  occupancy_grid_msg.data = data;
+
+  // Publish map
+  map_pub_.publish(occupancy_grid_msg);
+}
+
+
+void GraphOptimiser::updateMap(gtsam::Values pose_estimates,
+                               std::vector<LDP> keyframe_ldp_vec){
+  int i = keyframe_ldp_vec.size() - 1;
+  Pose2 pose2_estimate = *dynamic_cast<const Pose2*>(&pose_estimates.at(i));
+  tf::Transform map_to_laser_tf;
+  map_to_laser_tf = xythetaToTF(pose2_estimate.x(),
+                               pose2_estimate.y(),
+                               pose2_estimate.theta()) * base_to_laser_;
+
+  std::vector<int> robot_pose_index;
+  robot_pose_index = positionToMapIndex(pose2_estimate.x(),
+                                       pose2_estimate.y(),
+                                       map_width_,
+                                       map_height_,
+                                       map_resolution_);
+
+  // Save index in shorter variable for later use
+  int x0 = robot_pose_index[0];
+  int y0 = robot_pose_index[1];
+
+  // Loop over each ray of the scan
+  for (int j = 0; j < keyframe_ldp_vec[i]->nrays; j++){
+    double reading = keyframe_ldp_vec[i]->readings[j];
+    double angle = keyframe_ldp_vec[i]->theta[j];
+    double x_end = reading * cos(angle);
+    double y_end = reading * sin(angle);
+    tf::Transform endpoint;
+    endpoint = map_to_laser_tf * xythetaToTF(x_end, y_end, angle);
+
+    std::vector<int> end_point_index;
+    end_point_index = positionToMapIndex(endpoint.getOrigin().getX(),
+                                        endpoint.getOrigin().getY(),
+                                        map_width_,
+                                        map_height_,
+                                        map_resolution_);
+
+    // Save index in shorter variable for later use
+    int x1 = end_point_index[0];
+    int y1 = end_point_index[1];
+
+    // Update log odds of scan points
+    log_odds_array_(x1, y1) += l_occ_ - l_0_;
+
+    // Bresenham's line algorithm (Get indexes between robot pose and scans)
+    // starting from "https://github.com/lama-imr/lama_utilities/blob/indigo-devel/map_ray_caster/src/map_ray_caster.cpp"
+    // "https://csustan.csustan.edu/~tom/Lecture-Notes/Graphics/Bresenham-Line/Bresenham-Line.pdf"
+    int dx = x1 - x0;
+    int dy = y1 - y0;
+    int xstep = 1;
+    int ystep = 1;
+
+    // Check if dx, dy are negative (direction changes)
+    if (dx < 0) {dx = -dx; xstep = -1;};
+    if (dy < 0) {dy = -dy; ystep = -1;};
+
+    // Calculate variable for performance improvement
+    int twodx = 2 * dx;
+    int twody = 2 * dy;
+
+    // Check if gradient > 1
+    if (dx > dy){
+      int fraction_increment = 2 * dy;
+      int fraction = 2 * dy - dx;
+      int x = x0 + xstep;
+      int y = y0;
+      for (x, y; x != x1; x += xstep){
+        fraction += fraction_increment;
+        if (fraction >= 0){
+          y += ystep;
+          fraction -= twodx;
+        }
+        log_odds_array_(x, y) += l_free_ - l_0_;
+      }
+    }
+    else {
+      int fraction_increment = 2 * dx;
+      int fraction = 2 * dx - dy;
+      int x = x0;
+      int y = y0  + ystep;
+      for (x, y; y != y1; y += ystep){
+        fraction += fraction_increment;
+        if (fraction >= 0){
+          x += xstep;
+          fraction -= twody;
+        }
+        log_odds_array_(x, y) += l_free_ - l_0_;
+      }
+    }
+  }
+
+  // Init OccupancyGrid msg
+  nav_msgs::OccupancyGrid occupancy_grid_msg;
+  occupancy_grid_msg.header.frame_id = "map";
+  occupancy_grid_msg.info.resolution = map_resolution_;
+  occupancy_grid_msg.info.width = map_width_;
+  occupancy_grid_msg.info.height = map_height_;
+
+  // Origin
+  geometry_msgs::Pose origin_pose;
+  origin_pose = xythetaToPose(-(map_width_ * map_resolution_ / 2),
+                           -(map_height_ * map_resolution_ / 2),
+                           0);
+  occupancy_grid_msg.info.origin = origin_pose;
+
+  // Transform occupancy_probability_array to ROS msg
+  std::vector<int8_t> data;
+  for (int i = 0; i < map_width_; i++){
+    for (int j = 0; j < map_height_; j++){
+      data.push_back(100 * (1.0 - 1.0 / (1.0 + exp(log_odds_array_(j, i)))));
     }
   }
   occupancy_grid_msg.data = data;
@@ -470,9 +553,12 @@ void GraphOptimiser::scanMatcherCallback(const geometry_msgs::Pose2D::ConstPtr& 
   map_br_.sendTransform(tf::StampedTransform(map_to_odom_tf_, ros::Time::now(),
                         "map", "odom"));
 
-  if ((node_counter_ - 1) % 5 == 0){
+  if ((node_counter_ - 1) % 50 == 0){
     // Draw the map
     drawMap(pose_estimates_, keyframe_ldp_vec_);
+  }
+  else {
+    updateMap(pose_estimates_, keyframe_ldp_vec_);
   }
 }
 
