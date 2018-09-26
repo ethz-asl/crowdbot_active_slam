@@ -558,7 +558,10 @@ void GraphOptimiser::scanMatcherCallback(const geometry_msgs::Pose2D::ConstPtr& 
     drawMap(pose_estimates_, keyframe_ldp_vec_);
   }
   else {
-    updateMap(pose_estimates_, keyframe_ldp_vec_);
+    if ((diff_dist_linear_sq > dist_linear_sq_) or
+       (std::abs(angle_diff) > node_dist_angular_)){
+      updateMap(pose_estimates_, keyframe_ldp_vec_);
+    }
   }
 }
 
