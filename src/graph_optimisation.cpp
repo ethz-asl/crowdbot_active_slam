@@ -258,7 +258,11 @@ void GraphOptimiser::drawMap(gtsam::Values pose_estimates,
   std::vector<int8_t> data;
   for (int i = 0; i < map_width_; i++){
     for (int j = 0; j < map_height_; j++){
-      data.push_back(100 * (1.0 - 1.0 / (1.0 + exp(log_odds_array_(j, i)))));
+      if (log_odds_array_(j, i) == l_0_){
+        data.push_back(-1);
+      }else {
+        data.push_back(100 * (1.0 - 1.0 / (1.0 + exp(log_odds_array_(j, i)))));
+      }
     }
   }
   occupancy_grid_msg.data = data;
@@ -376,7 +380,11 @@ void GraphOptimiser::updateMap(gtsam::Values pose_estimates,
   std::vector<int8_t> data;
   for (int i = 0; i < map_width_; i++){
     for (int j = 0; j < map_height_; j++){
-      data.push_back(100 * (1.0 - 1.0 / (1.0 + exp(log_odds_array_(j, i)))));
+      if (log_odds_array_(j, i) == l_0_){
+        data.push_back(-1);
+      }else {
+        data.push_back(100 * (1.0 - 1.0 / (1.0 + exp(log_odds_array_(j, i)))));
+      }
     }
   }
   occupancy_grid_msg.data = data;
