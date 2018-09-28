@@ -1,0 +1,4 @@
+<launch>
+  <node name="frontier_exploration" pkg="crowdbot_active_slam"
+        type="frontier_exploration" output="screen"/>
+</launch>

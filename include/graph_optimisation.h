@@ -76,7 +76,7 @@ public:
    *  A callback function on Pose2D scans from the laser scan matcher
    *  which does Graph construction and optimisation.
    */
-  void scanMatcherCallback(const geometry_msgs::Pose2D::ConstPtr& pose_msg);
+  void scanMatcherCallback(const geometry_msgs::Pose2D::ConstPtr& pose2D_msg);
 
 private:
   // Node handler
