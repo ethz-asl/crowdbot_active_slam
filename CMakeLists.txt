@@ -7,13 +7,25 @@ find_package(catkin REQUIRED COMPONENTS
   std_msgs
   sensor_msgs
   geometry_msgs
-  cmake_modules)
+  cmake_modules
+  message_generation)
 
 find_package(GTSAM REQUIRED)
 find_package(PCL REQUIRED QUIET)
 find_package(PkgConfig REQUIRED)
 find_package(Eigen3 REQUIRED)
 pkg_check_modules(csm REQUIRED csm)
+
+add_service_files(
+  FILES
+  get_frontier_list.srv
+)
+
+generate_messages(
+  DEPENDENCIES
+  std_msgs
+  geometry_msgs
+)
 
 catkin_package(
 INCLUDE_DIRS include
@@ -24,8 +36,11 @@ include_directories(include ${catkin_INCLUDE_DIRS} ${csm_INCLUDE_DIRS} ${Eigen3_
 link_directories(${csm_LIBRARY_DIRS})
 
 add_executable(graph_optimisation src/graph_optimisation.cpp)
+add_executable(frontier_exploration src/frontier_exploration.cpp)
+
 target_link_libraries(graph_optimisation gtsam
                       ${catkin_LIBRARIES} ${csm_LIBRARIES})
+target_link_libraries(frontier_exploration ${catkin_LIBRARIES})
 
 install(DIRECTORY launch
   DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION})
