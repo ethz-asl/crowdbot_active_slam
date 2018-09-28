@@ -85,6 +85,7 @@ private:
 
   // Ros msgs
   nav_msgs::Path graph_path_;
+  nav_msgs::OccupancyGrid occupancy_grid_msg_;
   sensor_msgs::LaserScan latest_scan_msg_;
 
   // Publisher and Subscriber

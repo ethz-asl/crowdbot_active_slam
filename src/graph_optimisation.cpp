@@ -266,9 +266,7 @@ void GraphOptimiser::drawMap(gtsam::Values pose_estimates,
     }
   }
   occupancy_grid_msg.data = data;
-
-  // Publish map
-  map_pub_.publish(occupancy_grid_msg);
+  occupancy_grid_msg_ = occupancy_grid_msg;
 }
 
 
@@ -388,9 +386,7 @@ void GraphOptimiser::updateMap(gtsam::Values pose_estimates,
     }
   }
   occupancy_grid_msg.data = data;
-
-  // Publish map
-  map_pub_.publish(occupancy_grid_msg);
+  occupancy_grid_msg_ = occupancy_grid_msg;
 }
 
 void GraphOptimiser::scanCallback(const sensor_msgs::LaserScan::ConstPtr& scan_msg){
@@ -571,6 +567,8 @@ void GraphOptimiser::scanMatcherCallback(const geometry_msgs::Pose2D::ConstPtr& 
       updateMap(pose_estimates_, keyframe_ldp_vec_);
     }
   }
+  // Publish map
+  map_pub_.publish(occupancy_grid_msg_);
 }
 
 
