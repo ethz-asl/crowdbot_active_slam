@@ -21,6 +21,7 @@
 #include <tf/transform_datatypes.h>
 #include <nav_msgs/Path.h>
 #include <nav_msgs/OccupancyGrid.h>
+#include <crowdbot_active_slam/map_recalculation.h>
 
 #include <gtsam/nonlinear/NonlinearFactorGraph.h>
 #include <gtsam/slam/PriorFactor.h>
@@ -62,7 +63,7 @@ public:
   void drawMap(gtsam::Values pose_estimates, std::vector<LDP> keyframe_ldp_vec);
 
   /**
-   *  Updates current map with new scans.
+   *  Updates current map with newest scans.
    */
   void updateMap(gtsam::Values pose_estimates,
                  std::vector<LDP> keyframe_ldp_vec);
@@ -78,6 +79,13 @@ public:
    */
   void scanMatcherCallback(const geometry_msgs::Pose2D::ConstPtr& pose2D_msg);
 
+  /**
+   *  Service callback for recalculating the map
+   */
+  bool mapRecalculationServiceCallback(
+    crowdbot_active_slam::map_recalculation::Request &request,
+    crowdbot_active_slam::map_recalculation::Response &response);
+
 private:
   // Node handler
   ros::NodeHandle nh_;
@@ -88,11 +96,12 @@ private:
   nav_msgs::OccupancyGrid occupancy_grid_msg_;
   sensor_msgs::LaserScan latest_scan_msg_;
 
-  // Publisher and Subscriber
+  // Service, Publisher and Subscriber
   ros::Subscriber pose_sub_;
   ros::Subscriber scan_sub_;
   ros::Publisher path_pub_;
   ros::Publisher map_pub_;
+  ros::ServiceServer map_service_;
 
   // TF
   tf::Transform map_to_odom_tf_;
@@ -132,6 +141,7 @@ private:
   double node_dist_angular_;
   double dist_linear_sq_;
   double lc_radius_;
+  bool const_map_update_steps_;
   bool first_scan_pose_;
   bool scan_callback_initialized_;
   bool new_node_;

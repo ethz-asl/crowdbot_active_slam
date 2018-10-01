@@ -34,12 +34,17 @@ void GraphOptimiser::initParams(){
   nh_private_.param<double>("node_dist_linear", node_dist_linear_, 0.10);
   nh_private_.param<double>("node_dist_angular", node_dist_angular_, 0.175);
   nh_private_.param<double>("loop_closing_radius", lc_radius_, 0.175);
+  nh_private_.param<bool>("const_map_update_steps", const_map_update_steps_, false);
 
   // Initialise subscriber and publisher
   pose_sub_ = nh_.subscribe("pose2D", 1, &GraphOptimiser::scanMatcherCallback, this);
   scan_sub_ = nh_.subscribe("base_scan", 1, &GraphOptimiser::scanCallback, this);
   path_pub_ = nh_.advertise<nav_msgs::Path>("/graph_path", 1);
   map_pub_ = nh_.advertise<nav_msgs::OccupancyGrid>("/occupancy_map", 1);
+
+  // Initialise map service
+  map_service_ = nh_.advertiseService("map_recalculation_service",
+                        &GraphOptimiser::mapRecalculationServiceCallback, this);
 
   // Initialize base to laser tf
   tf::StampedTransform base_to_laser_tf_;
@@ -390,6 +395,13 @@ void GraphOptimiser::updateMap(gtsam::Values pose_estimates,
   occupancy_grid_msg_ = occupancy_grid_msg;
 }
 
+bool GraphOptimiser::mapRecalculationServiceCallback(
+  crowdbot_active_slam::map_recalculation::Request &request,
+  crowdbot_active_slam::map_recalculation::Response &response){
+    drawMap(pose_estimates_, keyframe_ldp_vec_);
+    return true;
+  }
+
 void GraphOptimiser::scanCallback(const sensor_msgs::LaserScan::ConstPtr& scan_msg){
   latest_scan_msg_ = *scan_msg;
   scan_callback_initialized_ = true;
@@ -554,7 +566,21 @@ void GraphOptimiser::scanMatcherCallback(const geometry_msgs::Pose2D::ConstPtr& 
     // Update variables
     node_counter_ += 1;
     prev_pose2_ = current_pose2_;
+
+    // Calculate Map
+    if (const_map_update_steps_ && (node_counter_ - 1) % 50 == 0){
+      // Draw the map
+      drawMap(pose_estimates_, keyframe_ldp_vec_);
+    }
+    else {
+      // Update map
+      if ((diff_dist_linear_sq > dist_linear_sq_) or
+         (std::abs(angle_diff) > node_dist_angular_)){
+        updateMap(pose_estimates_, keyframe_ldp_vec_);
+      }
+    }
   }
+
   // Update map to odom tf
   if (new_node_){
     map_br_.sendTransform(tf::StampedTransform(map_to_odom_tf_, ros::Time::now(),
@@ -577,16 +603,12 @@ void GraphOptimiser::scanMatcherCallback(const geometry_msgs::Pose2D::ConstPtr& 
                         "map", "odom"));
   }
 
-  if ((node_counter_ - 1) % 50 == 0){
+  // Calculate first Map
+  if (node_counter_ == 1){
     // Draw the map
     drawMap(pose_estimates_, keyframe_ldp_vec_);
   }
-  else {
-    if ((diff_dist_linear_sq > dist_linear_sq_) or
-       (std::abs(angle_diff) > node_dist_angular_)){
-      updateMap(pose_estimates_, keyframe_ldp_vec_);
-    }
-  }
+
   // Publish map
   map_pub_.publish(occupancy_grid_msg_);
 }

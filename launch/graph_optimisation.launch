@@ -4,5 +4,6 @@
     <param name="node_dist_linear" value="0.3"/>
     <param name="node_dist_angular" value="0.5"/>
     <param name="loop_closing_radius" value="0.7"/>
+    <param name="const_map_update_steps" value="false"/>
   </node>
 </launch>

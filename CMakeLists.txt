@@ -19,6 +19,7 @@ pkg_check_modules(csm REQUIRED csm)
 add_service_files(
   FILES
   get_frontier_list.srv
+  map_recalculation.srv
 )
 
 generate_messages(
