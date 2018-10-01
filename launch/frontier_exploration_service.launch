@@ -1,4 +1,6 @@
 <launch>
   <node name="frontier_exploration" pkg="crowdbot_active_slam"
-        type="frontier_exploration" output="screen"/>
+        type="frontier_exploration" output="screen">
+    <param name="frontier_size" value="50"/>
+  </node>
 </launch>

@@ -25,14 +25,18 @@ public:
   ~FrontierExploration();
 
   /**
-   *  ...
+   *  This service callback calculates the frontier centroid informations in
+   *  the actual map, returns the centroid information and publishes a cell grid
+   *  with the centroids.
    */
   bool serviceCallback(
                   crowdbot_active_slam::get_frontier_list::Request &request,
                   crowdbot_active_slam::get_frontier_list::Response &response);
 
   /**
-   *  ...
+   *  Takes the inital cell id and a frontier flag to search for the frontier
+   *  region around the initial cell. Returns a Pose2D centroid information.
+   *  If the frontier size is too small it returns all values as zero.
    */
   geometry_msgs::Pose2D getFrontierCentroid(unsigned int initial_cell,
                                             std::vector<bool>& frontier_flag,
@@ -41,29 +45,32 @@ public:
                                             float resolution);
 
   /**
-   *  ...
+   *  Transforms a cell id to x, y world coordinates.
    */
   void idToWorldXY(unsigned int id, double& x, double& y, unsigned int width,
                    unsigned int height, float resolution);
 
   /**
-   *  ...
+   *  Returns a list of cell id's for the 8-neighbourhood around an id cell.
    */
   std::vector<unsigned int> neighbour8(unsigned int id, unsigned int width,
                                        unsigned int height);
 
   /**
-   *  ...
+   *  Returns a list of cell id's for the 4-neighbourhood around an id cell.
    */
   std::vector<unsigned int> neighbour4(unsigned int id, unsigned int width,
                                        unsigned int height);
 
   /**
-   *  ...
+   *  This callback saves the current occupancy grid map.
    */
   void mapCallback(const nav_msgs::OccupancyGrid::ConstPtr& map_msg);
 
 private:
+  // Rosparam
+  int frontier_size_;
+
   // Node handler
   ros::NodeHandle nh_;
   ros::NodeHandle nh_private_;
