@@ -62,6 +62,12 @@ public:
   void drawMap(gtsam::Values pose_estimates, std::vector<LDP> keyframe_ldp_vec);
 
   /**
+   *  Updates current map with new scans.
+   */
+  void updateMap(gtsam::Values pose_estimates,
+                 std::vector<LDP> keyframe_ldp_vec);
+
+  /**
    *  A callback function on laser scans.
    */
   void scanCallback(const sensor_msgs::LaserScan::ConstPtr& scan_msg);
@@ -112,6 +118,12 @@ private:
   float map_resolution_;
   unsigned int map_width_;
   unsigned int map_height_;
+  Eigen::MatrixXf log_odds_array_;
+  float l_0_;
+  float p_occ_;
+  float p_free_;
+  float l_occ_;
+  float l_free_;
 
   // Other variables
   double node_dist_linear_;

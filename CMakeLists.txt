@@ -6,18 +6,21 @@ find_package(catkin REQUIRED COMPONENTS
   tf
   std_msgs
   sensor_msgs
-  geometry_msgs)
+  geometry_msgs
+  cmake_modules)
 
 find_package(GTSAM REQUIRED)
 find_package(PCL REQUIRED QUIET)
 find_package(PkgConfig REQUIRED)
+find_package(Eigen3 REQUIRED)
 pkg_check_modules(csm REQUIRED csm)
 
 catkin_package(
 INCLUDE_DIRS include
-CATKIN_DEPENDS roscpp tf std_msgs sensor_msgs geometry_msgs)
+CATKIN_DEPENDS roscpp tf std_msgs sensor_msgs geometry_msgs
+DEPENDS Eigen3)
 
-include_directories(include ${catkin_INCLUDE_DIRS} ${csm_INCLUDE_DIRS})
+include_directories(include ${catkin_INCLUDE_DIRS} ${csm_INCLUDE_DIRS} ${Eigen3_INCLUDE_DIRS})
 link_directories(${csm_LIBRARY_DIRS})
 
 add_executable(graph_optimisation src/graph_optimisation.cpp)
