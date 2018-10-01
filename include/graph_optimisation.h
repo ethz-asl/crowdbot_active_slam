@@ -105,6 +105,7 @@ private:
   // gtsam objects
   gtsam::Pose2 prev_pose2_;
   gtsam::Pose2 current_pose2_;
+  gtsam::Pose2 last_pose2_;
   gtsam::NonlinearFactorGraph graph_;
   gtsam::noiseModel::Diagonal::shared_ptr scan_match_noise_;
   gtsam::Values pose_estimates_;
@@ -133,6 +134,7 @@ private:
   double lc_radius_;
   bool first_scan_pose_;
   bool scan_callback_initialized_;
+  bool new_node_;
   int node_counter_;
 
 };

@@ -107,6 +107,7 @@ void GraphOptimiser::initParams(){
   dist_linear_sq_ = node_dist_linear_ * node_dist_linear_;
   first_scan_pose_ = true;
   scan_callback_initialized_ = false;
+  new_node_ = false;
   node_counter_ = 0;
 }
 
@@ -440,6 +441,8 @@ void GraphOptimiser::scanMatcherCallback(const geometry_msgs::Pose2D::ConstPtr& 
   // Add a new node if robot moved far enough
   if ((diff_dist_linear_sq > dist_linear_sq_) or
      (std::abs(angle_diff) > node_dist_angular_)){
+    new_node_ = true;
+
     // Save scan as LDP
     laserScanToLDP(latest_scan_msg_, current_ldp_);
     current_ldp_->estimate[0] = 0.0;
@@ -541,11 +544,10 @@ void GraphOptimiser::scanMatcherCallback(const geometry_msgs::Pose2D::ConstPtr& 
     path_pub_.publish(graph_path_);
 
     // Update map to odom transform
-    Pose2 last_pose2;
-    last_pose2 = *dynamic_cast<const Pose2*>(&pose_estimates_.at(node_counter_));
+    last_pose2_ = *dynamic_cast<const Pose2*>(&pose_estimates_.at(node_counter_));
 
     tf::Transform last_pose_tf;
-    last_pose_tf = xythetaToTF(last_pose2.x(), last_pose2.y(), last_pose2.theta());
+    last_pose_tf = xythetaToTF(last_pose2_.x(), last_pose2_.y(), last_pose2_.theta());
 
     map_to_odom_tf_ = last_pose_tf * odom_transform;
 
@@ -554,8 +556,26 @@ void GraphOptimiser::scanMatcherCallback(const geometry_msgs::Pose2D::ConstPtr& 
     prev_pose2_ = current_pose2_;
   }
   // Update map to odom tf
-  map_br_.sendTransform(tf::StampedTransform(map_to_odom_tf_, ros::Time::now(),
+  if (new_node_){
+    map_br_.sendTransform(tf::StampedTransform(map_to_odom_tf_, ros::Time::now(),
                         "map", "odom"));
+    new_node_ = false;
+  }else{
+    Pose2 between_pose2;
+    Pose2 temp_last_pose2;
+    between_pose2 = prev_pose2_.between(current_pose2_);
+    temp_last_pose2 = last_pose2_ * between_pose2;
+
+    tf::Transform last_pose_tf;
+    last_pose_tf = xythetaToTF(temp_last_pose2.x(),
+                               temp_last_pose2.y(),
+                               temp_last_pose2.theta());
+
+    map_to_odom_tf_ = last_pose_tf * odom_transform;
+
+    map_br_.sendTransform(tf::StampedTransform(map_to_odom_tf_, ros::Time::now(),
+                        "map", "odom"));
+  }
 
   if ((node_counter_ - 1) % 50 == 0){
     // Draw the map
