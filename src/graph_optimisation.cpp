@@ -103,7 +103,7 @@ void GraphOptimiser::initParams(){
   map_height_ = 1000;
   log_odds_array_ = Eigen::MatrixXf(map_width_, map_height_);
   l_0_ = log(0.5 / 0.5);
-  p_occ_ = 0.9; // How to choose?
+  p_occ_ = 0.99; // How to choose?
   p_free_ = 0.1; // How to choose?
   l_occ_ = log(p_occ_ / (1.0 - p_occ_));
   l_free_ = log(p_free_ / (1.0 - p_free_));
@@ -398,8 +398,16 @@ void GraphOptimiser::updateMap(gtsam::Values pose_estimates,
 bool GraphOptimiser::mapRecalculationServiceCallback(
   crowdbot_active_slam::map_recalculation::Request &request,
   crowdbot_active_slam::map_recalculation::Response &response){
-    drawMap(pose_estimates_, keyframe_ldp_vec_);
-    return true;
+  // Optimize the graph
+  LevenbergMarquardtOptimizer optimizer(graph_, pose_estimates_);
+  ROS_INFO("Optimisation started!");
+  pose_estimates_ = optimizer.optimize();
+  ROS_INFO("Optimisation finished!");
+
+  // Draw the whole map
+  drawMap(pose_estimates_, keyframe_ldp_vec_);
+
+  return true;
   }
 
 void GraphOptimiser::scanCallback(const sensor_msgs::LaserScan::ConstPtr& scan_msg){
@@ -573,11 +581,7 @@ void GraphOptimiser::scanMatcherCallback(const geometry_msgs::Pose2D::ConstPtr& 
       drawMap(pose_estimates_, keyframe_ldp_vec_);
     }
     else {
-      // Update map
-      if ((diff_dist_linear_sq > dist_linear_sq_) or
-         (std::abs(angle_diff) > node_dist_angular_)){
-        updateMap(pose_estimates_, keyframe_ldp_vec_);
-      }
+      updateMap(pose_estimates_, keyframe_ldp_vec_);
     }
   }
 
