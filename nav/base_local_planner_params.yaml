@@ -8,14 +8,17 @@ TrajectoryPlannerROS:
   acc_lim_theta: 1.2
   acc_lim_x: 2.5
   acc_lim_y: 2.5
-  xy_goal_tolerance: 0.40
+  xy_goal_tolerance: 0.3
   yaw_goal_tolerance: 3.14
   holonomic_robot: false
   sim_time: 3.0
   meter_scoring: true
   occdist_scale: 0.01
   heading_lookahead: 0.325
-  pdist_scale: 2.8
-  gdist_scale: 2.0
+  pdist_scale: 0.6
+  gdist_scale: 0.6
+  heading_scoring: true
+  heading_scoring_timestep: 1.0
 controller_frequency: 2.0
 planner_frequency: 1.0
+recovery_behavior_enabled: false

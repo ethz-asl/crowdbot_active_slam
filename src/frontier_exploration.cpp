@@ -63,7 +63,7 @@ bool FrontierExploration::serviceCallback(
 
   // Update map with freespace threshold
   for (int i = 0; i < latest_map_msg_.data.size(); i++){
-    if (latest_map_msg_.data[i] <= 10 && latest_map_msg_.data[i] != -1){
+    if (latest_map_msg_.data[i] <= 30 && latest_map_msg_.data[i] != -1){
       latest_map_msg_.data[i] = 0;
     }
   }

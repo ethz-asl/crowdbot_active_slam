@@ -104,7 +104,7 @@ void GraphOptimiser::initParams(){
   log_odds_array_ = Eigen::MatrixXf(map_width_, map_height_);
   l_0_ = log(0.5 / 0.5);
   p_occ_ = 0.99; // How to choose?
-  p_free_ = 0.1; // How to choose?
+  p_free_ = 0.25; // How to choose?
   l_occ_ = log(p_occ_ / (1.0 - p_occ_));
   l_free_ = log(p_free_ / (1.0 - p_free_));
 

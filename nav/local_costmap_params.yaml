@@ -8,4 +8,4 @@ local_costmap:
   width: 3.0
   height: 3.0
   resolution: 0.05
-  cost_scaling_factor: 5.0
+  cost_scaling_factor: 4.0
