@@ -29,7 +29,7 @@ FrontierExploration::FrontierExploration(ros::NodeHandle nh,
                            &FrontierExploration::mapCallback, this);
 
   // Init publisher
-  frontier_cell_pub_ = nh_.advertise<nav_msgs::GridCells>("/frontier_points_grid_cell", 1);
+  frontier_cell_pub_ = nh_.advertise<nav_msgs::GridCells>("frontier_points_grid_cell", 1);
 }
 
 FrontierExploration::~FrontierExploration() {}
@@ -48,9 +48,9 @@ bool FrontierExploration::serviceCallback(
 
   // Init Transform listener and get current robot pose
   tf::StampedTransform robot_pose_tf;
-  robot_pose_listener_.waitForTransform("/map", "/base_link", ros::Time(0),
+  robot_pose_listener_.waitForTransform("map", "base_link", ros::Time(0),
                                 ros::Duration(1.0));
-  robot_pose_listener_.lookupTransform("/map", "/base_link",
+  robot_pose_listener_.lookupTransform("map", "base_link",
                                   ros::Time(0), robot_pose_tf);
 
   double robot_x = robot_pose_tf.getOrigin().getX();
@@ -63,7 +63,7 @@ bool FrontierExploration::serviceCallback(
 
   // Update map with freespace threshold
   for (int i = 0; i < latest_map_msg_.data.size(); i++){
-    if (latest_map_msg_.data[i] <= 30 && latest_map_msg_.data[i] != -1){
+    if (latest_map_msg_.data[i] <= 25 && latest_map_msg_.data[i] != -1){
       latest_map_msg_.data[i] = 0;
     }
   }

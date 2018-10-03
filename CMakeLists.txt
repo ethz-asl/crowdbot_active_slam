@@ -38,10 +38,12 @@ link_directories(${csm_LIBRARY_DIRS})
 
 add_executable(graph_optimisation src/graph_optimisation.cpp)
 add_executable(frontier_exploration src/frontier_exploration.cpp)
+add_executable(decision_maker src/decision_maker.cpp)
 
 target_link_libraries(graph_optimisation gtsam
                       ${catkin_LIBRARIES} ${csm_LIBRARIES})
 target_link_libraries(frontier_exploration ${catkin_LIBRARIES})
+target_link_libraries(decision_maker ${catkin_LIBRARIES})
 
 install(DIRECTORY launch
   DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION})

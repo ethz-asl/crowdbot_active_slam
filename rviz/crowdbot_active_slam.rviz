@@ -148,7 +148,7 @@ Visualization Manager:
       Max Color: 255; 255; 255
       Max Intensity: 999999
       Min Color: 0; 0; 0
-      Min Intensity: -972897.5
+      Min Intensity: 0
       Name: LaserScan
       Position Transformer: XYZ
       Queue Size: 10
@@ -175,6 +175,7 @@ Visualization Manager:
         Global Planned Path: true
         Goal Pose: true
         Grid: true
+        GridCells: true
         LaserScan: true
         Local Planned Path: true
         Map: true
@@ -319,6 +320,13 @@ Visualization Manager:
       Topic: /move_base/local_costmap/costmap
       Unreliable: false
       Use Timestamp: false
+      Value: true
+    - Alpha: 1
+      Class: rviz/GridCells
+      Color: 25; 255; 0
+      Enabled: true
+      Name: GridCells
+      Topic: /frontier_exploration/frontier_points_grid_cell
       Value: true
   Enabled: true
   Global Options:

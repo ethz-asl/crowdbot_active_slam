@@ -39,8 +39,8 @@ void GraphOptimiser::initParams(){
   // Initialise subscriber and publisher
   pose_sub_ = nh_.subscribe("pose2D", 1, &GraphOptimiser::scanMatcherCallback, this);
   scan_sub_ = nh_.subscribe("base_scan", 1, &GraphOptimiser::scanCallback, this);
-  path_pub_ = nh_.advertise<nav_msgs::Path>("/graph_path", 1);
-  map_pub_ = nh_.advertise<nav_msgs::OccupancyGrid>("/occupancy_map", 1);
+  path_pub_ = nh_.advertise<nav_msgs::Path>("graph_path", 1);
+  map_pub_ = nh_.advertise<nav_msgs::OccupancyGrid>("occupancy_map", 1);
 
   // Initialise map service
   map_service_ = nh_.advertiseService("map_recalculation_service",
@@ -48,9 +48,9 @@ void GraphOptimiser::initParams(){
 
   // Initialize base to laser tf
   tf::StampedTransform base_to_laser_tf_;
-  base_to_laser_listener_.waitForTransform("/base_link", "/laser", ros::Time(0),
+  base_to_laser_listener_.waitForTransform("base_link", "laser", ros::Time(0),
                                 ros::Duration(1.0));
-  base_to_laser_listener_.lookupTransform("/base_link", "/laser",
+  base_to_laser_listener_.lookupTransform("base_link", "laser",
                                   ros::Time(0), base_to_laser_tf_);
   base_to_laser_ = base_to_laser_tf_;
   laser_to_base_ = base_to_laser_tf_.inverse();
@@ -619,7 +619,7 @@ void GraphOptimiser::scanMatcherCallback(const geometry_msgs::Pose2D::ConstPtr& 
 
 
 int main(int argc, char **argv){
-  ros::init(argc, argv, "GraphOptimiser");
+  ros::init(argc, argv, "graph_optimisation");
   ros::NodeHandle nh;
   ros::NodeHandle nh_("~");
   GraphOptimiser optimiser(nh, nh_);
