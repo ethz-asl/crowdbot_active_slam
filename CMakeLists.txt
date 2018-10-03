@@ -15,6 +15,7 @@ find_package(PCL REQUIRED QUIET)
 find_package(PkgConfig REQUIRED)
 find_package(Eigen3 REQUIRED)
 pkg_check_modules(csm REQUIRED csm)
+pkg_check_modules(SBPL REQUIRED sbpl)
 
 add_service_files(
   FILES
@@ -33,8 +34,9 @@ INCLUDE_DIRS include
 CATKIN_DEPENDS roscpp tf std_msgs sensor_msgs geometry_msgs
 DEPENDS Eigen3)
 
-include_directories(include ${catkin_INCLUDE_DIRS} ${csm_INCLUDE_DIRS} ${Eigen3_INCLUDE_DIRS})
-link_directories(${csm_LIBRARY_DIRS})
+include_directories(include ${catkin_INCLUDE_DIRS} ${csm_INCLUDE_DIRS}
+                            ${Eigen3_INCLUDE_DIRS} ${SBPL_INCLUDE_DIRS})
+link_directories(${csm_LIBRARY_DIRS} ${SBPL_LIBRARY_DIRS})
 
 add_executable(graph_optimisation src/graph_optimisation.cpp)
 add_executable(frontier_exploration src/frontier_exploration.cpp)
@@ -43,7 +45,7 @@ add_executable(decision_maker src/decision_maker.cpp)
 target_link_libraries(graph_optimisation gtsam
                       ${catkin_LIBRARIES} ${csm_LIBRARIES})
 target_link_libraries(frontier_exploration ${catkin_LIBRARIES})
-target_link_libraries(decision_maker ${catkin_LIBRARIES})
+target_link_libraries(decision_maker ${catkin_LIBRARIES} ${SBPL_LIBRARIES})
 
 install(DIRECTORY launch
   DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION})

@@ -3,6 +3,7 @@
 
 #include <ros/ros.h>
 #include <actionlib/client/simple_action_client.h>
+#include <sbpl/headers.h>
 
 #include <crowdbot_active_slam/map_recalculation.h>
 #include <crowdbot_active_slam/get_frontier_list.h>
