@@ -103,8 +103,8 @@ void GraphOptimiser::initParams(){
   map_height_ = 1000;
   log_odds_array_ = Eigen::MatrixXf(map_width_, map_height_);
   l_0_ = log(0.5 / 0.5);
-  p_occ_ = 0.99; // How to choose?
-  p_free_ = 0.25; // How to choose?
+  p_occ_ = 0.997;
+  p_free_ = 0.003;
   l_occ_ = log(p_occ_ / (1.0 - p_occ_));
   l_free_ = log(p_free_ / (1.0 - p_free_));
 
@@ -165,8 +165,11 @@ void GraphOptimiser::drawMap(gtsam::Values pose_estimates,
                                   pose2_estimate.theta()) * base_to_laser_;
 
     std::vector<int> robot_pose_index;
-    robot_pose_index = positionToMapIndex(pose2_estimate.x(),
-                                          pose2_estimate.y(),
+
+    double robot_x = pose2_estimate.x();
+    double robot_y = pose2_estimate.y();
+    robot_pose_index = positionToMapIndex(robot_x,
+                                          robot_y,
                                           map_width_,
                                           map_height_,
                                           map_resolution_);
@@ -184,9 +187,12 @@ void GraphOptimiser::drawMap(gtsam::Values pose_estimates,
       tf::Transform endpoint;
       endpoint = map_to_laser_tf * xythetaToTF(x_end, y_end, angle);
 
+      double endpoint_x = endpoint.getOrigin().getX();
+      double endpoint_y = endpoint.getOrigin().getY();
+
       std::vector<int> end_point_index;
-      end_point_index = positionToMapIndex(endpoint.getOrigin().getX(),
-                                           endpoint.getOrigin().getY(),
+      end_point_index = positionToMapIndex(endpoint_x,
+                                           endpoint_y,
                                            map_width_,
                                            map_height_,
                                            map_resolution_);
@@ -197,6 +203,36 @@ void GraphOptimiser::drawMap(gtsam::Values pose_estimates,
 
       // Update log odds of scan points
       log_odds_array_(x1, y1) += l_occ_ - l_0_;
+
+      // Check if +/- 0.5*resolution is in a new cell
+      double xdiff = endpoint_x - robot_x;
+      double ydiff = endpoint_y - robot_y;
+      double robot_laser_dist = sqrt(xdiff * xdiff + ydiff * ydiff);
+
+      // Calculate delta_x/y with similar triangles
+      double delta_x = 0.5 * map_resolution_ / robot_laser_dist * xdiff;
+      double delta_y = 0.5 * map_resolution_ / robot_laser_dist * ydiff;
+
+      std::vector<int> end_point_index_p;
+      end_point_index_p = positionToMapIndex(endpoint_x + delta_x,
+                                             endpoint_y + delta_y,
+                                             map_width_,
+                                             map_height_,
+                                             map_resolution_);
+
+      std::vector<int> end_point_index_m;
+      end_point_index_m = positionToMapIndex(endpoint_x - delta_x,
+                                             endpoint_y - delta_y,
+                                             map_width_,
+                                             map_height_,
+                                             map_resolution_);
+
+      if (end_point_index_p[0] != x1 || end_point_index_p[1] != y1){
+        log_odds_array_(end_point_index_p[0], end_point_index_p[1]) += l_occ_ - l_0_;
+      }
+      if (end_point_index_m[0] != x1 || end_point_index_m[1] != y1){
+        log_odds_array_(end_point_index_m[0], end_point_index_m[1]) += l_occ_ - l_0_;
+      }
 
       // Bresenham's line algorithm (Get indexes between robot pose and scans)
       // starting from "https://github.com/lama-imr/lama_utilities/blob/indigo-devel/map_ray_caster/src/map_ray_caster.cpp"
@@ -226,21 +262,25 @@ void GraphOptimiser::drawMap(gtsam::Values pose_estimates,
             y += ystep;
             fraction -= twodx;
           }
-          log_odds_array_(x, y) += l_free_ - l_0_;
+          if (x != end_point_index_m[0] || y != end_point_index_m[1]){
+            log_odds_array_(x, y) += l_free_ - l_0_;
+          }
         }
       }
       else {
         int fraction_increment = 2 * dx;
         int fraction = 2 * dx - dy;
         int x = x0;
-        int y = y0  + ystep;
+        int y = y0 + ystep;
         for (x, y; y != y1; y += ystep){
           fraction += fraction_increment;
           if (fraction >= 0){
             x += xstep;
             fraction -= twody;
           }
-          log_odds_array_(x, y) += l_free_ - l_0_;
+          if (x != end_point_index_m[0] || y != end_point_index_m[1]){
+            log_odds_array_(x, y) += l_free_ - l_0_;
+          }
         }
       }
     }
@@ -286,11 +326,14 @@ void GraphOptimiser::updateMap(gtsam::Values pose_estimates,
                                pose2_estimate.theta()) * base_to_laser_;
 
   std::vector<int> robot_pose_index;
-  robot_pose_index = positionToMapIndex(pose2_estimate.x(),
-                                       pose2_estimate.y(),
-                                       map_width_,
-                                       map_height_,
-                                       map_resolution_);
+
+  double robot_x = pose2_estimate.x();
+  double robot_y = pose2_estimate.y();
+  robot_pose_index = positionToMapIndex(robot_x,
+                                        robot_y,
+                                        map_width_,
+                                        map_height_,
+                                        map_resolution_);
 
   // Save index in shorter variable for later use
   int x0 = robot_pose_index[0];
@@ -305,12 +348,15 @@ void GraphOptimiser::updateMap(gtsam::Values pose_estimates,
     tf::Transform endpoint;
     endpoint = map_to_laser_tf * xythetaToTF(x_end, y_end, angle);
 
+    double endpoint_x = endpoint.getOrigin().getX();
+    double endpoint_y = endpoint.getOrigin().getY();
+
     std::vector<int> end_point_index;
-    end_point_index = positionToMapIndex(endpoint.getOrigin().getX(),
-                                        endpoint.getOrigin().getY(),
-                                        map_width_,
-                                        map_height_,
-                                        map_resolution_);
+    end_point_index = positionToMapIndex(endpoint_x,
+                                         endpoint_y,
+                                         map_width_,
+                                         map_height_,
+                                         map_resolution_);
 
     // Save index in shorter variable for later use
     int x1 = end_point_index[0];
@@ -318,6 +364,36 @@ void GraphOptimiser::updateMap(gtsam::Values pose_estimates,
 
     // Update log odds of scan points
     log_odds_array_(x1, y1) += l_occ_ - l_0_;
+
+    // Check if +/- 0.5*resolution is in a new cell
+    double xdiff = endpoint_x - robot_x;
+    double ydiff = endpoint_y - robot_y;
+    double robot_laser_dist = sqrt(xdiff * xdiff + ydiff * ydiff);
+
+    // Calculate delta_x/y with similar triangles
+    double delta_x = 0.5 * map_resolution_ / robot_laser_dist * xdiff;
+    double delta_y = 0.5 * map_resolution_ / robot_laser_dist * ydiff;
+
+    std::vector<int> end_point_index_p;
+    end_point_index_p = positionToMapIndex(endpoint_x + delta_x,
+                                           endpoint_y + delta_y,
+                                           map_width_,
+                                           map_height_,
+                                           map_resolution_);
+
+    std::vector<int> end_point_index_m;
+    end_point_index_m = positionToMapIndex(endpoint_x - delta_x,
+                                           endpoint_y - delta_y,
+                                           map_width_,
+                                           map_height_,
+                                           map_resolution_);
+
+    if (end_point_index_p[0] != x1 || end_point_index_p[1] != y1){
+      log_odds_array_(end_point_index_p[0], end_point_index_p[1]) += l_occ_ - l_0_;
+    }
+    if (end_point_index_m[0] != x1 || end_point_index_m[1] != y1){
+      log_odds_array_(end_point_index_m[0], end_point_index_m[1]) += l_occ_ - l_0_;
+    }
 
     // Bresenham's line algorithm (Get indexes between robot pose and scans)
     // starting from "https://github.com/lama-imr/lama_utilities/blob/indigo-devel/map_ray_caster/src/map_ray_caster.cpp"
@@ -347,21 +423,25 @@ void GraphOptimiser::updateMap(gtsam::Values pose_estimates,
           y += ystep;
           fraction -= twodx;
         }
-        log_odds_array_(x, y) += l_free_ - l_0_;
+        if (x != end_point_index_m[0] || y != end_point_index_m[1]){
+          log_odds_array_(x, y) += l_free_ - l_0_;
+        }
       }
     }
     else {
       int fraction_increment = 2 * dx;
       int fraction = 2 * dx - dy;
       int x = x0;
-      int y = y0  + ystep;
+      int y = y0 + ystep;
       for (x, y; y != y1; y += ystep){
         fraction += fraction_increment;
         if (fraction >= 0){
           x += xstep;
           fraction -= twody;
         }
-        log_odds_array_(x, y) += l_free_ - l_0_;
+        if (x != end_point_index_m[0] || y != end_point_index_m[1]){
+          log_odds_array_(x, y) += l_free_ - l_0_;
+        }
       }
     }
   }
