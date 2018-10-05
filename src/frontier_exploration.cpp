@@ -55,6 +55,11 @@ bool FrontierExploration::serviceCallback(
 
   double robot_x = robot_pose_tf.getOrigin().getX();
   double robot_y = robot_pose_tf.getOrigin().getY();
+  double robot_theta = tf::getYaw(robot_pose_tf.getRotation());
+
+  response.start_pose.x = robot_x;
+  response.start_pose.y = robot_y;
+  response.start_pose.theta = robot_theta;
 
   // Save map information
   unsigned int width = latest_map_msg_.info.width;

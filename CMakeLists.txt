@@ -47,5 +47,7 @@ target_link_libraries(graph_optimisation gtsam
 target_link_libraries(frontier_exploration ${catkin_LIBRARIES})
 target_link_libraries(decision_maker ${catkin_LIBRARIES} ${SBPL_LIBRARIES})
 
-install(DIRECTORY launch
+install(DIRECTORY
+  launch
+  matlab
   DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION})
