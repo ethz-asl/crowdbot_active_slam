@@ -23,6 +23,11 @@ DecisionMaker::DecisionMaker(ros::NodeHandle nh, ros::NodeHandle nh_)
   map_recalculation_client_ = nh_.serviceClient
         <crowdbot_active_slam::map_recalculation>
         ("/map_recalculation_service");
+  get_plan_move_base_client_ = nh_.serviceClient
+        <nav_msgs::GetPlan>("/move_base/make_plan");
+  // utility_calc_client_ = nh_.serviceClient
+  //       <crowdbot_active_slam::utility_calc>
+  //       ("/utility_calc_service");
 
   // Init SBPL env
   // set the perimeter of the robot
@@ -54,6 +59,25 @@ DecisionMaker::DecisionMaker(ros::NodeHandle nh, ros::NodeHandle nh_)
 
 DecisionMaker::~DecisionMaker() {
   delete planner_;
+}
+
+geometry_msgs::PoseStamped pose2DToPoseStamped(geometry_msgs::Pose2D pose2D){
+  geometry_msgs::Point pose_position;
+  pose_position.x = pose2D.x;
+  pose_position.y = pose2D.y;
+
+  tf::Quaternion q = tf::createQuaternionFromRPY(0, 0, pose2D.theta);
+  geometry_msgs::Quaternion pose_orientation;
+  quaternionTFToMsg(q, pose_orientation);
+
+  geometry_msgs::Pose pose;
+  pose.position = pose_position;
+  pose.orientation = pose_orientation;
+
+  geometry_msgs::PoseStamped posestamped;
+  posestamped.pose = pose;
+  posestamped.header.frame_id = "/map";
+  return posestamped;
 }
 
 unsigned int DecisionMaker::mapToSBPLCost(int occupancy){
@@ -92,8 +116,8 @@ void DecisionMaker::createFootprint(std::vector<sbpl_2Dpt_t>& perimeter,
   perimeter.push_back(pt_m);
 }
 
-void DecisionMaker::planPath(geometry_msgs::Pose2D start_pose,
-                             geometry_msgs::Pose2D goal_pose){
+nav_msgs::Path DecisionMaker::planPathSBPL(geometry_msgs::Pose2D start_pose,
+                                       geometry_msgs::Pose2D goal_pose){
   // Update cost
   unsigned int ix, iy;
   for (int i = 0; i < latest_map_msg_.data.size(); i++){
@@ -152,77 +176,93 @@ void DecisionMaker::planPath(geometry_msgs::Pose2D start_pose,
     plan_path_.poses.push_back(pose);
   }
   plan_pub_.publish(plan_path_);
+  return plan_path_;
 }
 
 void DecisionMaker::startExploration(){
-    // Check if map already subscribed
-    if (!map_initialized_){
-      ROS_WARN("Map was not subscribed until now!");
-      return;
-    }
+  // Check if map already subscribed
+  if (!map_initialized_){
+    ROS_WARN("Map was not subscribed until now!");
+    return;
+  }
 
-    crowdbot_active_slam::get_frontier_list frontier_srv;
+  crowdbot_active_slam::get_frontier_list frontier_srv;
 
-    if (frontier_exploration_client_.call(frontier_srv))
-    {
-      ROS_INFO("Frontier exploration call successfull");
-    }
-    else
-    {
-      ROS_ERROR("Failed to call service frontier_exploration");
-    }
+  if (frontier_exploration_client_.call(frontier_srv))
+  {
+    ROS_INFO("Frontier exploration call successfull");
+  }
+  else
+  {
+    ROS_ERROR("Failed to call service frontier_exploration");
+  }
 
-    int frontier_size = frontier_srv.response.frontier_list.size();
-    if (frontier_size == 0){
-      finished_ = true;
-      return;
-    }
+  int frontier_size = frontier_srv.response.frontier_list.size();
+  if (frontier_size == 0){
+    finished_ = true;
+    return;
+  }
 
-    for (int i = 0; i < frontier_size; i++){
-      planPath(frontier_srv.response.start_pose, frontier_srv.response.frontier_list[i]);
-    }
+  nav_msgs::Path action_plan;
+  nav_msgs::GetPlan get_plan;
 
-    // Action client
-    actionlib::SimpleActionClient<move_base_msgs::MoveBaseAction> goal_client("move_base", true);
+  for (int i = 0; i < frontier_size; i++){
+    // action_plan = planPath(frontier_srv.response.start_pose,
+    //                        frontier_srv.response.frontier_list[i]);
 
-    ROS_INFO("Waiting for action server to start.");
-    // wait for the action server to start
-    goal_client.waitForServer();
+    get_plan.request.start = pose2DToPoseStamped(frontier_srv.response.start_pose);
+    get_plan.request.goal = pose2DToPoseStamped(frontier_srv.response.frontier_list[i]);
+    get_plan.request.tolerance = 0.3;
+    get_plan_move_base_client_.call(get_plan);
+    action_plan = get_plan.response.plan;
+    action_plan.header.frame_id = "/map";
+    plan_pub_.publish(action_plan);
+    
+    // Call service of graph optimisation
+    // utility = get_utility();
+  }
 
-    ROS_INFO("Action server started, sending goal.");
+  // Action client
+  actionlib::SimpleActionClient<move_base_msgs::MoveBaseAction> goal_client("move_base", true);
 
-    move_base_msgs::MoveBaseGoal goal;
-    goal.target_pose.header.frame_id = "map";
-    goal.target_pose.pose.position.x = frontier_srv.response.frontier_list[0].x;
-    goal.target_pose.pose.position.y = frontier_srv.response.frontier_list[0].y;
-    goal.target_pose.pose.position.z = 0;
+  ROS_INFO("Waiting for action server to start.");
+  // wait for the action server to start
+  goal_client.waitForServer();
 
-    goal.target_pose.pose.orientation.x = 0;
-    goal.target_pose.pose.orientation.y = 0;
-    goal.target_pose.pose.orientation.z = 0;
-    goal.target_pose.pose.orientation.w = 1;
+  ROS_INFO("Action server started, sending goal.");
 
-    goal_client.sendGoal(goal);
+  move_base_msgs::MoveBaseGoal goal;
+  goal.target_pose.header.frame_id = "map";
+  goal.target_pose.pose.position.x = frontier_srv.response.frontier_list[0].x;
+  goal.target_pose.pose.position.y = frontier_srv.response.frontier_list[0].y;
+  goal.target_pose.pose.position.z = 0;
 
-    bool finished_before_timeout = goal_client.waitForResult(ros::Duration(120.0));
+  goal.target_pose.pose.orientation.x = 0;
+  goal.target_pose.pose.orientation.y = 0;
+  goal.target_pose.pose.orientation.z = 0;
+  goal.target_pose.pose.orientation.w = 1;
 
-    if (finished_before_timeout)
-    {
-      actionlib::SimpleClientGoalState state = goal_client.getState();
-      ROS_INFO("Action finished: %s",state.toString().c_str());
-    }
-    else
-      ROS_INFO("Action did not finish before the time out.");
+  goal_client.sendGoal(goal);
 
-    crowdbot_active_slam::map_recalculation map_srv;
-    if (map_recalculation_client_.call(map_srv))
-    {
-      ROS_INFO("Map recalculation call successfull");
-    }
-    else
-    {
-      ROS_ERROR("Failed to call service map_recalculation");
-    }
+  bool finished_before_timeout = goal_client.waitForResult(ros::Duration(120.0));
+
+  if (finished_before_timeout)
+  {
+    actionlib::SimpleClientGoalState state = goal_client.getState();
+    ROS_INFO("Action finished: %s",state.toString().c_str());
+  }
+  else
+    ROS_INFO("Action did not finish before the time out.");
+
+  crowdbot_active_slam::map_recalculation map_srv;
+  if (map_recalculation_client_.call(map_srv))
+  {
+    ROS_INFO("Map recalculation call successfull");
+  }
+  else
+  {
+    ROS_ERROR("Failed to call service map_recalculation");
+  }
 }
 
 void DecisionMaker::mapCallback(

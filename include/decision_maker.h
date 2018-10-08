@@ -10,7 +10,9 @@
 
 #include <crowdbot_active_slam/map_recalculation.h>
 #include <crowdbot_active_slam/get_frontier_list.h>
+#include <crowdbot_active_slam/utility_calc.h>
 #include <move_base_msgs/MoveBaseAction.h>
+#include <nav_msgs/GetPlan.h>
 
 
 class DecisionMaker {
@@ -25,18 +27,36 @@ public:
    */
   ~DecisionMaker();
 
+  /**
+   *  ...
+   */
   unsigned int mapToSBPLCost(int occupancy);
 
+  /**
+   *  ...
+   */
   void idToCell(unsigned int id, unsigned int& x, unsigned int& y,
                 unsigned int width, unsigned int height);
 
+  /**
+   *  ...
+   */
   void createFootprint(std::vector<sbpl_2Dpt_t>& perimeter, double halfwidth,
                                                             double halflength);
+  /**
+   *  ...
+   */
+  nav_msgs::Path planPathSBPL(geometry_msgs::Pose2D start_pose,
+                              geometry_msgs::Pose2D goal_pose);
 
-  void planPath(geometry_msgs::Pose2D start_pose, geometry_msgs::Pose2D goal_pose);
-
+  /**
+   *  ...
+   */
   void startExploration();
 
+  /**
+   *  ...
+   */
   void mapCallback(const nav_msgs::OccupancyGrid::ConstPtr &map_msg);
 
 private:
@@ -53,6 +73,8 @@ private:
   ros::Subscriber map_sub_;
   ros::ServiceClient frontier_exploration_client_;
   ros::ServiceClient map_recalculation_client_;
+  ros::ServiceClient utility_calc_client_;
+  ros::ServiceClient get_plan_move_base_client_;
 
   // others
   unsigned int width_;
