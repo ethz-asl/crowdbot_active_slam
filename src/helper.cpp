@@ -76,3 +76,24 @@ geometry_msgs::Pose xythetaToPose(double x, double y, double theta){
 
   return pose;
 }
+
+double xyDiffToYaw(double x_diff, double y_diff){
+  if (x_diff == 0 && y_diff > 0){
+    return M_PI_2;
+  }
+  else if (x_diff == 0 && y_diff < 0){
+    return -M_PI_2;
+  }
+  else if (x_diff < 0 && y_diff == 0){
+    return M_PI;
+  }
+  else if (x_diff < 0 && y_diff < 0){
+    return atan(y_diff / x_diff) - M_PI;
+  }
+  else if (x_diff < 0 && y_diff > 0){
+    return atan(y_diff / x_diff) + M_PI;
+  }
+  else {
+    return atan(y_diff / x_diff);
+  }
+}

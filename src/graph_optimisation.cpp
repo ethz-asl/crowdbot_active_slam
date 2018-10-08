@@ -40,11 +40,14 @@ void GraphOptimiser::initParams(){
   pose_sub_ = nh_.subscribe("pose2D", 1, &GraphOptimiser::scanMatcherCallback, this);
   scan_sub_ = nh_.subscribe("base_scan", 1, &GraphOptimiser::scanCallback, this);
   path_pub_ = nh_.advertise<nav_msgs::Path>("graph_path", 1);
+  action_path_pub_ = nh_.advertise<nav_msgs::Path>("action_graph", 1);
   map_pub_ = nh_.advertise<nav_msgs::OccupancyGrid>("occupancy_map", 1);
 
   // Initialise map service
   map_service_ = nh_.advertiseService("map_recalculation_service",
                         &GraphOptimiser::mapRecalculationServiceCallback, this);
+  utility_calc_service_ = nh_.advertiseService("utility_calc_service",
+                             &GraphOptimiser::utilityCalcServiceCallback, this);
 
   // Initialize base to laser tf
   tf::StampedTransform base_to_laser_tf_;
@@ -315,7 +318,6 @@ void GraphOptimiser::drawMap(gtsam::Values pose_estimates,
   occupancy_grid_msg_ = occupancy_grid_msg;
 }
 
-
 void GraphOptimiser::updateMap(gtsam::Values pose_estimates,
                                std::vector<LDP> keyframe_ldp_vec){
   int i = keyframe_ldp_vec.size() - 1;
@@ -489,6 +491,137 @@ bool GraphOptimiser::mapRecalculationServiceCallback(
 
   return true;
   }
+
+bool GraphOptimiser::utilityCalcServiceCallback(
+  crowdbot_active_slam::utility_calc::Request &request,
+  crowdbot_active_slam::utility_calc::Response &response){
+
+  Pose2 current_estimate;
+  int size = pose_estimates_.size();
+
+  // Cast Pose2 from Value
+  current_estimate = *dynamic_cast<const Pose2*>(&pose_estimates_.at(size - 1));
+
+  // Get covariance from current position
+  Marginals marginals(graph_, pose_estimates_);
+  noiseModel::Gaussian::shared_ptr current_marginal_noise =
+      noiseModel::Gaussian::Covariance(marginals.marginalCovariance(size - 1));
+
+  // Build action graph
+  NonlinearFactorGraph action_graph;
+  Values action_estimates;
+  action_graph.add(PriorFactor<Pose2>(0, current_estimate, current_marginal_noise));
+  action_estimates.insert(0, current_estimate);
+
+  Pose2 prev_pose = current_estimate;
+  int node_counter = 1;
+  int lc_counter = 0;
+  unsigned char lc = 'l';
+  std::map<int, int> map_of_lc;
+  int prev_i = 0;
+  double prev_angle = current_estimate.theta();
+
+  for (int i = 0; i < request.plan.poses.size(); i++){
+    // Check if distance/angle diff is bigger than threshold as done in SLAM algo below
+    double x_diff = request.plan.poses[i].pose.position.x -
+                    request.plan.poses[prev_i].pose.position.x;
+    double y_diff = request.plan.poses[i].pose.position.y -
+                    request.plan.poses[prev_i].pose.position.y;
+    double diff_dist_linear_sq = x_diff * x_diff + y_diff * y_diff;
+
+    double angle = xyDiffToYaw(x_diff, y_diff);
+    double angle_diff = angle - prev_angle;
+
+    if ((diff_dist_linear_sq > dist_linear_sq_) or
+       (std::abs(angle_diff) > node_dist_angular_)){
+      //
+      Pose2 next_pose(request.plan.poses[i].pose.position.x,
+                      request.plan.poses[i].pose.position.y,
+                      angle);
+      Pose2 next_mean = prev_pose.between(next_pose);
+
+      action_graph.add(BetweenFactor<Pose2>(node_counter - 1, node_counter,
+        next_mean, scan_match_noise_));
+      action_estimates.insert(node_counter, next_pose);
+
+      // Check for loop closings
+      double x_high = next_pose.x() + lc_radius_;
+      double x_low = next_pose.x() - lc_radius_;
+      double y_high = next_pose.y() + lc_radius_;
+      double y_low = next_pose.y() - lc_radius_;
+      double lc_radius_squared = lc_radius_ * lc_radius_;
+
+      for (int j = 0; j < pose_estimates_.size(); j++){
+        Pose2 tmp_pose2 = *dynamic_cast<const Pose2*>(&pose_estimates_.at(j));
+
+        // Check if tmp_pose2 is in square region around current pose estimate
+        if (tmp_pose2.x() <= x_high && tmp_pose2.x() >= x_low &&
+            tmp_pose2.y() <= y_high && tmp_pose2.y() >= y_low){
+          double x_diff_lc = next_pose.x() - tmp_pose2.x();
+          double y_diff_lc = next_pose.y() - tmp_pose2.y();
+
+          // Check if tmp_pose2 is in circle around current pose estimate
+          if (x_diff_lc * x_diff_lc + y_diff_lc * y_diff_lc <= lc_radius_squared){
+
+            // Get Pose tf between current and new Pose as first guess for icp
+            Pose2 diff_pose2 = next_pose.between(tmp_pose2);
+
+            noiseModel::Gaussian::shared_ptr current_marginal_noise =
+                noiseModel::Gaussian::Covariance(marginals.marginalCovariance(j));
+
+            if (map_of_lc.find(j) != map_of_lc.end()){
+              int lc_index = map_of_lc.find(j)->second;
+              action_graph.add(BetweenFactor<Pose2>(node_counter, Symbol(lc, lc_index),
+                                              diff_pose2, scan_match_noise_));
+            }
+            else {
+              action_graph.add(PriorFactor<Pose2>(Symbol(lc, lc_counter),
+                                              tmp_pose2, current_marginal_noise));
+              action_graph.add(BetweenFactor<Pose2>(node_counter, Symbol(lc, lc_counter),
+                                              diff_pose2, scan_match_noise_));
+              action_estimates.insert(Symbol(lc, lc_counter), tmp_pose2);
+
+              map_of_lc.insert(std::make_pair(j, lc_counter));
+              lc_counter += 1;
+            }
+          }
+        }
+      }
+      node_counter += 1;
+      prev_angle = angle;
+      prev_pose = next_pose;
+      prev_i = i;
+    }
+  }
+
+  // Optimize the graph
+  LevenbergMarquardtOptimizer optimizer(action_graph, action_estimates);
+  ROS_INFO("Optimisation started!");
+  action_estimates = optimizer.optimize();
+  ROS_INFO("Optimisation finished!");
+
+  // Create a path msg of the graph node estimates
+  nav_msgs::Path new_path;
+  new_path.header.frame_id = "/map";
+  Pose2 tmp_pose2;
+
+  // Iterate over all node estimates
+  for (int i = 0; i < action_estimates.size() - lc_counter; i++){
+    // Cast Pose2 from Value
+    tmp_pose2 = *dynamic_cast<const Pose2*>(&action_estimates.at(i));
+
+    // Create PoseStamped variables from Pose 2 and add to path
+    new_path.poses.push_back(pose2ToPoseStamped(tmp_pose2));
+  }
+
+  // Publish the graph
+  action_path_pub_.publish(new_path);
+
+
+  response.utility = 1;
+
+  return true;
+}
 
 void GraphOptimiser::scanCallback(const sensor_msgs::LaserScan::ConstPtr& scan_msg){
   latest_scan_msg_ = *scan_msg;

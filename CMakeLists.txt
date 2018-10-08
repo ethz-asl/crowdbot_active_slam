@@ -7,6 +7,7 @@ find_package(catkin REQUIRED COMPONENTS
   std_msgs
   sensor_msgs
   geometry_msgs
+  nav_msgs
   cmake_modules
   message_generation)
 
@@ -21,12 +22,14 @@ add_service_files(
   FILES
   get_frontier_list.srv
   map_recalculation.srv
+  utility_calc.srv
 )
 
 generate_messages(
   DEPENDENCIES
   std_msgs
   geometry_msgs
+  nav_msgs
 )
 
 catkin_package(

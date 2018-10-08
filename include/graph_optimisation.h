@@ -22,13 +22,16 @@
 #include <nav_msgs/Path.h>
 #include <nav_msgs/OccupancyGrid.h>
 #include <crowdbot_active_slam/map_recalculation.h>
+#include <crowdbot_active_slam/utility_calc.h>
 
 #include <gtsam/nonlinear/NonlinearFactorGraph.h>
+#include <gtsam/nonlinear/Marginals.h>
 #include <gtsam/slam/PriorFactor.h>
 #include <gtsam/slam/BetweenFactor.h>
 #include <gtsam/nonlinear/LevenbergMarquardtOptimizer.h>
 #include <gtsam/geometry/Pose2.h>
 #include <gtsam/nonlinear/Values.h>
+#include <gtsam/inference/Symbol.h>
 
 #include <csm/csm_all.h>
 #undef min
@@ -86,6 +89,13 @@ public:
     crowdbot_active_slam::map_recalculation::Request &request,
     crowdbot_active_slam::map_recalculation::Response &response);
 
+  /**
+   *  Service callback for calculating utility of a plan
+   */
+  bool utilityCalcServiceCallback(
+    crowdbot_active_slam::utility_calc::Request &request,
+    crowdbot_active_slam::utility_calc::Response &response);
+
 private:
   // Node handler
   ros::NodeHandle nh_;
@@ -100,8 +110,10 @@ private:
   ros::Subscriber pose_sub_;
   ros::Subscriber scan_sub_;
   ros::Publisher path_pub_;
+  ros::Publisher action_path_pub_;
   ros::Publisher map_pub_;
   ros::ServiceServer map_service_;
+  ros::ServiceServer utility_calc_service_;
 
   // TF
   tf::Transform map_to_odom_tf_;

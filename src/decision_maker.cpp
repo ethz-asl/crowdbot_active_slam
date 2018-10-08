@@ -25,9 +25,9 @@ DecisionMaker::DecisionMaker(ros::NodeHandle nh, ros::NodeHandle nh_)
         ("/map_recalculation_service");
   get_plan_move_base_client_ = nh_.serviceClient
         <nav_msgs::GetPlan>("/move_base/make_plan");
-  // utility_calc_client_ = nh_.serviceClient
-  //       <crowdbot_active_slam::utility_calc>
-  //       ("/utility_calc_service");
+  utility_calc_client_ = nh_.serviceClient
+        <crowdbot_active_slam::utility_calc>
+        ("/utility_calc_service");
 
   // Init SBPL env
   // set the perimeter of the robot
@@ -205,6 +205,7 @@ void DecisionMaker::startExploration(){
 
   nav_msgs::Path action_plan;
   nav_msgs::GetPlan get_plan;
+  crowdbot_active_slam::utility_calc utility;
 
   for (int i = 0; i < frontier_size; i++){
     // action_plan = planPath(frontier_srv.response.start_pose,
@@ -217,9 +218,11 @@ void DecisionMaker::startExploration(){
     action_plan = get_plan.response.plan;
     action_plan.header.frame_id = "/map";
     plan_pub_.publish(action_plan);
-    
+
     // Call service of graph optimisation
     // utility = get_utility();
+    utility.request.plan = action_plan;
+    utility_calc_client_.call(utility);
   }
 
   // Action client
