@@ -703,9 +703,21 @@ bool GraphOptimiser::utilityCalcServiceCallback(
   std::map<int, double> subset;
   getSubsetOfMap(action_path, alpha, subset);
 
+  // Calculate utility
+  double utility = 0;
+  for (std::map<int, double>::iterator it = subset.begin(); it != subset.end(); ++it){
+    // Get probability
+    double p = double(occupancy_grid_msg_.data[it->first]) / 100.0;
+    // Check if cell is unkonwn
+    if (p == -0.01) p = 0.5;
+    // Check if not 0 or 1 to avoid nan's
+    if (p != 0 && p != 1){
+      utility += -(p * log2(p) + (1 - p) * log2(1 - p)) -
+      1.0 / (1.0 - it->second) * log2(pow(p, it->second) + pow(1 - p, it->second));
+    }
+  }
 
-  response.utility = 1;
-
+  response.utility = utility;
   return true;
 }
 
