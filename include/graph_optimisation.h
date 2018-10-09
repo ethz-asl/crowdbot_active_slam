@@ -63,6 +63,13 @@ public:
   /**
    *  ...
    */
+  void getSubsetOfMap(nav_msgs::Path action_path,
+                      std::vector<double> alpha,
+                      std::map<int, double>& subset);
+
+  /**
+   *  ...
+   */
   void updateLogOdsWithBresenham(int x0, int y0, int x1, int y1,
                                  std::vector<int> end_point_index_m);
 
@@ -164,6 +171,8 @@ private:
   bool scan_callback_initialized_;
   bool new_node_;
   int node_counter_;
+  unsigned int scan_ranges_size_;
+  double scan_angle_increment_;
 
 };
 

@@ -68,7 +68,7 @@ bool FrontierExploration::serviceCallback(
 
   // Update map with freespace threshold
   for (int i = 0; i < latest_map_msg_.data.size(); i++){
-    if (latest_map_msg_.data[i] <= 25 && latest_map_msg_.data[i] != -1){
+    if (int(latest_map_msg_.data[i]) <= 25 && int(latest_map_msg_.data[i]) != -1){
       latest_map_msg_.data[i] = 0;
     }
   }
@@ -100,14 +100,14 @@ bool FrontierExploration::serviceCallback(
     std::vector<unsigned int> neighbour_vec = neighbour4(id, width, height);
     for (int i = 0; i < neighbour_vec.size(); i++){
       // Check if cell is free and has not been visited, then add to queue
-      if (latest_map_msg_.data[neighbour_vec[i]] == 0 &&
+      if (int(latest_map_msg_.data[neighbour_vec[i]]) == 0 &&
           !visited_flag[neighbour_vec[i]]){
         visited_flag[neighbour_vec[i]] = true;
         breadth_first_search.push(neighbour_vec[i]);
       }
       // Check if cell is unknown and has not been marked as frontier
       else if (!frontier_flag[neighbour_vec[i]] &&
-               latest_map_msg_.data[neighbour_vec[i]] == -1){
+               int(latest_map_msg_.data[neighbour_vec[i]]) == -1){
         frontier_flag[neighbour_vec[i]] = true;
 
         // Get frontier centroid around current cell

@@ -120,7 +120,7 @@ void GraphOptimiser::initParams(){
 }
 
 void GraphOptimiser::laserScanToLDP(sensor_msgs::LaserScan& scan_msg, LDP& ldp){
-  unsigned int n = scan_msg.ranges.size();
+  unsigned int n = scan_ranges_size_;
   ldp = ld_alloc_new(n);
 
   for (int i = 0; i < n; i++){
@@ -134,7 +134,7 @@ void GraphOptimiser::laserScanToLDP(sensor_msgs::LaserScan& scan_msg, LDP& ldp){
       ldp->valid[i] = 0;
       ldp->readings[i] = -1;
     }
-    ldp->theta[i] = scan_msg.angle_min + i * scan_msg.angle_increment;
+    ldp->theta[i] = scan_msg.angle_min + i * scan_angle_increment_;
     ldp->cluster[i] = -1;
   }
 
@@ -148,6 +148,116 @@ void GraphOptimiser::laserScanToLDP(sensor_msgs::LaserScan& scan_msg, LDP& ldp){
   ldp->true_pose[0] = 0.0;
   ldp->true_pose[1] = 0.0;
   ldp->true_pose[2] = 0.0;
+}
+
+void GraphOptimiser::getSubsetOfMap(nav_msgs::Path action_path,
+                                    std::vector<double> alpha,
+                                    std::map<int, double>& subset){
+  //
+  int node_size = action_path.poses.size();
+  for (int i = 0; i < node_size; i++){
+    // Get pose of laser
+    tf::Pose robot_tf;
+    tf::poseMsgToTF(action_path.poses[i].pose, robot_tf);
+    tf::Transform laser_tf;
+    laser_tf = robot_tf * base_to_laser_;
+    double robot_x = laser_tf.getOrigin().getX();
+    double robot_y = laser_tf.getOrigin().getY();
+
+    std::vector<int> laser_idx = positionToMapIndex(robot_x, robot_y,
+                                      map_width_, map_height_, map_resolution_);
+    int x0 = laser_idx[0];
+    int y0 = laser_idx[1];
+
+    // Bresenham
+    double theta = 0;
+    for (int j = 0; j < scan_ranges_size_; j++){
+      bool wall_reached = false;
+      int dx = cos(theta);
+      int dy = sin(theta);
+      int xstep = 1;
+      int ystep = 1;
+
+      // Check if dx, dy are negative (direction changes)
+      if (dx < 0) {dx = -dx; xstep = -1;};
+      if (dy < 0) {dy = -dy; ystep = -1;};
+
+      // Calculate variable for performance improvement
+      int twodx = 2 * dx;
+      int twody = 2 * dy;
+
+      // Check if gradient < 1
+      if (dx > dy){
+        int fraction_increment = 2 * dy;
+        int fraction = 2 * dy - dx;
+        int x = x0 + xstep;
+        int y = y0;
+        while (!wall_reached){
+          fraction += fraction_increment;
+          if (fraction >= 0){
+            y += ystep;
+            fraction -= twodx;
+          }
+          // Check if x,y still in map
+          if (x >= 0 && x < map_width_ && y >= 0 && y < map_height_){
+            int temp_id = mapIndexToId(x, y, map_width_);
+            // Check if next cell is a wall
+            if (int(occupancy_grid_msg_.data[temp_id]) < 90){
+              // Check if already in subset
+              if (subset.find(temp_id) != subset.end()){
+                subset.find(temp_id)->second = alpha[i];
+              }
+              else {
+                subset.insert(std::make_pair(temp_id, alpha[i]));
+              }
+            }
+            else {
+              wall_reached = true;
+            }
+          }
+          else {
+            wall_reached = true;
+          }
+          x += xstep;
+        }
+      }
+      else {
+        int fraction_increment = 2 * dx;
+        int fraction = 2 * dx - dy;
+        int x = x0;
+        int y = y0 + ystep;
+        while (!wall_reached){
+          fraction += fraction_increment;
+          if (fraction >= 0){
+            x += xstep;
+            fraction -= twody;
+          }
+          // Check if x,y still in map
+          if (x >= 0 && x < map_width_ && y >= 0 && y < map_height_){
+            int temp_id = mapIndexToId(x, y, map_width_);
+            // Check if next cell is a wall
+            if (int(occupancy_grid_msg_.data[temp_id]) < 90){
+              // Check if already in subset
+              if (subset.find(temp_id) != subset.end()){
+                subset.find(temp_id)->second = alpha[i];
+              }
+              else {
+                subset.insert(std::make_pair(temp_id, alpha[i]));
+              }
+            }
+            else {
+              wall_reached = true;
+            }
+          }
+          else {
+            wall_reached = true;
+          }
+          y += ystep;
+        }
+      }
+      theta += scan_angle_increment_;
+    }
+  }
 }
 
 void GraphOptimiser::updateLogOdsWithBresenham(int x0, int y0, int x1, int y1,
@@ -559,8 +669,8 @@ bool GraphOptimiser::utilityCalcServiceCallback(
   ROS_INFO("Optimisation finished!");
 
   // Create a path msg of the graph node estimates
-  nav_msgs::Path new_path;
-  new_path.header.frame_id = "/map";
+  nav_msgs::Path action_path;
+  action_path.header.frame_id = "/map";
   Pose2 tmp_pose2;
 
   // Iterate over all node estimates
@@ -570,14 +680,14 @@ bool GraphOptimiser::utilityCalcServiceCallback(
     tmp_pose2 = *dynamic_cast<const Pose2*>(&action_estimates.at(i));
 
     // Create PoseStamped variables from Pose 2 and add to path
-    new_path.poses.push_back(pose2ToPoseStamped(tmp_pose2));
+    action_path.poses.push_back(pose2ToPoseStamped(tmp_pose2));
   }
 
   // Publish the graph
-  action_path_pub_.publish(new_path);
+  action_path_pub_.publish(action_path);
 
   // Calculate alpha for each node
-  double alpha[node_size];
+  std::vector<double> alpha;
   double sigma_temp;
   Marginals action_marginals(action_graph, action_estimates);
   for (int i = 0; i < node_size; i++){
@@ -587,9 +697,11 @@ bool GraphOptimiser::utilityCalcServiceCallback(
                          log(eivals[1].real()) +
                          log(eivals[2].real());
     sigma_temp = exp(1.0 / 3.0 * sum_of_logs);
-    alpha[i] = 1.0 + 1.0 / sigma_temp;
+    alpha.push_back(1.0 + 1.0 / sigma_temp);
   }
 
+  std::map<int, double> subset;
+  getSubsetOfMap(action_path, alpha, subset);
 
 
   response.utility = 1;
@@ -599,6 +711,8 @@ bool GraphOptimiser::utilityCalcServiceCallback(
 
 void GraphOptimiser::scanCallback(const sensor_msgs::LaserScan::ConstPtr& scan_msg){
   latest_scan_msg_ = *scan_msg;
+  scan_ranges_size_ = latest_scan_msg_.ranges.size();
+  scan_angle_increment_ = latest_scan_msg_.angle_increment;
   scan_callback_initialized_ = true;
 }
 
