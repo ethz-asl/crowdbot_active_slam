@@ -61,6 +61,12 @@ public:
   void laserScanToLDP(sensor_msgs::LaserScan& scan_msg, LDP& ldp);
 
   /**
+   *  ...
+   */
+  void updateLogOdsWithBresenham(int x0, int y0, int x1, int y1,
+                                 std::vector<int> end_point_index_m);
+
+  /**
    *  Calculates map with current factor graph and keyframe scans and draws map.
    */
   void drawMap(gtsam::Values pose_estimates, std::vector<LDP> keyframe_ldp_vec);

@@ -150,6 +150,60 @@ void GraphOptimiser::laserScanToLDP(sensor_msgs::LaserScan& scan_msg, LDP& ldp){
   ldp->true_pose[2] = 0.0;
 }
 
+void GraphOptimiser::updateLogOdsWithBresenham(int x0, int y0, int x1, int y1,
+                                           std::vector<int> end_point_index_m){
+  // Bresenham's line algorithm (Get indexes between robot pose and scans)
+  // starting from "https://github.com/lama-imr/lama_utilities/blob/indigo-devel/map_ray_caster/src/map_ray_caster.cpp"
+  // "https://csustan.csustan.edu/~tom/Lecture-Notes/Graphics/Bresenham-Line/Bresenham-Line.pdf"
+
+  int dx = x1 - x0;
+  int dy = y1 - y0;
+  int xstep = 1;
+  int ystep = 1;
+
+  // Check if dx, dy are negative (direction changes)
+  if (dx < 0) {dx = -dx; xstep = -1;};
+  if (dy < 0) {dy = -dy; ystep = -1;};
+
+  // Calculate variable for performance improvement
+  int twodx = 2 * dx;
+  int twody = 2 * dy;
+
+  // Check if gradient < 1
+  if (dx > dy){
+    int fraction_increment = 2 * dy;
+    int fraction = 2 * dy - dx;
+    int x = x0 + xstep;
+    int y = y0;
+    for (x, y; x != x1; x += xstep){
+      fraction += fraction_increment;
+      if (fraction >= 0){
+        y += ystep;
+        fraction -= twodx;
+      }
+      if (x != end_point_index_m[0] || y != end_point_index_m[1]){
+        log_odds_array_(x, y) += l_free_ - l_0_;
+      }
+    }
+  }
+  else {
+    int fraction_increment = 2 * dx;
+    int fraction = 2 * dx - dy;
+    int x = x0;
+    int y = y0 + ystep;
+    for (x, y; y != y1; y += ystep){
+      fraction += fraction_increment;
+      if (fraction >= 0){
+        x += xstep;
+        fraction -= twody;
+      }
+      if (x != end_point_index_m[0] || y != end_point_index_m[1]){
+        log_odds_array_(x, y) += l_free_ - l_0_;
+      }
+    }
+  }
+}
+
 void GraphOptimiser::drawMap(gtsam::Values pose_estimates,
                              std::vector<LDP> keyframe_ldp_vec){
   // Init arrays to l_0_
@@ -237,55 +291,7 @@ void GraphOptimiser::drawMap(gtsam::Values pose_estimates,
         log_odds_array_(end_point_index_m[0], end_point_index_m[1]) += l_occ_ - l_0_;
       }
 
-      // Bresenham's line algorithm (Get indexes between robot pose and scans)
-      // starting from "https://github.com/lama-imr/lama_utilities/blob/indigo-devel/map_ray_caster/src/map_ray_caster.cpp"
-      // "https://csustan.csustan.edu/~tom/Lecture-Notes/Graphics/Bresenham-Line/Bresenham-Line.pdf"
-      int dx = x1 - x0;
-      int dy = y1 - y0;
-      int xstep = 1;
-      int ystep = 1;
-
-      // Check if dx, dy are negative (direction changes)
-      if (dx < 0) {dx = -dx; xstep = -1;};
-      if (dy < 0) {dy = -dy; ystep = -1;};
-
-      // Calculate variable for performance improvement
-      int twodx = 2 * dx;
-      int twody = 2 * dy;
-
-      // Check if gradient > 1
-      if (dx > dy){
-        int fraction_increment = 2 * dy;
-        int fraction = 2 * dy - dx;
-        int x = x0 + xstep;
-        int y = y0;
-        for (x, y; x != x1; x += xstep){
-          fraction += fraction_increment;
-          if (fraction >= 0){
-            y += ystep;
-            fraction -= twodx;
-          }
-          if (x != end_point_index_m[0] || y != end_point_index_m[1]){
-            log_odds_array_(x, y) += l_free_ - l_0_;
-          }
-        }
-      }
-      else {
-        int fraction_increment = 2 * dx;
-        int fraction = 2 * dx - dy;
-        int x = x0;
-        int y = y0 + ystep;
-        for (x, y; y != y1; y += ystep){
-          fraction += fraction_increment;
-          if (fraction >= 0){
-            x += xstep;
-            fraction -= twody;
-          }
-          if (x != end_point_index_m[0] || y != end_point_index_m[1]){
-            log_odds_array_(x, y) += l_free_ - l_0_;
-          }
-        }
-      }
+      updateLogOdsWithBresenham(x0, y0, x1, y1, end_point_index_m);
     }
   }
 
@@ -397,55 +403,7 @@ void GraphOptimiser::updateMap(gtsam::Values pose_estimates,
       log_odds_array_(end_point_index_m[0], end_point_index_m[1]) += l_occ_ - l_0_;
     }
 
-    // Bresenham's line algorithm (Get indexes between robot pose and scans)
-    // starting from "https://github.com/lama-imr/lama_utilities/blob/indigo-devel/map_ray_caster/src/map_ray_caster.cpp"
-    // "https://csustan.csustan.edu/~tom/Lecture-Notes/Graphics/Bresenham-Line/Bresenham-Line.pdf"
-    int dx = x1 - x0;
-    int dy = y1 - y0;
-    int xstep = 1;
-    int ystep = 1;
-
-    // Check if dx, dy are negative (direction changes)
-    if (dx < 0) {dx = -dx; xstep = -1;};
-    if (dy < 0) {dy = -dy; ystep = -1;};
-
-    // Calculate variable for performance improvement
-    int twodx = 2 * dx;
-    int twody = 2 * dy;
-
-    // Check if gradient > 1
-    if (dx > dy){
-      int fraction_increment = 2 * dy;
-      int fraction = 2 * dy - dx;
-      int x = x0 + xstep;
-      int y = y0;
-      for (x, y; x != x1; x += xstep){
-        fraction += fraction_increment;
-        if (fraction >= 0){
-          y += ystep;
-          fraction -= twodx;
-        }
-        if (x != end_point_index_m[0] || y != end_point_index_m[1]){
-          log_odds_array_(x, y) += l_free_ - l_0_;
-        }
-      }
-    }
-    else {
-      int fraction_increment = 2 * dx;
-      int fraction = 2 * dx - dy;
-      int x = x0;
-      int y = y0 + ystep;
-      for (x, y; y != y1; y += ystep){
-        fraction += fraction_increment;
-        if (fraction >= 0){
-          x += xstep;
-          fraction -= twody;
-        }
-        if (x != end_point_index_m[0] || y != end_point_index_m[1]){
-          log_odds_array_(x, y) += l_free_ - l_0_;
-        }
-      }
-    }
+    updateLogOdsWithBresenham(x0, y0, x1, y1, end_point_index_m);
   }
 
   // Init OccupancyGrid msg
@@ -606,7 +564,8 @@ bool GraphOptimiser::utilityCalcServiceCallback(
   Pose2 tmp_pose2;
 
   // Iterate over all node estimates
-  for (int i = 0; i < action_estimates.size() - lc_counter; i++){
+  int node_size = action_estimates.size() - lc_counter;
+  for (int i = 0; i < node_size; i++){
     // Cast Pose2 from Value
     tmp_pose2 = *dynamic_cast<const Pose2*>(&action_estimates.at(i));
 
@@ -616,6 +575,21 @@ bool GraphOptimiser::utilityCalcServiceCallback(
 
   // Publish the graph
   action_path_pub_.publish(new_path);
+
+  // Calculate alpha for each node
+  double alpha[node_size];
+  double sigma_temp;
+  Marginals action_marginals(action_graph, action_estimates);
+  for (int i = 0; i < node_size; i++){
+    // D-optimality
+    Eigen::VectorXcd eivals = action_marginals.marginalCovariance(i).eigenvalues();
+    double sum_of_logs = log(eivals[0].real()) +
+                         log(eivals[1].real()) +
+                         log(eivals[2].real());
+    sigma_temp = exp(1.0 / 3.0 * sum_of_logs);
+    alpha[i] = 1.0 + 1.0 / sigma_temp;
+  }
+
 
 
   response.utility = 1;
