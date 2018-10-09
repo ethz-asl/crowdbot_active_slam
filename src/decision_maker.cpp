@@ -206,11 +206,11 @@ void DecisionMaker::startExploration(){
   nav_msgs::Path action_plan;
   nav_msgs::GetPlan get_plan;
   crowdbot_active_slam::utility_calc utility;
+  std::vector<double> utility_vec;
+  std::vector<double>::iterator max_utility;
 
   for (int i = 0; i < frontier_size; i++){
-    // action_plan = planPath(frontier_srv.response.start_pose,
-    //                        frontier_srv.response.frontier_list[i]);
-
+    // Get action plan
     get_plan.request.start = pose2DToPoseStamped(frontier_srv.response.start_pose);
     get_plan.request.goal = pose2DToPoseStamped(frontier_srv.response.frontier_list[i]);
     get_plan.request.tolerance = 0.3;
@@ -219,11 +219,19 @@ void DecisionMaker::startExploration(){
     action_plan.header.frame_id = "/map";
     plan_pub_.publish(action_plan);
 
-    // Call service of graph optimisation
-    // utility = get_utility();
+    // Get utility of action plan
     utility.request.plan = action_plan;
     utility_calc_client_.call(utility);
+
+    std::cout << utility.response.utility << std::endl;
+    // Save utility values in vec
+    utility_vec.push_back(utility.response.utility);
   }
+
+  // Get id of max utility
+  max_utility = std::max_element(utility_vec.begin(), utility_vec.end());
+  int max_utility_id = std::distance(utility_vec.begin(), max_utility);
+  std::cout << "Choose this: " << utility_vec[max_utility_id] << std::endl;
 
   // Action client
   actionlib::SimpleActionClient<move_base_msgs::MoveBaseAction> goal_client("move_base", true);
@@ -236,8 +244,8 @@ void DecisionMaker::startExploration(){
 
   move_base_msgs::MoveBaseGoal goal;
   goal.target_pose.header.frame_id = "map";
-  goal.target_pose.pose.position.x = frontier_srv.response.frontier_list[0].x;
-  goal.target_pose.pose.position.y = frontier_srv.response.frontier_list[0].y;
+  goal.target_pose.pose.position.x = frontier_srv.response.frontier_list[max_utility_id].x;
+  goal.target_pose.pose.position.y = frontier_srv.response.frontier_list[max_utility_id].y;
   goal.target_pose.pose.position.z = 0;
 
   goal.target_pose.pose.orientation.x = 0;
