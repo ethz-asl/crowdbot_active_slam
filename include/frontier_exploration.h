@@ -38,17 +38,24 @@ public:
    *  region around the initial cell. Returns a Pose2D centroid information.
    *  If the frontier size is too small it returns all values as zero.
    */
-  geometry_msgs::Pose2D getFrontierCentroid(unsigned int initial_cell,
-                                            std::vector<bool>& frontier_flag,
-                                            unsigned int width,
-                                            unsigned int height,
-                                            float resolution);
+  bool getFrontierCentroid(unsigned int initial_cell,
+                           std::vector<bool>& frontier_flag,
+                           unsigned int width,
+                           unsigned int height,
+                           float resolution,
+                           geometry_msgs::Pose2D& centroid);
 
   /**
    *  Transforms a cell id to x, y world coordinates.
    */
   void idToWorldXY(unsigned int id, double& x, double& y, unsigned int width,
                    unsigned int height, float resolution);
+
+   /**
+    *  Returns a list of cell id's for the neighbourhood around #x cells.
+    */
+   std::vector<unsigned int> neighbourXCells(unsigned int id,
+                 unsigned int width, unsigned int height, unsigned int n_cells);
 
   /**
    *  Returns a list of cell id's for the 8-neighbourhood around an id cell.

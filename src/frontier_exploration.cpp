@@ -111,15 +111,15 @@ bool FrontierExploration::serviceCallback(
         frontier_flag[neighbour_vec[i]] = true;
 
         // Get frontier centroid around current cell
-        geometry_msgs::Pose2D frontier_centroid = getFrontierCentroid(
-          neighbour_vec[i], frontier_flag, width, height, resolution);
-
-          // Check if values are zero -> if yes frontier size was too small
-        if (frontier_centroid.x != 0 && frontier_centroid.y != 0)
+        geometry_msgs::Pose2D frontier_centroid;
+        if (getFrontierCentroid(neighbour_vec[i], frontier_flag, width, height,
+                                resolution, frontier_centroid)){
           response.frontier_list.push_back(frontier_centroid);
+        }
       }
     }
   }
+
   // Generate GridCells msg of frontier centroids
   nav_msgs::GridCells frontier_points_msg;
   frontier_points_msg.header.frame_id = "map";
@@ -132,14 +132,18 @@ bool FrontierExploration::serviceCallback(
     point.z = 0;
     frontier_points_msg.cells.push_back(point);
   }
+
   // Publish GridCells msg of frontier centroids
   frontier_cell_pub_.publish(frontier_points_msg);
   return true;
 }
 
-geometry_msgs::Pose2D FrontierExploration::getFrontierCentroid(
-                  unsigned int initial_cell, std::vector<bool>& frontier_flag,
-                  unsigned int width, unsigned int height, float resolution){
+bool FrontierExploration::getFrontierCentroid(unsigned int initial_cell,
+                                              std::vector<bool>& frontier_flag,
+                                              unsigned int width,
+                                              unsigned int height,
+                                              float resolution,
+                                              geometry_msgs::Pose2D& centroid){
 
   geometry_msgs::Pose2D centroid_pose2D;
   unsigned int size = 1;
@@ -163,14 +167,14 @@ geometry_msgs::Pose2D FrontierExploration::getFrontierCentroid(
     std::vector<unsigned int> neighbour8_vec = neighbour8(id, width, height);
     for (int i = 0; i < neighbour8_vec.size(); i++){
       // Check if cell is unknown and has not been marked as a frontier cell
-      if (latest_map_msg_.data[neighbour8_vec[i]] == -1 &&
+      if (int(latest_map_msg_.data[neighbour8_vec[i]]) == -1 &&
           !frontier_flag[neighbour8_vec[i]]){
         bool has_free_neighbour4 = false;
         std::vector<unsigned int> neighbour4_vec =
                                     neighbour4(neighbour8_vec[i], width, height);
         // Check if a neighbour is a free cell
         for (int j = 0; j < neighbour4_vec.size(); j++){
-          if (latest_map_msg_.data[neighbour4_vec[j]] == 0){
+          if (int(latest_map_msg_.data[neighbour4_vec[j]]) == 0){
             has_free_neighbour4 = true;
           }
         }
@@ -189,20 +193,30 @@ geometry_msgs::Pose2D FrontierExploration::getFrontierCentroid(
       }
     }
   }
-  // Check if size of frontier is big enough
+
+  // Calculate centroid pose
+  centroid_x /= size;
+  centroid_y /= size;
+  centroid.x = centroid_x;
+  centroid.y = centroid_y;
+  centroid.theta = 0.0;
+
+  // Check if size of frontier is big enough and if a neighbour is a wall
   if (size > frontier_size_){
-    centroid_x /= size;
-    centroid_y /= size;
-    centroid_pose2D.x = centroid_x;
-    centroid_pose2D.y = centroid_y;
-    centroid_pose2D.theta = 0.0;
+    std::vector<int> cell = positionToMapIndex(centroid_x, centroid_y, width,
+                                               height, resolution);
+    unsigned int id = cell[0] + cell[1] * width;
+    std::vector<unsigned int> neighbour_x_cells = neighbourXCells(id, width, height, 5);
+    for (int i = 0; i < neighbour_x_cells.size(); i++){
+      if (int(latest_map_msg_.data[neighbour_x_cells[i]]) > 90){
+        return false;
+      }
+    }
+    return true;
   }
   else {
-    centroid_pose2D.x = 0.0;
-    centroid_pose2D.y = 0.0;
-    centroid_pose2D.theta = 0.0;
+    return false;
   }
-  return centroid_pose2D;
 }
 
 void FrontierExploration::idToWorldXY(unsigned int id, double& x, double& y,
@@ -212,6 +226,23 @@ void FrontierExploration::idToWorldXY(unsigned int id, double& x, double& y,
     x = int((ix_cell - width / 2)) * resolution + resolution / 2.0;
     y = int((iy_cell - height / 2)) * resolution + resolution / 2.0;
   }
+
+std::vector<unsigned int> FrontierExploration::neighbourXCells(unsigned int id,
+                unsigned int width, unsigned int height, unsigned int n_cells){
+  std::vector<unsigned int> neighbour_vec;
+
+  int bl_corner = id - n_cells - n_cells * width;
+  for (unsigned int i = 0; i < 2 * n_cells; i++){
+    for (unsigned int j = 0; j < 2 * n_cells; j++){
+      int new_id =  bl_corner + j + i * width;
+      if (new_id >= 0 && new_id <= width * height && new_id != id){
+        neighbour_vec.push_back(new_id);
+      }
+    }
+  }
+
+  return neighbour_vec;
+}
 
 std::vector<unsigned int> FrontierExploration::neighbour8(unsigned int id,
                                       unsigned int width, unsigned int height){
