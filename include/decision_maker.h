@@ -28,34 +28,34 @@ public:
   ~DecisionMaker();
 
   /**
-   *  ...
+   *  Transform map probabilties to costs for SBPL planner
    */
   unsigned int mapToSBPLCost(int occupancy);
 
   /**
-   *  ...
+   *  Calculate cell ids from map id
    */
   void idToCell(unsigned int id, unsigned int& x, unsigned int& y,
                 unsigned int width, unsigned int height);
 
   /**
-   *  ...
+   *  Creates the robot footprint for SBPL planner
    */
   void createFootprint(std::vector<sbpl_2Dpt_t>& perimeter, double halfwidth,
                                                             double halflength);
   /**
-   *  ...
+   *  Calculates plan with SBPL planner and returns a path
    */
   nav_msgs::Path planPathSBPL(geometry_msgs::Pose2D start_pose,
                               geometry_msgs::Pose2D goal_pose);
 
   /**
-   *  ...
+   *  Function which starts the exploration task when starting or ariving at goal
    */
   void startExploration();
 
   /**
-   *  ...
+   *  Occupancy map callback which starts startExploration
    */
   void mapCallback(const nav_msgs::OccupancyGrid::ConstPtr &map_msg);
 
