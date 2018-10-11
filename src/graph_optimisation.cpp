@@ -106,8 +106,10 @@ void GraphOptimiser::initParams(){
   map_height_ = 1000;
   log_odds_array_ = Eigen::MatrixXf(map_width_, map_height_);
   l_0_ = log(0.5 / 0.5);
-  p_occ_ = 0.997;
-  p_free_ = 0.003;
+  // Asuming sensor model: P(z=1|m=1)=0.8 because can eg. go through glass
+  //                       P(z=0|m=0)=0.99
+  p_occ_ = 0.998;       // P(m=1|z=1)
+  p_free_ = 0.168;      // P(m=1|z=0)
   l_occ_ = log(p_occ_ / (1.0 - p_occ_));
   l_free_ = log(p_free_ / (1.0 - p_free_));
 
