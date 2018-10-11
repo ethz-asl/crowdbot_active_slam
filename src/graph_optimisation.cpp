@@ -772,7 +772,7 @@ void GraphOptimiser::scanMatcherCallback(const geometry_msgs::Pose2D::ConstPtr& 
     // Create graph with first node
     pose_estimates_.insert(node_counter_, current_pose2_);
     noiseModel::Diagonal::shared_ptr prior_noise =
-      noiseModel::Diagonal::Sigmas((Vector(3) << 0.01, 0.01, 0.01));
+      noiseModel::Diagonal::Sigmas((Vector(3) << 0.1, 0.1, 0.1));
     graph_.add(PriorFactor<Pose2>(node_counter_, current_pose2_, prior_noise));
 
     // Save scan as LDP
