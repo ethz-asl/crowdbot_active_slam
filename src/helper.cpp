@@ -46,13 +46,21 @@ tf::Transform xythetaToTF(double x, double y, double theta){
 }
 
 /**
+ *  A helper function which creates map ids from index.
+ */
+int mapIndexToId(int x, int y, unsigned int width){
+  int id = x + y * width;
+  return id;
+}
+
+/**
  *  A helper function which creates map index from position information.
  */
 std::vector<int> positionToMapIndex(double x, double y,
    unsigned int width, unsigned int height, float resolution){
   std::vector<int> index(2);
-  index[0] = (x - resolution / 2.0) / resolution + width / 2;
-  index[1] = (y - resolution / 2.0) / resolution + height / 2;
+  index[0] = floor(x / resolution) + width / 2;
+  index[1] = floor(y / resolution) + height / 2;
 
   return index;
 }
@@ -75,4 +83,25 @@ geometry_msgs::Pose xythetaToPose(double x, double y, double theta){
   pose.orientation = pose_orientation;
 
   return pose;
+}
+
+double xyDiffToYaw(double x_diff, double y_diff){
+  if (x_diff == 0 && y_diff > 0){
+    return M_PI_2;
+  }
+  else if (x_diff == 0 && y_diff < 0){
+    return -M_PI_2;
+  }
+  else if (x_diff < 0 && y_diff == 0){
+    return M_PI;
+  }
+  else if (x_diff < 0 && y_diff < 0){
+    return atan(y_diff / x_diff) - M_PI;
+  }
+  else if (x_diff < 0 && y_diff > 0){
+    return atan(y_diff / x_diff) + M_PI;
+  }
+  else {
+    return atan(y_diff / x_diff);
+  }
 }

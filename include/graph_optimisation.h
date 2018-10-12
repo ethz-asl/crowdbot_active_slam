@@ -21,13 +21,17 @@
 #include <tf/transform_datatypes.h>
 #include <nav_msgs/Path.h>
 #include <nav_msgs/OccupancyGrid.h>
+#include <crowdbot_active_slam/map_recalculation.h>
+#include <crowdbot_active_slam/utility_calc.h>
 
 #include <gtsam/nonlinear/NonlinearFactorGraph.h>
+#include <gtsam/nonlinear/Marginals.h>
 #include <gtsam/slam/PriorFactor.h>
 #include <gtsam/slam/BetweenFactor.h>
 #include <gtsam/nonlinear/LevenbergMarquardtOptimizer.h>
 #include <gtsam/geometry/Pose2.h>
 #include <gtsam/nonlinear/Values.h>
+#include <gtsam/inference/Symbol.h>
 
 #include <csm/csm_all.h>
 #undef min
@@ -57,12 +61,25 @@ public:
   void laserScanToLDP(sensor_msgs::LaserScan& scan_msg, LDP& ldp);
 
   /**
+   *  ...
+   */
+  void getSubsetOfMap(nav_msgs::Path action_path,
+                      std::vector<double> alpha,
+                      std::map<int, double>& subset);
+
+  /**
+   *  ...
+   */
+  void updateLogOdsWithBresenham(int x0, int y0, int x1, int y1,
+                                 std::vector<int> end_point_index_m);
+
+  /**
    *  Calculates map with current factor graph and keyframe scans and draws map.
    */
   void drawMap(gtsam::Values pose_estimates, std::vector<LDP> keyframe_ldp_vec);
 
   /**
-   *  Updates current map with new scans.
+   *  Updates current map with newest scans.
    */
   void updateMap(gtsam::Values pose_estimates,
                  std::vector<LDP> keyframe_ldp_vec);
@@ -76,7 +93,21 @@ public:
    *  A callback function on Pose2D scans from the laser scan matcher
    *  which does Graph construction and optimisation.
    */
-  void scanMatcherCallback(const geometry_msgs::Pose2D::ConstPtr& pose_msg);
+  void scanMatcherCallback(const geometry_msgs::Pose2D::ConstPtr& pose2D_msg);
+
+  /**
+   *  Service callback for recalculating the map
+   */
+  bool mapRecalculationServiceCallback(
+    crowdbot_active_slam::map_recalculation::Request &request,
+    crowdbot_active_slam::map_recalculation::Response &response);
+
+  /**
+   *  Service callback for calculating utility of a plan
+   */
+  bool utilityCalcServiceCallback(
+    crowdbot_active_slam::utility_calc::Request &request,
+    crowdbot_active_slam::utility_calc::Response &response);
 
 private:
   // Node handler
@@ -85,13 +116,17 @@ private:
 
   // Ros msgs
   nav_msgs::Path graph_path_;
+  nav_msgs::OccupancyGrid occupancy_grid_msg_;
   sensor_msgs::LaserScan latest_scan_msg_;
 
-  // Publisher and Subscriber
+  // Service, Publisher and Subscriber
   ros::Subscriber pose_sub_;
   ros::Subscriber scan_sub_;
   ros::Publisher path_pub_;
+  ros::Publisher action_path_pub_;
   ros::Publisher map_pub_;
+  ros::ServiceServer map_service_;
+  ros::ServiceServer utility_calc_service_;
 
   // TF
   tf::Transform map_to_odom_tf_;
@@ -104,6 +139,7 @@ private:
   // gtsam objects
   gtsam::Pose2 prev_pose2_;
   gtsam::Pose2 current_pose2_;
+  gtsam::Pose2 last_pose2_;
   gtsam::NonlinearFactorGraph graph_;
   gtsam::noiseModel::Diagonal::shared_ptr scan_match_noise_;
   gtsam::Values pose_estimates_;
@@ -130,9 +166,13 @@ private:
   double node_dist_angular_;
   double dist_linear_sq_;
   double lc_radius_;
+  bool const_map_update_steps_;
   bool first_scan_pose_;
   bool scan_callback_initialized_;
+  bool new_node_;
   int node_counter_;
+  unsigned int scan_ranges_size_;
+  double scan_angle_increment_;
 
 };
 
