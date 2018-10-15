@@ -100,6 +100,12 @@ void GraphOptimiser::initParams(){
   // Initialise noise on scan matching nodes
   scan_match_noise_ = noiseModel::Diagonal::Sigmas((Vector(3) << 0.1, 0.1, 0.2));
 
+  // ISAM2
+  ISAM2Params parameters;
+  parameters.relinearizeThreshold = 0.01;
+  parameters.relinearizeSkip = 1;
+  isam_ = ISAM2(parameters);
+
   // Map paramters
   map_resolution_ = 0.05;
   map_width_ = 1000;
@@ -572,11 +578,11 @@ void GraphOptimiser::updateMap(gtsam::Values pose_estimates,
 bool GraphOptimiser::mapRecalculationServiceCallback(
   crowdbot_active_slam::map_recalculation::Request &request,
   crowdbot_active_slam::map_recalculation::Response &response){
-  // Optimize the graph
-  LevenbergMarquardtOptimizer optimizer(graph_, pose_estimates_);
-  ROS_INFO("Optimisation started!");
-  pose_estimates_ = optimizer.optimize();
-  ROS_INFO("Optimisation finished!");
+  // // Optimize the graph
+  // LevenbergMarquardtOptimizer optimizer(graph_, pose_estimates_);
+  // ROS_INFO("Optimisation started!");
+  // pose_estimates_ = optimizer.optimize();
+  // ROS_INFO("Optimisation finished!");
 
   // Draw the whole map
   drawMap(pose_estimates_, keyframe_ldp_vec_);
@@ -588,6 +594,12 @@ bool GraphOptimiser::utilityCalcServiceCallback(
   crowdbot_active_slam::utility_calc::Request &request,
   crowdbot_active_slam::utility_calc::Response &response){
 
+  // ISAM2
+  ISAM2Params parameters;
+  parameters.relinearizeThreshold = 0.01;
+  parameters.relinearizeSkip = 1;
+  ISAM2 isam(parameters);
+
   Pose2 current_estimate;
   int size = pose_estimates_.size();
 
@@ -595,9 +607,19 @@ bool GraphOptimiser::utilityCalcServiceCallback(
   current_estimate = *dynamic_cast<const Pose2*>(&pose_estimates_.at(size - 1));
 
   // Get covariance from current position
-  Marginals marginals(graph_, pose_estimates_);
-  noiseModel::Gaussian::shared_ptr current_marginal_noise =
-      noiseModel::Gaussian::Covariance(marginals.marginalCovariance(size - 1));
+  // Marginals marginals(graph_, pose_estimates_);
+  // noiseModel::Gaussian::shared_ptr current_marginal_noise =
+  //     noiseModel::Gaussian::Covariance(marginals.marginalCovariance(size - 1));
+
+  noiseModel::Gaussian::shared_ptr current_marginal_noise;
+  if (node_counter_ == 1){
+    current_marginal_noise =
+        noiseModel::Diagonal::Sigmas((Vector(3) << 0.1, 0.1, 0.1));
+  }
+  else {
+    current_marginal_noise =
+        noiseModel::Gaussian::Covariance(isam_.marginalCovariance(size - 1));
+  }
 
   // Build action graph
   NonlinearFactorGraph action_graph;
@@ -643,7 +665,7 @@ bool GraphOptimiser::utilityCalcServiceCallback(
       double y_low = next_pose.y() - lc_radius_;
       double lc_radius_squared = lc_radius_ * lc_radius_;
 
-      for (int j = 0; j < pose_estimates_.size(); j++){
+      for (int j = 0; j < pose_estimates_.size() - 1; j++){
         Pose2 tmp_pose2 = *dynamic_cast<const Pose2*>(&pose_estimates_.at(j));
 
         // Check if tmp_pose2 is in square region around current pose estimate
@@ -658,8 +680,8 @@ bool GraphOptimiser::utilityCalcServiceCallback(
             // Get Pose tf between current and new Pose as first guess for icp
             Pose2 diff_pose2 = next_pose.between(tmp_pose2);
 
-            noiseModel::Gaussian::shared_ptr current_marginal_noise =
-                noiseModel::Gaussian::Covariance(marginals.marginalCovariance(j));
+            current_marginal_noise =
+                noiseModel::Gaussian::Covariance(isam_.marginalCovariance(j));
 
             if (map_of_lc.find(j) != map_of_lc.end()){
               int lc_index = map_of_lc.find(j)->second;
@@ -679,6 +701,16 @@ bool GraphOptimiser::utilityCalcServiceCallback(
           }
         }
       }
+      //
+      //ROS_INFO("Optimisation started!");
+      isam.update(action_graph, action_estimates);
+      isam.update();
+      //pose_estimates_ = isam.calculateEstimate();
+      //ROS_INFO("Optimisation finished!");
+
+      action_graph.resize(0);
+      action_estimates.clear();
+
       node_counter += 1;
       prev_angle = angle;
       prev_pose = next_pose;
@@ -686,11 +718,13 @@ bool GraphOptimiser::utilityCalcServiceCallback(
     }
   }
 
-  // Optimize the graph
-  LevenbergMarquardtOptimizer optimizer(action_graph, action_estimates);
-  ROS_INFO("Optimisation started!");
-  action_estimates = optimizer.optimize();
-  ROS_INFO("Optimisation finished!");
+  // // Optimize the graph
+  // LevenbergMarquardtOptimizer optimizer(action_graph, action_estimates);
+  // ROS_INFO("Optimisation started!");
+  // action_estimates = optimizer.optimize();
+  // ROS_INFO("Optimisation finished!");
+
+  action_estimates = isam.calculateEstimate();
 
   // Create a path msg of the graph node estimates
   nav_msgs::Path action_path;
@@ -713,10 +747,11 @@ bool GraphOptimiser::utilityCalcServiceCallback(
   // Calculate alpha for each node
   std::vector<double> alpha;
   double sigma_temp;
-  Marginals action_marginals(action_graph, action_estimates);
+  //Marginals action_marginals(action_graph, action_estimates);
   for (int i = 0; i < node_size; i++){
     // D-optimality
-    Eigen::VectorXcd eivals = action_marginals.marginalCovariance(i).eigenvalues();
+    //Eigen::VectorXcd eivals = action_marginals.marginalCovariance(i).eigenvalues();
+    Eigen::VectorXcd eivals = isam.marginalCovariance(i).eigenvalues();
     double sum_of_logs = log(eivals[0].real()) +
                          log(eivals[1].real()) +
                          log(eivals[2].real());
@@ -773,6 +808,7 @@ void GraphOptimiser::scanMatcherCallback(const geometry_msgs::Pose2D::ConstPtr& 
   if (first_scan_pose_){
     // Create graph with first node
     pose_estimates_.insert(node_counter_, current_pose2_);
+    new_estimates_ = pose_estimates_;
     noiseModel::Diagonal::shared_ptr prior_noise =
       noiseModel::Diagonal::Sigmas((Vector(3) << 0.1, 0.1, 0.1));
     graph_.add(PriorFactor<Pose2>(node_counter_, current_pose2_, prior_noise));
@@ -815,6 +851,7 @@ void GraphOptimiser::scanMatcherCallback(const geometry_msgs::Pose2D::ConstPtr& 
     Pose2 prev_pose2_estimate = *dynamic_cast<const Pose2*>(&pose_estimates_.at(node_counter_ - 1));
     Pose2 current_pose2_estimate = prev_pose2_estimate * next_mean;
     pose_estimates_.insert(node_counter_, current_pose2_estimate);
+    new_estimates_.insert(node_counter_, current_pose2_estimate);
     graph_.add(BetweenFactor<Pose2>(node_counter_ - 1, node_counter_,
       next_mean, scan_match_noise_));
 
@@ -876,14 +913,24 @@ void GraphOptimiser::scanMatcherCallback(const geometry_msgs::Pose2D::ConstPtr& 
       }
     }
 
-    if (node_counter_ % 5 == 0){
-      // Optimize the graph
-      LevenbergMarquardtOptimizer optimizer(graph_, pose_estimates_);
-      ROS_INFO("Optimisation started!");
-      pose_estimates_ = optimizer.optimize();
-      ROS_INFO("Optimisation finished!");
-      // pose_estimates_.print("Pose estimates:\n");
-    }
+    //
+    ROS_INFO("Optimisation started!");
+    isam_.update(graph_, new_estimates_);
+    isam_.update();
+    pose_estimates_ = isam_.calculateEstimate();
+    ROS_INFO("Optimisation finished!");
+
+    graph_.resize(0);
+    new_estimates_.clear();
+
+    // if (node_counter_ % 5 == 0){
+    //   // Optimize the graph
+    //   LevenbergMarquardtOptimizer optimizer(graph_, pose_estimates_);
+    //   ROS_INFO("Optimisation started!");
+    //   pose_estimates_ = optimizer.optimize();
+    //   ROS_INFO("Optimisation finished!");
+    //   // pose_estimates_.print("Pose estimates:\n");
+    // }
 
     // Create a path msg of the graph node estimates
     nav_msgs::Path new_path;

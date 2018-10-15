@@ -200,6 +200,7 @@ void DecisionMaker::startExploration(){
   int frontier_size = frontier_srv.response.frontier_list.size();
   if (frontier_size == 0){
     finished_ = true;
+    ROS_INFO("Exploration finished!");
     return;
   }
 
@@ -255,7 +256,7 @@ void DecisionMaker::startExploration(){
 
   goal_client.sendGoal(goal);
 
-  bool finished_before_timeout = goal_client.waitForResult(ros::Duration(120.0));
+  bool finished_before_timeout = goal_client.waitForResult(ros::Duration(150.0));
 
   if (finished_before_timeout)
   {
