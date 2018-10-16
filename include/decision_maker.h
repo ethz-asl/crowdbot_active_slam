@@ -84,6 +84,7 @@ private:
   bool finished_;
   bool map_initialized_;
   std::string primitive_filename_;
+  std::string exploration_type_;
   SBPLPlanner* planner_;
   EnvironmentNAVXYTHETALAT env_;
 };

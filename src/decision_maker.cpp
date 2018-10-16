@@ -5,6 +5,7 @@ DecisionMaker::DecisionMaker(ros::NodeHandle nh, ros::NodeHandle nh_)
     : nh_(nh), nh_private_(nh_) {
   // Get ros param
   nh_private_.param("primitive_filename", primitive_filename_, std::string(""));
+  nh_private_.param("exploration_type", exploration_type_, std::string("utility"));
 
   // Init finished bool
   finished_ = false;
@@ -208,7 +209,10 @@ void DecisionMaker::startExploration(){
   nav_msgs::GetPlan get_plan;
   crowdbot_active_slam::utility_calc utility;
   std::vector<double> utility_vec;
+  std::vector<int> path_sizes;
   std::vector<double>::iterator max_utility;
+  std::vector<int>::iterator path_sizes_it;
+  int goal_id;
 
   for (int i = 0; i < frontier_size; i++){
     // Get action plan
@@ -220,19 +224,33 @@ void DecisionMaker::startExploration(){
     action_plan.header.frame_id = "/map";
     plan_pub_.publish(action_plan);
 
-    // Get utility of action plan
-    utility.request.plan = action_plan;
-    utility_calc_client_.call(utility);
+    if (exploration_type_ == "shortest_frontier"){
+      path_sizes.push_back(action_plan.poses.size());
+    }
 
-    std::cout << "utility: " << utility.response.utility << std::endl;
-    // Save utility values in vec
-    utility_vec.push_back(utility.response.utility);
+    if (exploration_type_ == "utility"){
+      // Get utility of action plan
+      utility.request.plan = action_plan;
+      utility_calc_client_.call(utility);
+
+      std::cout << "utility: " << utility.response.utility << std::endl;
+      // Save utility values in vec
+      utility_vec.push_back(utility.response.utility);
+    }
   }
 
-  // Get id of max utility
-  max_utility = std::max_element(utility_vec.begin(), utility_vec.end());
-  int max_utility_id = std::distance(utility_vec.begin(), max_utility);
-  std::cout << "Choose this: " << utility_vec[max_utility_id] << std::endl;
+  if (exploration_type_ == "shortest_frontier"){
+    path_sizes_it = std::min_element(path_sizes.begin(), path_sizes.end());
+    goal_id = std::distance(path_sizes.begin(), path_sizes_it);
+  }
+
+  if (exploration_type_ == "utility"){
+    // Get id of max utility
+    max_utility = std::max_element(utility_vec.begin(), utility_vec.end());
+    int max_utility_id = std::distance(utility_vec.begin(), max_utility);
+    std::cout << "Choose this: " << utility_vec[max_utility_id] << std::endl;
+    goal_id = max_utility_id;
+  }
 
   // Action client
   actionlib::SimpleActionClient<move_base_msgs::MoveBaseAction> goal_client("move_base", true);
@@ -245,8 +263,8 @@ void DecisionMaker::startExploration(){
 
   move_base_msgs::MoveBaseGoal goal;
   goal.target_pose.header.frame_id = "map";
-  goal.target_pose.pose.position.x = frontier_srv.response.frontier_list[max_utility_id].x;
-  goal.target_pose.pose.position.y = frontier_srv.response.frontier_list[max_utility_id].y;
+  goal.target_pose.pose.position.x = frontier_srv.response.frontier_list[goal_id].x;
+  goal.target_pose.pose.position.y = frontier_srv.response.frontier_list[goal_id].y;
   goal.target_pose.pose.position.z = 0;
 
   goal.target_pose.pose.orientation.x = 0;
