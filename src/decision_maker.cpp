@@ -200,6 +200,7 @@ void DecisionMaker::startExploration(){
   int frontier_size = frontier_srv.response.frontier_list.size();
   if (frontier_size == 0){
     finished_ = true;
+    ROS_INFO("Exploration finished!");
     return;
   }
 
@@ -223,7 +224,7 @@ void DecisionMaker::startExploration(){
     utility.request.plan = action_plan;
     utility_calc_client_.call(utility);
 
-    std::cout << utility.response.utility << std::endl;
+    std::cout << "utility: " << utility.response.utility << std::endl;
     // Save utility values in vec
     utility_vec.push_back(utility.response.utility);
   }
@@ -255,7 +256,7 @@ void DecisionMaker::startExploration(){
 
   goal_client.sendGoal(goal);
 
-  bool finished_before_timeout = goal_client.waitForResult(ros::Duration(120.0));
+  bool finished_before_timeout = goal_client.waitForResult(ros::Duration(150.0));
 
   if (finished_before_timeout)
   {

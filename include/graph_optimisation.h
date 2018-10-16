@@ -32,6 +32,7 @@
 #include <gtsam/geometry/Pose2.h>
 #include <gtsam/nonlinear/Values.h>
 #include <gtsam/inference/Symbol.h>
+#include <gtsam/nonlinear/ISAM2.h>
 
 #include <csm/csm_all.h>
 #undef min
@@ -143,6 +144,8 @@ private:
   gtsam::NonlinearFactorGraph graph_;
   gtsam::noiseModel::Diagonal::shared_ptr scan_match_noise_;
   gtsam::Values pose_estimates_;
+  gtsam::Values new_estimates_;
+  gtsam::ISAM2 isam_;
 
   // CSM
   sm_params sm_icp_params_;
