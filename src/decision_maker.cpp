@@ -224,7 +224,7 @@ void DecisionMaker::startExploration(){
     utility.request.plan = action_plan;
     utility_calc_client_.call(utility);
 
-    std::cout << utility.response.utility << std::endl;
+    std::cout << "utility: " << utility.response.utility << std::endl;
     // Save utility values in vec
     utility_vec.push_back(utility.response.utility);
   }

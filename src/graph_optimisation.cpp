@@ -578,11 +578,6 @@ void GraphOptimiser::updateMap(gtsam::Values pose_estimates,
 bool GraphOptimiser::mapRecalculationServiceCallback(
   crowdbot_active_slam::map_recalculation::Request &request,
   crowdbot_active_slam::map_recalculation::Response &response){
-  // // Optimize the graph
-  // LevenbergMarquardtOptimizer optimizer(graph_, pose_estimates_);
-  // ROS_INFO("Optimisation started!");
-  // pose_estimates_ = optimizer.optimize();
-  // ROS_INFO("Optimisation finished!");
 
   // Draw the whole map
   drawMap(pose_estimates_, keyframe_ldp_vec_);
@@ -607,10 +602,6 @@ bool GraphOptimiser::utilityCalcServiceCallback(
   current_estimate = *dynamic_cast<const Pose2*>(&pose_estimates_.at(size - 1));
 
   // Get covariance from current position
-  // Marginals marginals(graph_, pose_estimates_);
-  // noiseModel::Gaussian::shared_ptr current_marginal_noise =
-  //     noiseModel::Gaussian::Covariance(marginals.marginalCovariance(size - 1));
-
   noiseModel::Gaussian::shared_ptr current_marginal_noise;
   if (node_counter_ == 1){
     current_marginal_noise =
@@ -705,8 +696,6 @@ bool GraphOptimiser::utilityCalcServiceCallback(
       //ROS_INFO("Optimisation started!");
       isam.update(action_graph, action_estimates);
       isam.update();
-      //pose_estimates_ = isam.calculateEstimate();
-      //ROS_INFO("Optimisation finished!");
 
       action_graph.resize(0);
       action_estimates.clear();
@@ -717,12 +706,6 @@ bool GraphOptimiser::utilityCalcServiceCallback(
       prev_i = i;
     }
   }
-
-  // // Optimize the graph
-  // LevenbergMarquardtOptimizer optimizer(action_graph, action_estimates);
-  // ROS_INFO("Optimisation started!");
-  // action_estimates = optimizer.optimize();
-  // ROS_INFO("Optimisation finished!");
 
   action_estimates = isam.calculateEstimate();
 
@@ -747,10 +730,9 @@ bool GraphOptimiser::utilityCalcServiceCallback(
   // Calculate alpha for each node
   std::vector<double> alpha;
   double sigma_temp;
-  //Marginals action_marginals(action_graph, action_estimates);
+
   for (int i = 0; i < node_size; i++){
     // D-optimality
-    //Eigen::VectorXcd eivals = action_marginals.marginalCovariance(i).eigenvalues();
     Eigen::VectorXcd eivals = isam.marginalCovariance(i).eigenvalues();
     double sum_of_logs = log(eivals[0].real()) +
                          log(eivals[1].real()) +
@@ -774,8 +756,8 @@ bool GraphOptimiser::utilityCalcServiceCallback(
       double p = double(p_percent) / 100.0;
       utility += -(p * log2(p) + (1 - p) * log2(1 - p)) -
       1.0 / (1.0 - it->second) * log2(pow(p, it->second) + pow(1 - p, it->second));
-      std::cout << "percent: " << p_percent << std::endl;
-      std::cout << "utility: " << utility << std::endl;
+      // std::cout << "percent: " << p_percent << std::endl;
+      // std::cout << "utility: " << utility << std::endl;
     }
   }
 
