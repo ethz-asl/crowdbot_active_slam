@@ -15,7 +15,7 @@ TrajectoryPlannerROS:
   meter_scoring: true
   occdist_scale: 0.01
   heading_lookahead: 0.325
-  pdist_scale: 0.8
+  pdist_scale: 1.0
   gdist_scale: 0.8
   heading_scoring: true
   heading_scoring_timestep: 1.0
