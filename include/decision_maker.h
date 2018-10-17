@@ -63,6 +63,11 @@ public:
    */
    void saveGridMap();
 
+   /**
+    *  Save general information to the exploration
+    */
+   void saveGeneralResults();
+
   /**
    *  Occupancy map callback which starts startExploration
    */
@@ -90,12 +95,13 @@ private:
   unsigned int height_;
   float resolution_;
 
-  bool finished_;
   bool map_initialized_;
   std::string primitive_filename_;
   std::string exploration_type_;
   SBPLPlanner* planner_;
   EnvironmentNAVXYTHETALAT env_;
+  std::time_t start_time_;
+  std::time_t end_time_;
 };
 
 

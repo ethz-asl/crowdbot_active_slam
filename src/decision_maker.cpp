@@ -7,9 +7,6 @@ DecisionMaker::DecisionMaker(ros::NodeHandle nh, ros::NodeHandle nh_)
   nh_private_.param("primitive_filename", primitive_filename_, std::string(""));
   nh_private_.param("exploration_type", exploration_type_, std::string("utility"));
 
-  // Init finished bool
-  finished_ = false;
-
   // Publisher
   plan_pub_ = nh_.advertise<nav_msgs::Path>("plans_path", 1);
 
@@ -56,6 +53,9 @@ DecisionMaker::DecisionMaker(ros::NodeHandle nh, ros::NodeHandle nh_)
   // Planner
   bool bsearch = false;
   planner_ = new ADPlanner(&env_, bsearch);
+
+  // Save start time
+  start_time_ = std::time(0);
 }
 
 DecisionMaker::~DecisionMaker() {
@@ -200,9 +200,10 @@ void DecisionMaker::startExploration(){
 
   int frontier_size = frontier_srv.response.frontier_list.size();
   if (frontier_size == 0){
-    finished_ = true;
+    end_time_ = std::time(0);
     ROS_INFO("Exploration finished!");
     saveGridMap();
+    saveGeneralResults();
     ROS_INFO("This node will be shutdown now!");
     ros::shutdown();
   }
@@ -318,6 +319,38 @@ void DecisionMaker::saveGridMap(){
   }
   else{
     ROS_INFO("Could not open occupancy_grid_map.txt!");
+  }
+}
+
+void DecisionMaker::saveGeneralResults(){
+  // Save current time
+  std::time_t now = std::time(0);
+  char char_time[100];
+  std::strftime(char_time, sizeof(char_time), "_%Y_%m_%d_%H_%M_%S", std::localtime(&now));
+
+  // Get path and file name
+  std::string package_path = ros::package::getPath("crowdbot_active_slam");
+  std::string save_path = package_path + "/test_results/general_results" +
+                          char_time + ".txt";
+
+  //
+  std::time_t diff_time = end_time_ - start_time_;
+
+  //
+  std::ofstream result_file(save_path.c_str());
+  if (result_file.is_open()){
+    // Add information to file
+    result_file << "Exploration type: " << exploration_type_ << std::endl;
+    result_file << "Exploration time: " << diff_time << "s" << std::endl;
+    result_file << "Map width: " << width_ << std::endl;
+    result_file << "Map height: " << height_ << std::endl;
+    result_file << "Map resolution: " << resolution_ << std::endl;
+
+    // Close file
+    result_file.close();
+  }
+  else{
+    ROS_INFO("Could not open general_results.txt!");
   }
 }
 
