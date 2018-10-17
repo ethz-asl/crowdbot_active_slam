@@ -3,6 +3,7 @@ project(crowdbot_active_slam)
 
 find_package(catkin REQUIRED COMPONENTS
   roscpp
+  roslib
   tf
   std_msgs
   sensor_msgs
@@ -34,7 +35,7 @@ generate_messages(
 
 catkin_package(
 INCLUDE_DIRS include
-CATKIN_DEPENDS roscpp tf std_msgs sensor_msgs geometry_msgs
+CATKIN_DEPENDS roscpp roslib tf std_msgs sensor_msgs geometry_msgs
 DEPENDS Eigen3)
 
 include_directories(include ${catkin_INCLUDE_DIRS} ${csm_INCLUDE_DIRS}

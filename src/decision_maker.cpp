@@ -202,7 +202,9 @@ void DecisionMaker::startExploration(){
   if (frontier_size == 0){
     finished_ = true;
     ROS_INFO("Exploration finished!");
-    return;
+    saveGridMap();
+    ROS_INFO("This node will be shutdown now!");
+    ros::shutdown();
   }
 
   nav_msgs::Path action_plan;
@@ -292,6 +294,30 @@ void DecisionMaker::startExploration(){
   else
   {
     ROS_ERROR("Failed to call service map_recalculation");
+  }
+}
+
+void DecisionMaker::saveGridMap(){
+  // Save current time
+  std::time_t now = std::time(0);
+  char char_time[100];
+  std::strftime(char_time, sizeof(char_time), "_%Y_%m_%d_%H_%M_%S", std::localtime(&now));
+
+  // Get path and file name
+  std::string package_path = ros::package::getPath("crowdbot_active_slam");
+  std::string save_path = package_path + "/test_results/occupancy_grid_map" +
+                          char_time + ".txt";
+
+  // Save map
+  std::ofstream map_file(save_path.c_str());
+  if (map_file.is_open()){
+    for (int i = 0; i < width_ * height_; i++){
+      map_file << int(latest_map_msg_.data[i]) << std::endl;
+    }
+    map_file.close();
+  }
+  else{
+    ROS_INFO("Could not open occupancy_grid_map.txt!");
   }
 }
 

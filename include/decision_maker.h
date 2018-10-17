@@ -1,7 +1,11 @@
 #ifndef DECISION_MAKER_H
 #define DECISION_MAKER_H
 
+#include <fstream>
+#include <ctime>
+
 #include <ros/ros.h>
+#include <ros/package.h>
 #include <actionlib/client/simple_action_client.h>
 #include <nav_msgs/OccupancyGrid.h>
 #include <nav_msgs/Path.h>
@@ -53,6 +57,11 @@ public:
    *  Function which starts the exploration task when starting or ariving at goal
    */
   void startExploration();
+
+  /**
+   *  Save map in txt file sich that it can be used for calculations later
+   */
+   void saveGridMap();
 
   /**
    *  Occupancy map callback which starts startExploration
