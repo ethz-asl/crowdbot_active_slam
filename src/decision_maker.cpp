@@ -18,8 +18,11 @@ DecisionMaker::DecisionMaker(ros::NodeHandle nh, ros::NodeHandle nh_)
   frontier_exploration_client_ = nh_.serviceClient
         <crowdbot_active_slam::get_frontier_list>
         ("/frontier_exploration/frontier_exploration_service");
+  uncertainty_client_ = nh_.serviceClient
+        <crowdbot_active_slam::service_call>
+        ("/save_uncertainty_service");
   map_recalculation_client_ = nh_.serviceClient
-        <crowdbot_active_slam::map_recalculation>
+        <crowdbot_active_slam::service_call>
         ("/map_recalculation_service");
   get_plan_move_base_client_ = nh_.serviceClient
         <nav_msgs::GetPlan>("/move_base/make_plan");
@@ -55,7 +58,7 @@ DecisionMaker::DecisionMaker(ros::NodeHandle nh, ros::NodeHandle nh_)
   planner_ = new ADPlanner(&env_, bsearch);
 
   // Save start time
-  start_time_ = std::time(0);
+  start_time_ = ros::Time::now();
 }
 
 DecisionMaker::~DecisionMaker() {
@@ -200,10 +203,25 @@ void DecisionMaker::startExploration(){
 
   int frontier_size = frontier_srv.response.frontier_list.size();
   if (frontier_size == 0){
-    end_time_ = std::time(0);
     ROS_INFO("Exploration finished!");
-    saveGridMap();
+    end_time_ = ros::Time::now();
+
+    // Save general test information
     saveGeneralResults();
+
+    // Save the occupancy grid map
+    saveGridMap();
+
+    // Save uncertainties along path
+    crowdbot_active_slam::service_call uncertainty_srv;
+    if (uncertainty_client_.call(uncertainty_srv)){
+      ROS_INFO("Uncertainties of path have been saved!");
+    }
+    else{
+      ROS_INFO("Uncertainty service failed!");
+    }
+
+    // Shutdown
     ROS_INFO("This node will be shutdown now!");
     ros::shutdown();
   }
@@ -287,7 +305,7 @@ void DecisionMaker::startExploration(){
   else
     ROS_INFO("Action did not finish before the time out.");
 
-  crowdbot_active_slam::map_recalculation map_srv;
+  crowdbot_active_slam::service_call map_srv;
   if (map_recalculation_client_.call(map_srv))
   {
     ROS_INFO("Map recalculation call successfull");
@@ -334,7 +352,7 @@ void DecisionMaker::saveGeneralResults(){
                           char_time + ".txt";
 
   //
-  std::time_t diff_time = end_time_ - start_time_;
+  double diff_time = end_time_.toSec() - start_time_.toSec();
 
   //
   std::ofstream result_file(save_path.c_str());
@@ -345,6 +363,10 @@ void DecisionMaker::saveGeneralResults(){
     result_file << "Map width: " << width_ << std::endl;
     result_file << "Map height: " << height_ << std::endl;
     result_file << "Map resolution: " << resolution_ << std::endl;
+    result_file << "node_dist_linear: " << "FILL IN" << std::endl;
+    result_file << "node_dist_angular: " << "FILL IN" << std::endl;
+    result_file << "loop_closing_radius: " << "FILL IN" << std::endl;
+
 
     // Close file
     result_file.close();

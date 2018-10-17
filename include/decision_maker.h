@@ -12,7 +12,7 @@
 #include <tf/tf.h>
 #include <sbpl/headers.h>
 
-#include <crowdbot_active_slam/map_recalculation.h>
+#include <crowdbot_active_slam/service_call.h>
 #include <crowdbot_active_slam/get_frontier_list.h>
 #include <crowdbot_active_slam/utility_calc.h>
 #include <move_base_msgs/MoveBaseAction.h>
@@ -89,6 +89,7 @@ private:
   ros::ServiceClient map_recalculation_client_;
   ros::ServiceClient utility_calc_client_;
   ros::ServiceClient get_plan_move_base_client_;
+  ros::ServiceClient uncertainty_client_;
 
   // others
   unsigned int width_;
@@ -100,8 +101,8 @@ private:
   std::string exploration_type_;
   SBPLPlanner* planner_;
   EnvironmentNAVXYTHETALAT env_;
-  std::time_t start_time_;
-  std::time_t end_time_;
+  ros::Time start_time_;
+  ros::Time end_time_;
 };
 
 

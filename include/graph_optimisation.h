@@ -8,7 +8,11 @@
 #ifndef GRAPH_OPTIMISATION_H
 #define GRAPH_OPTIMISATION_H
 
+#include <fstream>
+#include <ctime>
+
 #include <ros/ros.h>
+#include <ros/package.h>
 #include <geometry_msgs/Pose2D.h>
 #include <geometry_msgs/PoseStamped.h>
 #include <geometry_msgs/Pose.h>
@@ -21,7 +25,7 @@
 #include <tf/transform_datatypes.h>
 #include <nav_msgs/Path.h>
 #include <nav_msgs/OccupancyGrid.h>
-#include <crowdbot_active_slam/map_recalculation.h>
+#include <crowdbot_active_slam/service_call.h>
 #include <crowdbot_active_slam/utility_calc.h>
 
 #include <gtsam/nonlinear/NonlinearFactorGraph.h>
@@ -97,11 +101,18 @@ public:
   void scanMatcherCallback(const geometry_msgs::Pose2D::ConstPtr& pose2D_msg);
 
   /**
+   *  Service callback for saving current uncertainty matrix along path
+   */
+  bool saveUncertaintyMatServiceCallback(
+    crowdbot_active_slam::service_call::Request &request,
+    crowdbot_active_slam::service_call::Response &response);
+
+  /**
    *  Service callback for recalculating the map
    */
   bool mapRecalculationServiceCallback(
-    crowdbot_active_slam::map_recalculation::Request &request,
-    crowdbot_active_slam::map_recalculation::Response &response);
+    crowdbot_active_slam::service_call::Request &request,
+    crowdbot_active_slam::service_call::Response &response);
 
   /**
    *  Service callback for calculating utility of a plan
@@ -128,6 +139,7 @@ private:
   ros::Publisher map_pub_;
   ros::ServiceServer map_service_;
   ros::ServiceServer utility_calc_service_;
+  ros::ServiceServer uncertainty_service_;
 
   // TF
   tf::Transform map_to_odom_tf_;
@@ -176,6 +188,7 @@ private:
   int node_counter_;
   unsigned int scan_ranges_size_;
   double scan_angle_increment_;
+  std::vector<gtsam::Matrix> uncertainty_matrices_path_;
 
 };
 
