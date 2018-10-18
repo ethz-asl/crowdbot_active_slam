@@ -366,6 +366,10 @@ void DecisionMaker::saveGeneralResults(){
     result_file << "node_dist_linear: " << "FILL IN" << std::endl;
     result_file << "node_dist_angular: " << "FILL IN" << std::endl;
     result_file << "loop_closing_radius: " << "FILL IN" << std::endl;
+    result_file << "Node number: " << "FILL IN" << std::endl;
+    result_file << "World: " << "FILL IN" << std::endl;
+    result_file << "Optimality: " << "FILL IN" << std::endl;
+
 
 
     // Close file
