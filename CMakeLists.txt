@@ -16,8 +16,11 @@ find_package(GTSAM REQUIRED)
 find_package(PCL REQUIRED QUIET)
 find_package(PkgConfig REQUIRED)
 find_package(Eigen3 REQUIRED)
+find_package(plotty REQUIRED)
 pkg_check_modules(csm REQUIRED csm)
 pkg_check_modules(SBPL REQUIRED sbpl)
+
+add_compile_options(-std=c++11)
 
 add_service_files(
   FILES
@@ -36,20 +39,27 @@ generate_messages(
 catkin_package(
 INCLUDE_DIRS include
 CATKIN_DEPENDS roscpp roslib tf std_msgs sensor_msgs geometry_msgs
-DEPENDS Eigen3)
+DEPENDS Eigen3 plotty)
 
 include_directories(include ${catkin_INCLUDE_DIRS} ${csm_INCLUDE_DIRS}
-                            ${Eigen3_INCLUDE_DIRS} ${SBPL_INCLUDE_DIRS})
+                            ${Eigen3_INCLUDE_DIRS} ${SBPL_INCLUDE_DIRS}
+                            ${plotty_INCLUDE_DIRS})
 link_directories(${csm_LIBRARY_DIRS} ${SBPL_LIBRARY_DIRS})
 
 add_executable(graph_optimisation src/graph_optimisation.cpp)
 add_executable(frontier_exploration src/frontier_exploration.cpp)
 add_executable(decision_maker src/decision_maker.cpp)
 
+add_executable(calculate_map_error test_results/scripts/calculate_map_error.cpp)
+add_executable(plot_cov_along_path test_results/scripts/plot_cov_along_path.cpp)
+
 target_link_libraries(graph_optimisation gtsam
                       ${catkin_LIBRARIES} ${csm_LIBRARIES})
 target_link_libraries(frontier_exploration ${catkin_LIBRARIES})
 target_link_libraries(decision_maker ${catkin_LIBRARIES} ${SBPL_LIBRARIES})
+
+target_link_libraries(calculate_map_error ${catkin_LIBRARIES})
+target_link_libraries(plot_cov_along_path ${catkin_LIBRARIES} ${plotty_LIBRARIES})
 
 install(DIRECTORY
   launch
