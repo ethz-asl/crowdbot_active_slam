@@ -6,7 +6,8 @@
     <rosparam file="$(find crowdbot_active_slam)/nav/global_costmap_params.yaml" command="load"/>
     <rosparam file="$(find crowdbot_active_slam)/nav/base_local_planner_params.yaml" command="load"/>
     <remap from="map" to="occupancy_map"/>
-    <remap from="cmd_vel" to="pioneer/cmd_vel"/>
+    <remap from="cmd_vel" to="mobile_base_controller/cmd_vel"/>
+    <remap from="odom" to="mobile_base_controller/odom"/>
     <remap from="scan" to="base_scan"/>
   </node>
 </launch>
