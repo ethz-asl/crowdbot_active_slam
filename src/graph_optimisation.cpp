@@ -590,11 +590,23 @@ bool GraphOptimiser::saveUncertaintyMatServiceCallback(
   std::string save_path = package_path + "/test_results/uncertainty_matrices" +
                           char_time + ".txt";
 
+  Pose2 current_pose;
+  Pose2 previous_pose;
+  double path_length = 0.0;
   // Save uncertainty
   std::ofstream map_file(save_path.c_str());
   if (map_file.is_open()){
     for (int i = 0; i < uncertainty_matrices_path_.size(); i++){
-      map_file << uncertainty_matrices_path_[i] << std::endl;
+      if (i == 0){
+        map_file << path_length << " " << uncertainty_matrices_path_[i] << std::endl;
+        previous_pose = *dynamic_cast<const Pose2*>(&pose_estimates_.at(i));
+      }
+      else {
+        current_pose = *dynamic_cast<const Pose2*>(&pose_estimates_.at(i));
+        path_length += current_pose.between(previous_pose).t().norm();
+        map_file << path_length << " " << uncertainty_matrices_path_[i] << std::endl;
+        previous_pose = current_pose;
+      }
     }
     map_file.close();
   }
@@ -655,6 +667,7 @@ bool GraphOptimiser::utilityCalcServiceCallback(
   std::map<int, int> map_of_lc;
   int prev_i = 0;
   double prev_angle = current_estimate.theta();
+  double path_length = 0;
 
   for (int i = 0; i < request.plan.poses.size(); i++){
     // Check if distance/angle diff is bigger than threshold as done in SLAM algo below
@@ -674,6 +687,9 @@ bool GraphOptimiser::utilityCalcServiceCallback(
                       request.plan.poses[i].pose.position.y,
                       angle);
       Pose2 next_mean = prev_pose.between(next_pose);
+
+      // Update path length
+      path_length += next_mean.t().norm();
 
       action_graph.add(BetweenFactor<Pose2>(node_counter - 1, node_counter,
         next_mean, scan_match_noise_));
@@ -790,7 +806,8 @@ bool GraphOptimiser::utilityCalcServiceCallback(
       // std::cout << "utility: " << utility << std::endl;
     }
   }
-
+  // normalize utility by path path_length
+  utility = utility / path_length;
   response.utility = utility;
   return true;
 }
