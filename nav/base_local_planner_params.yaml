@@ -5,22 +5,26 @@ TrajectoryPlannerROS:
   min_vel_theta: -1.5
   min_in_place_vel_theta: 0.4
   escape_vel: -0.2
-  acc_lim_theta: 1.5
-  acc_lim_x: 1.0
+  acc_lim_theta: 2.5
+  acc_lim_x: 1.5
   acc_lim_y: 0.0
   xy_goal_tolerance: 0.5
   yaw_goal_tolerance: 3.14
   holonomic_robot: false
-  sim_time: 1.4
-  vx_samples: 20
+  sim_time: 1.5
+  vx_samples: 15
   vtheta_samples: 30
   meter_scoring: true
   occdist_scale: 0.01
-  heading_lookahead: 0.325
-  pdist_scale: 0.8
+  heading_lookahead: 0.225
+  pdist_scale: 0.6
   gdist_scale: 0.8
   heading_scoring: true
-  heading_scoring_timestep: 1.0
+  heading_scoring_timestep: 1.4
 controller_frequency: 5.0
-planner_frequency: 1.0
+planner_frequency: 0.5
 recovery_behavior_enabled: false
+
+NavfnROS:
+  allow_unknown: false
+  default_tolerance: 0.5

@@ -5,9 +5,7 @@ DecisionMaker::DecisionMaker(ros::NodeHandle nh, ros::NodeHandle nh_)
     : nh_(nh), nh_private_(nh_) {
   // Get ros param
   nh_private_.param("primitive_filename", primitive_filename_, std::string(""));
-
-  // Init finished bool
-  finished_ = false;
+  nh_private_.param("exploration_type", exploration_type_, std::string("utility"));
 
   // Publisher
   plan_pub_ = nh_.advertise<nav_msgs::Path>("plans_path", 1);
@@ -20,8 +18,11 @@ DecisionMaker::DecisionMaker(ros::NodeHandle nh, ros::NodeHandle nh_)
   frontier_exploration_client_ = nh_.serviceClient
         <crowdbot_active_slam::get_frontier_list>
         ("/frontier_exploration/frontier_exploration_service");
+  uncertainty_client_ = nh_.serviceClient
+        <crowdbot_active_slam::service_call>
+        ("/save_uncertainty_service");
   map_recalculation_client_ = nh_.serviceClient
-        <crowdbot_active_slam::map_recalculation>
+        <crowdbot_active_slam::service_call>
         ("/map_recalculation_service");
   get_plan_move_base_client_ = nh_.serviceClient
         <nav_msgs::GetPlan>("/move_base/make_plan");
@@ -55,6 +56,9 @@ DecisionMaker::DecisionMaker(ros::NodeHandle nh, ros::NodeHandle nh_)
   // Planner
   bool bsearch = false;
   planner_ = new ADPlanner(&env_, bsearch);
+
+  // Save start time
+  start_time_ = ros::Time::now();
 }
 
 DecisionMaker::~DecisionMaker() {
@@ -199,16 +203,37 @@ void DecisionMaker::startExploration(){
 
   int frontier_size = frontier_srv.response.frontier_list.size();
   if (frontier_size == 0){
-    finished_ = true;
     ROS_INFO("Exploration finished!");
-    return;
+    end_time_ = ros::Time::now();
+
+    // Save general test information
+    saveGeneralResults();
+
+    // Save the occupancy grid map
+    saveGridMap();
+
+    // Save uncertainties along path
+    crowdbot_active_slam::service_call uncertainty_srv;
+    if (uncertainty_client_.call(uncertainty_srv)){
+      ROS_INFO("Uncertainties of path have been saved!");
+    }
+    else{
+      ROS_INFO("Uncertainty service failed!");
+    }
+
+    // Shutdown
+    ROS_INFO("This node will be shutdown now!");
+    ros::shutdown();
   }
 
   nav_msgs::Path action_plan;
   nav_msgs::GetPlan get_plan;
   crowdbot_active_slam::utility_calc utility;
   std::vector<double> utility_vec;
+  std::vector<int> path_sizes;
   std::vector<double>::iterator max_utility;
+  std::vector<int>::iterator path_sizes_it;
+  int goal_id;
 
   for (int i = 0; i < frontier_size; i++){
     // Get action plan
@@ -220,19 +245,33 @@ void DecisionMaker::startExploration(){
     action_plan.header.frame_id = "/map";
     plan_pub_.publish(action_plan);
 
-    // Get utility of action plan
-    utility.request.plan = action_plan;
-    utility_calc_client_.call(utility);
+    if (exploration_type_ == "shortest_frontier"){
+      path_sizes.push_back(action_plan.poses.size());
+    }
 
-    std::cout << "utility: " << utility.response.utility << std::endl;
-    // Save utility values in vec
-    utility_vec.push_back(utility.response.utility);
+    if (exploration_type_ == "utility"){
+      // Get utility of action plan
+      utility.request.plan = action_plan;
+      utility_calc_client_.call(utility);
+
+      std::cout << "utility: " << utility.response.utility << std::endl;
+      // Save utility values in vec
+      utility_vec.push_back(utility.response.utility);
+    }
   }
 
-  // Get id of max utility
-  max_utility = std::max_element(utility_vec.begin(), utility_vec.end());
-  int max_utility_id = std::distance(utility_vec.begin(), max_utility);
-  std::cout << "Choose this: " << utility_vec[max_utility_id] << std::endl;
+  if (exploration_type_ == "shortest_frontier"){
+    path_sizes_it = std::min_element(path_sizes.begin(), path_sizes.end());
+    goal_id = std::distance(path_sizes.begin(), path_sizes_it);
+  }
+
+  if (exploration_type_ == "utility"){
+    // Get id of max utility
+    max_utility = std::max_element(utility_vec.begin(), utility_vec.end());
+    int max_utility_id = std::distance(utility_vec.begin(), max_utility);
+    std::cout << "Choose this: " << utility_vec[max_utility_id] << std::endl;
+    goal_id = max_utility_id;
+  }
 
   // Action client
   actionlib::SimpleActionClient<move_base_msgs::MoveBaseAction> goal_client("move_base", true);
@@ -245,8 +284,8 @@ void DecisionMaker::startExploration(){
 
   move_base_msgs::MoveBaseGoal goal;
   goal.target_pose.header.frame_id = "map";
-  goal.target_pose.pose.position.x = frontier_srv.response.frontier_list[max_utility_id].x;
-  goal.target_pose.pose.position.y = frontier_srv.response.frontier_list[max_utility_id].y;
+  goal.target_pose.pose.position.x = frontier_srv.response.frontier_list[goal_id].x;
+  goal.target_pose.pose.position.y = frontier_srv.response.frontier_list[goal_id].y;
   goal.target_pose.pose.position.z = 0;
 
   goal.target_pose.pose.orientation.x = 0;
@@ -266,7 +305,7 @@ void DecisionMaker::startExploration(){
   else
     ROS_INFO("Action did not finish before the time out.");
 
-  crowdbot_active_slam::map_recalculation map_srv;
+  crowdbot_active_slam::service_call map_srv;
   if (map_recalculation_client_.call(map_srv))
   {
     ROS_INFO("Map recalculation call successfull");
@@ -274,6 +313,70 @@ void DecisionMaker::startExploration(){
   else
   {
     ROS_ERROR("Failed to call service map_recalculation");
+  }
+}
+
+void DecisionMaker::saveGridMap(){
+  // Save current time
+  std::time_t now = std::time(0);
+  char char_time[100];
+  std::strftime(char_time, sizeof(char_time), "_%Y_%m_%d_%H_%M_%S", std::localtime(&now));
+
+  // Get path and file name
+  std::string package_path = ros::package::getPath("crowdbot_active_slam");
+  std::string save_path = package_path + "/test_results/occupancy_grid_map" +
+                          char_time + ".txt";
+
+  // Save map
+  std::ofstream map_file(save_path.c_str());
+  if (map_file.is_open()){
+    for (int i = 0; i < width_ * height_; i++){
+      map_file << int(latest_map_msg_.data[i]) << std::endl;
+    }
+    map_file.close();
+  }
+  else{
+    ROS_INFO("Could not open occupancy_grid_map.txt!");
+  }
+}
+
+void DecisionMaker::saveGeneralResults(){
+  // Save current time
+  std::time_t now = std::time(0);
+  char char_time[100];
+  std::strftime(char_time, sizeof(char_time), "_%Y_%m_%d_%H_%M_%S", std::localtime(&now));
+
+  // Get path and file name
+  std::string package_path = ros::package::getPath("crowdbot_active_slam");
+  std::string save_path = package_path + "/test_results/general_results" +
+                          char_time + ".txt";
+
+  //
+  double diff_time = end_time_.toSec() - start_time_.toSec();
+
+  //
+  std::ofstream result_file(save_path.c_str());
+  if (result_file.is_open()){
+    // Add information to file
+    result_file << "Exploration type: " << exploration_type_ << std::endl;
+    result_file << "Exploration time: " << diff_time << "s" << std::endl;
+    result_file << "Map width: " << width_ << std::endl;
+    result_file << "Map height: " << height_ << std::endl;
+    result_file << "Map resolution: " << resolution_ << std::endl;
+    result_file << "node_dist_linear: " << "FILL IN" << std::endl;
+    result_file << "node_dist_angular: " << "FILL IN" << std::endl;
+    result_file << "loop_closing_radius: " << "FILL IN" << std::endl;
+    result_file << "Node number: " << "FILL IN" << std::endl;
+    result_file << "World: " << "FILL IN" << std::endl;
+    result_file << "Optimality: " << "FILL IN" << std::endl;
+
+
+
+    // Close file
+    result_file.close();
+  }
+  else{
+    ROS_INFO("Could not open general_results.txt!");
   }
 }
 
