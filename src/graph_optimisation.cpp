@@ -234,9 +234,9 @@ void GraphOptimiser::getSubsetOfMap(nav_msgs::Path action_path,
           // Check if x,y still in map
           if (x >= 0 && x < map_width_ && y >= 0 && y < map_height_){
             int temp_id = mapIndexToId(x, y, map_width_);
-            // Check if next cell is a wall
-            if (int(occupancy_grid_msg_.data[temp_id]) < 90 &&
-                int(occupancy_grid_msg_.data[temp_id]) != -1){
+            // Check if next cell is not wall and not unknown
+            int temp_prob = int(occupancy_grid_msg_.data[temp_id]);
+            if (temp_prob < 90 && temp_prob != -1){
               // Check if already in subset
               if (subset.find(temp_id) != subset.end()){
                 subset.find(temp_id)->second = alpha[i];
@@ -245,7 +245,7 @@ void GraphOptimiser::getSubsetOfMap(nav_msgs::Path action_path,
                 subset.insert(std::make_pair(temp_id, alpha[i]));
               }
             }
-            else if (int(occupancy_grid_msg_.data[temp_id]) >= 90){
+            else if (temp_prob >= 90){
               // Check if already in subset
               if (subset.find(temp_id) != subset.end()){
                 subset.find(temp_id)->second = alpha[i];
@@ -255,6 +255,7 @@ void GraphOptimiser::getSubsetOfMap(nav_msgs::Path action_path,
               }
               wall_reached = true;
             }
+            // if unknown
             else {
               wall_reached = true;
             }
@@ -279,9 +280,9 @@ void GraphOptimiser::getSubsetOfMap(nav_msgs::Path action_path,
           // Check if x,y still in map
           if (x >= 0 && x < map_width_ && y >= 0 && y < map_height_){
             int temp_id = mapIndexToId(x, y, map_width_);
-            // Check if next cell is a wall or unkown
-            if (int(occupancy_grid_msg_.data[temp_id]) < 90 &&
-                int(occupancy_grid_msg_.data[temp_id]) != -1){
+            // Check if next cell is not a wall or unkown
+            int temp_prob = int(occupancy_grid_msg_.data[temp_id]);
+            if (temp_prob < 90 && temp_prob != -1){
               // Check if already in subset
               if (subset.find(temp_id) != subset.end()){
                 subset.find(temp_id)->second = alpha[i];
@@ -290,7 +291,7 @@ void GraphOptimiser::getSubsetOfMap(nav_msgs::Path action_path,
                 subset.insert(std::make_pair(temp_id, alpha[i]));
               }
             }
-            else if (int(occupancy_grid_msg_.data[temp_id]) >= 90){
+            else if (temp_prob >= 90){
               // Check if already in subset
               if (subset.find(temp_id) != subset.end()){
                 subset.find(temp_id)->second = alpha[i];
@@ -300,6 +301,7 @@ void GraphOptimiser::getSubsetOfMap(nav_msgs::Path action_path,
               }
               wall_reached = true;
             }
+            // if unknown
             else {
               wall_reached = true;
             }
