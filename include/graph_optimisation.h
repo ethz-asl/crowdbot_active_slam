@@ -76,7 +76,7 @@ public:
    *  ...
    */
   void updateLogOdsWithBresenham(int x0, int y0, int x1, int y1,
-                                 std::vector<int> end_point_index_m);
+                               std::vector<int> end_point_index_m, bool update);
 
   /**
    *  Calculates map with current factor graph and keyframe scans and draws map.
@@ -185,6 +185,8 @@ private:
   bool first_scan_pose_;
   bool scan_callback_initialized_;
   bool new_node_;
+  bool first_map_published_;
+  ros::Time last_published_;
   int node_counter_;
   unsigned int scan_ranges_size_;
   double scan_angle_increment_;

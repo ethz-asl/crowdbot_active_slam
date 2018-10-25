@@ -110,10 +110,32 @@ void GraphOptimiser::initParams(){
 
   // Map paramters
   map_resolution_ = 0.05;
-  map_width_ = 1000;
-  map_height_ = 1000;
+  map_width_ = 2000;
+  map_height_ = 2000;
+
+  // Init OccupancyGrid msg
+  occupancy_grid_msg_.header.frame_id = "map";
+  occupancy_grid_msg_.info.resolution = map_resolution_;
+  occupancy_grid_msg_.info.width = map_width_;
+  occupancy_grid_msg_.info.height = map_height_;
+
+  // Origin
+  geometry_msgs::Pose origin_pose;
+  origin_pose = xythetaToPose(-(map_width_ * map_resolution_ / 2),
+                              -(map_height_ * map_resolution_ / 2),
+                              0);
+  occupancy_grid_msg_.info.origin = origin_pose;
+
+  for (int i = 0; i < map_width_; i++){
+    for (int j = 0; j < map_height_; j++){
+      occupancy_grid_msg_.data.push_back(-1);
+    }
+  }
+
+  // Init log log_odds_array_
   log_odds_array_ = Eigen::MatrixXf(map_width_, map_height_);
   l_0_ = log(0.5 / 0.5);
+
   // Asuming sensor model: P(z=1|m=1)=0.8 because can eg. go through glass
   //                       P(z=0|m=0)=0.99
   p_occ_ = 0.998;       // P(m=1|z=1)
@@ -126,6 +148,7 @@ void GraphOptimiser::initParams(){
   first_scan_pose_ = true;
   scan_callback_initialized_ = false;
   new_node_ = false;
+  first_map_published_ = false;
   node_counter_ = 0;
 }
 
@@ -293,7 +316,7 @@ void GraphOptimiser::getSubsetOfMap(nav_msgs::Path action_path,
 }
 
 void GraphOptimiser::updateLogOdsWithBresenham(int x0, int y0, int x1, int y1,
-                                           std::vector<int> end_point_index_m){
+                               std::vector<int> end_point_index_m, bool update){
   // Bresenham's line algorithm (Get indexes between robot pose and scans)
   // starting from "https://github.com/lama-imr/lama_utilities/blob/indigo-devel/map_ray_caster/src/map_ray_caster.cpp"
   // "https://csustan.csustan.edu/~tom/Lecture-Notes/Graphics/Bresenham-Line/Bresenham-Line.pdf"
@@ -325,6 +348,11 @@ void GraphOptimiser::updateLogOdsWithBresenham(int x0, int y0, int x1, int y1,
       }
       if (x != end_point_index_m[0] || y != end_point_index_m[1]){
         log_odds_array_(x, y) += l_free_ - l_0_;
+        if (update){
+          unsigned int temp_id = mapIndexToId(x, y, map_width_);
+          occupancy_grid_msg_.data[temp_id] = 100 * (1.0 - 1.0 / (1.0 +
+                                                  exp(log_odds_array_(x, y))));
+        }
       }
     }
   }
@@ -341,6 +369,11 @@ void GraphOptimiser::updateLogOdsWithBresenham(int x0, int y0, int x1, int y1,
       }
       if (x != end_point_index_m[0] || y != end_point_index_m[1]){
         log_odds_array_(x, y) += l_free_ - l_0_;
+        if (update){
+          unsigned int temp_id = mapIndexToId(x, y, map_width_);
+          occupancy_grid_msg_.data[temp_id] = 100 * (1.0 - 1.0 / (1.0 +
+                                                  exp(log_odds_array_(x, y))));
+        }
       }
     }
   }
@@ -348,7 +381,7 @@ void GraphOptimiser::updateLogOdsWithBresenham(int x0, int y0, int x1, int y1,
 
 void GraphOptimiser::drawMap(gtsam::Values pose_estimates,
                              std::vector<LDP> keyframe_ldp_vec){
-  // Init arrays to l_0_
+  // Init log_odds_array_
   for (int i = 0; i < map_width_; i++){
     for (int j = 0; j < map_height_; j++){
       log_odds_array_(i, j) = l_0_;
@@ -433,37 +466,21 @@ void GraphOptimiser::drawMap(gtsam::Values pose_estimates,
         log_odds_array_(end_point_index_m[0], end_point_index_m[1]) += l_occ_ - l_0_;
       }
 
-      updateLogOdsWithBresenham(x0, y0, x1, y1, end_point_index_m);
+      updateLogOdsWithBresenham(x0, y0, x1, y1, end_point_index_m, false);
     }
   }
 
-  // Init OccupancyGrid msg
-  nav_msgs::OccupancyGrid occupancy_grid_msg;
-  occupancy_grid_msg.header.frame_id = "map";
-  occupancy_grid_msg.info.resolution = map_resolution_;
-  occupancy_grid_msg.info.width = map_width_;
-  occupancy_grid_msg.info.height = map_height_;
-
-  // Origin
-  geometry_msgs::Pose origin_pose;
-  origin_pose = xythetaToPose(-(map_width_ * map_resolution_ / 2),
-                              -(map_height_ * map_resolution_ / 2),
-                              0);
-  occupancy_grid_msg.info.origin = origin_pose;
-
-  // Transform occupancy_probability_array to ROS msg
-  std::vector<int8_t> data;
+  // Update occupancy_grid_msg_
   for (int i = 0; i < map_width_; i++){
     for (int j = 0; j < map_height_; j++){
-      if (log_odds_array_(j, i) == l_0_){
-        data.push_back(-1);
+      if (log_odds_array_(i, j) == l_0_){
+        occupancy_grid_msg_.data[mapIndexToId(i, j, map_width_)] = -1;
       }else {
-        data.push_back(100 * (1.0 - 1.0 / (1.0 + exp(log_odds_array_(j, i)))));
+        occupancy_grid_msg_.data[mapIndexToId(i, j, map_width_)] =
+                        100 * (1.0 - 1.0 / (1.0 + exp(log_odds_array_(i, j))));
       }
     }
   }
-  occupancy_grid_msg.data = data;
-  occupancy_grid_msg_ = occupancy_grid_msg;
 }
 
 void GraphOptimiser::updateMap(gtsam::Values pose_estimates,
@@ -514,6 +531,8 @@ void GraphOptimiser::updateMap(gtsam::Values pose_estimates,
 
     // Update log odds of scan points
     log_odds_array_(x1, y1) += l_occ_ - l_0_;
+    unsigned int temp_id = mapIndexToId(x1, y1, map_width_);
+    occupancy_grid_msg_.data[temp_id] = 100 * (1.0 - 1.0 / (1.0 + exp(log_odds_array_(x1, y1))));
 
     // Check if +/- 0.5*resolution is in a new cell
     double xdiff = endpoint_x - robot_x;
@@ -540,41 +559,21 @@ void GraphOptimiser::updateMap(gtsam::Values pose_estimates,
 
     if (end_point_index_p[0] != x1 || end_point_index_p[1] != y1){
       log_odds_array_(end_point_index_p[0], end_point_index_p[1]) += l_occ_ - l_0_;
+      unsigned int temp_id =
+          mapIndexToId(end_point_index_p[0], end_point_index_p[1], map_width_);
+      occupancy_grid_msg_.data[temp_id] = 100 * (1.0 - 1.0 / (1.0 +
+          exp(log_odds_array_(end_point_index_p[0], end_point_index_p[1]))));
     }
     if (end_point_index_m[0] != x1 || end_point_index_m[1] != y1){
       log_odds_array_(end_point_index_m[0], end_point_index_m[1]) += l_occ_ - l_0_;
+      unsigned int temp_id =
+          mapIndexToId(end_point_index_m[0], end_point_index_m[1], map_width_);
+      occupancy_grid_msg_.data[temp_id] = 100 * (1.0 - 1.0 / (1.0 +
+          exp(log_odds_array_(end_point_index_m[0], end_point_index_m[1]))));
     }
 
-    updateLogOdsWithBresenham(x0, y0, x1, y1, end_point_index_m);
+    updateLogOdsWithBresenham(x0, y0, x1, y1, end_point_index_m, true);
   }
-
-  // Init OccupancyGrid msg
-  nav_msgs::OccupancyGrid occupancy_grid_msg;
-  occupancy_grid_msg.header.frame_id = "map";
-  occupancy_grid_msg.info.resolution = map_resolution_;
-  occupancy_grid_msg.info.width = map_width_;
-  occupancy_grid_msg.info.height = map_height_;
-
-  // Origin
-  geometry_msgs::Pose origin_pose;
-  origin_pose = xythetaToPose(-(map_width_ * map_resolution_ / 2),
-                           -(map_height_ * map_resolution_ / 2),
-                           0);
-  occupancy_grid_msg.info.origin = origin_pose;
-
-  // Transform occupancy_probability_array to ROS msg
-  std::vector<int8_t> data;
-  for (int i = 0; i < map_width_; i++){
-    for (int j = 0; j < map_height_; j++){
-      if (log_odds_array_(j, i) == l_0_){
-        data.push_back(-1);
-      }else {
-        data.push_back(100 * (1.0 - 1.0 / (1.0 + exp(log_odds_array_(j, i)))));
-      }
-    }
-  }
-  occupancy_grid_msg.data = data;
-  occupancy_grid_msg_ = occupancy_grid_msg;
 }
 
 bool GraphOptimiser::saveUncertaintyMatServiceCallback(
@@ -623,6 +622,10 @@ bool GraphOptimiser::mapRecalculationServiceCallback(
 
   // Draw the whole map
   drawMap(pose_estimates_, keyframe_ldp_vec_);
+
+  // Publish map
+  last_published_ = ros::Time::now();
+  map_pub_.publish(occupancy_grid_msg_);
 
   return true;
   }
@@ -1006,6 +1009,11 @@ void GraphOptimiser::scanMatcherCallback(const geometry_msgs::Pose2D::ConstPtr& 
   if (new_node_){
     map_br_.sendTransform(tf::StampedTransform(map_to_odom_tf_, ros::Time::now(),
                         "map", "odom"));
+
+    // Publish map
+    last_published_ = ros::Time::now();
+    map_pub_.publish(occupancy_grid_msg_);
+
     new_node_ = false;
   }else{
     Pose2 between_pose2;
@@ -1025,13 +1033,20 @@ void GraphOptimiser::scanMatcherCallback(const geometry_msgs::Pose2D::ConstPtr& 
   }
 
   // Calculate first Map
-  if (node_counter_ == 1){
+  if (node_counter_ == 1 && !first_map_published_){
     // Draw the map
     drawMap(pose_estimates_, keyframe_ldp_vec_);
-  }
 
+    // Publish map
+    last_published_ = ros::Time::now();
+    map_pub_.publish(occupancy_grid_msg_);
+
+    first_map_published_ = true;
+  }
   // Publish map
-  map_pub_.publish(occupancy_grid_msg_);
+  if (ros::Time::now() - last_published_ > ros::Duration(1)){
+    map_pub_.publish(occupancy_grid_msg_);
+  }
 }
 
 
