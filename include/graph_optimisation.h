@@ -201,6 +201,8 @@ private:
   int node_counter_;
   unsigned int scan_ranges_size_;
   double scan_angle_increment_;
+  double scan_range_min_;
+  double scan_range_max_;
   std::vector<gtsam::Matrix> uncertainty_matrices_path_;
 
 };

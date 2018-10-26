@@ -161,7 +161,7 @@ void GraphOptimiser::laserScanToLDP(sensor_msgs::LaserScan& scan_msg, LDP& ldp){
   for (int i = 0; i < n; i++){
     double r = scan_msg.ranges[i];
 
-    if (r > scan_msg.range_min && r < scan_msg.range_max){
+    if (r > scan_range_min_ && r < scan_range_max_){
       ldp->valid[i] = 1;
       ldp->readings[i] = r;
     }
@@ -417,6 +417,12 @@ void GraphOptimiser::drawMap(gtsam::Values pose_estimates,
     // Loop over each ray of the scan
     for (int j = 0; j < keyframe_ldp_vec[i]->nrays; j++){
       double reading = keyframe_ldp_vec[i]->readings[j];
+
+      if (reading == -1){
+        // We can assume that there exist never a reading < 0.1
+        reading = scan_range_max_;
+      }
+
       double angle = keyframe_ldp_vec[i]->theta[j];
       double x_end = reading * cos(angle);
       double y_end = reading * sin(angle);
@@ -438,7 +444,12 @@ void GraphOptimiser::drawMap(gtsam::Values pose_estimates,
       int y1 = end_point_index[1];
 
       // Update log odds of scan points
-      log_odds_array_(x1, y1) += l_occ_ - l_0_;
+      if (reading == scan_range_max_){
+        log_odds_array_(x1, y1) += l_free_ - l_0_;
+      }
+      else {
+        log_odds_array_(x1, y1) += l_occ_ - l_0_;
+      }
 
       // Check if +/- 0.5*resolution is in a new cell
       double xdiff = endpoint_x - robot_x;
@@ -464,10 +475,20 @@ void GraphOptimiser::drawMap(gtsam::Values pose_estimates,
                                              map_resolution_);
 
       if (end_point_index_p[0] != x1 || end_point_index_p[1] != y1){
-        log_odds_array_(end_point_index_p[0], end_point_index_p[1]) += l_occ_ - l_0_;
+        if (reading == scan_range_max_){
+          log_odds_array_(end_point_index_p[0], end_point_index_p[1]) += l_free_ - l_0_;
+        }
+        else {
+          log_odds_array_(end_point_index_p[0], end_point_index_p[1]) += l_occ_ - l_0_;
+        }
       }
       if (end_point_index_m[0] != x1 || end_point_index_m[1] != y1){
-        log_odds_array_(end_point_index_m[0], end_point_index_m[1]) += l_occ_ - l_0_;
+        if (reading == scan_range_max_){
+          log_odds_array_(end_point_index_m[0], end_point_index_m[1]) += l_free_ - l_0_;
+        }
+        else {
+          log_odds_array_(end_point_index_m[0], end_point_index_m[1]) += l_occ_ - l_0_;
+        }
       }
 
       updateLogOdsWithBresenham(x0, y0, x1, y1, end_point_index_m, false);
@@ -513,6 +534,12 @@ void GraphOptimiser::updateMap(gtsam::Values pose_estimates,
   // Loop over each ray of the scan
   for (int j = 0; j < keyframe_ldp_vec[i]->nrays; j++){
     double reading = keyframe_ldp_vec[i]->readings[j];
+
+    if (reading == -1){
+      // We can assume that there exist never a reading < 0.1
+      reading = scan_range_max_;
+    }
+
     double angle = keyframe_ldp_vec[i]->theta[j];
     double x_end = reading * cos(angle);
     double y_end = reading * sin(angle);
@@ -534,7 +561,12 @@ void GraphOptimiser::updateMap(gtsam::Values pose_estimates,
     int y1 = end_point_index[1];
 
     // Update log odds of scan points
-    log_odds_array_(x1, y1) += l_occ_ - l_0_;
+    if (reading == scan_range_max_){
+      log_odds_array_(x1, y1) += l_free_ - l_0_;
+    }
+    else {
+      log_odds_array_(x1, y1) += l_occ_ - l_0_;
+    }
     unsigned int temp_id = mapIndexToId(x1, y1, map_width_);
     occupancy_grid_msg_.data[temp_id] = 100 * (1.0 - 1.0 / (1.0 + exp(log_odds_array_(x1, y1))));
 
@@ -562,14 +594,24 @@ void GraphOptimiser::updateMap(gtsam::Values pose_estimates,
                                            map_resolution_);
 
     if (end_point_index_p[0] != x1 || end_point_index_p[1] != y1){
-      log_odds_array_(end_point_index_p[0], end_point_index_p[1]) += l_occ_ - l_0_;
+      if (reading == scan_range_max_){
+        log_odds_array_(end_point_index_p[0], end_point_index_p[1]) += l_free_ - l_0_;
+      }
+      else {
+        log_odds_array_(end_point_index_p[0], end_point_index_p[1]) += l_occ_ - l_0_;
+      }
       unsigned int temp_id =
           mapIndexToId(end_point_index_p[0], end_point_index_p[1], map_width_);
       occupancy_grid_msg_.data[temp_id] = 100 * (1.0 - 1.0 / (1.0 +
           exp(log_odds_array_(end_point_index_p[0], end_point_index_p[1]))));
     }
     if (end_point_index_m[0] != x1 || end_point_index_m[1] != y1){
-      log_odds_array_(end_point_index_m[0], end_point_index_m[1]) += l_occ_ - l_0_;
+      if (reading == scan_range_max_){
+        log_odds_array_(end_point_index_m[0], end_point_index_m[1]) += l_free_ - l_0_;
+      }
+      else {
+        log_odds_array_(end_point_index_m[0], end_point_index_m[1]) += l_occ_ - l_0_;
+      }
       unsigned int temp_id =
           mapIndexToId(end_point_index_m[0], end_point_index_m[1], map_width_);
       occupancy_grid_msg_.data[temp_id] = 100 * (1.0 - 1.0 / (1.0 +
@@ -816,8 +858,12 @@ bool GraphOptimiser::utilityCalcServiceCallback(
 
 void GraphOptimiser::scanCallback(const sensor_msgs::LaserScan::ConstPtr& scan_msg){
   latest_scan_msg_ = *scan_msg;
-  scan_ranges_size_ = latest_scan_msg_.ranges.size();
-  scan_angle_increment_ = latest_scan_msg_.angle_increment;
+  if (!scan_callback_initialized_){
+    scan_ranges_size_ = latest_scan_msg_.ranges.size();
+    scan_angle_increment_ = latest_scan_msg_.angle_increment;
+    scan_range_min_ = latest_scan_msg_.range_min;
+    scan_range_max_ = latest_scan_msg_.range_max;
+  }
   scan_callback_initialized_ = true;
 }
 
