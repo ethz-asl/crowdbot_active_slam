@@ -1,0 +1,8 @@
+<launch>
+  <node name="decision_maker" pkg="crowdbot_active_slam"
+        type="decision_maker" output="screen">
+    <param name="primitive_filename"
+           value="$(find crowdbot_active_slam)/matlab/mprim/pioneer.mprim"/>
+    <param name="exploration_type" value="shortest_frontier"/>
+  </node>
+</launch>
