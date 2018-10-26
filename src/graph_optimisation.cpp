@@ -46,10 +46,12 @@ void GraphOptimiser::initParams(){
   // Initialise map service
   uncertainty_service_ = nh_.advertiseService("save_uncertainty_service",
                       &GraphOptimiser::saveUncertaintyMatServiceCallback, this);
-  map_service_ = nh_.advertiseService("map_recalculation_service",
-                        &GraphOptimiser::mapRecalculationServiceCallback, this);
+  map_recalc_service_ = nh_.advertiseService("map_recalculation_service",
+                      &GraphOptimiser::mapRecalculationServiceCallback, this);
+  get_map_service_ = nh_.advertiseService("get_map_service",
+                      &GraphOptimiser::getMapServiceCallback, this);
   utility_calc_service_ = nh_.advertiseService("utility_calc_service",
-                             &GraphOptimiser::utilityCalcServiceCallback, this);
+                      &GraphOptimiser::utilityCalcServiceCallback, this);
 
   // Initialize base to laser tf
   tf::StampedTransform base_to_laser_tf_;
@@ -148,7 +150,7 @@ void GraphOptimiser::initParams(){
   first_scan_pose_ = true;
   scan_callback_initialized_ = false;
   new_node_ = false;
-  first_map_published_ = false;
+  first_map_calculated_ = false;
   node_counter_ = 0;
 }
 
@@ -624,11 +626,6 @@ bool GraphOptimiser::mapRecalculationServiceCallback(
 
   // Draw the whole map
   drawMap(pose_estimates_, keyframe_ldp_vec_);
-
-  // Publish map
-  last_published_ = ros::Time::now();
-  map_pub_.publish(occupancy_grid_msg_);
-
   return true;
   }
 
@@ -1011,11 +1008,6 @@ void GraphOptimiser::scanMatcherCallback(const geometry_msgs::Pose2D::ConstPtr& 
   if (new_node_){
     map_br_.sendTransform(tf::StampedTransform(map_to_odom_tf_, ros::Time::now(),
                         "map", "odom"));
-
-    // Publish map
-    last_published_ = ros::Time::now();
-    map_pub_.publish(occupancy_grid_msg_);
-
     new_node_ = false;
   }else{
     Pose2 between_pose2;
@@ -1035,28 +1027,40 @@ void GraphOptimiser::scanMatcherCallback(const geometry_msgs::Pose2D::ConstPtr& 
   }
 
   // Calculate first Map
-  if (node_counter_ == 1 && !first_map_published_){
+  if (node_counter_ == 1 && !first_map_calculated_){
     // Draw the map
     drawMap(pose_estimates_, keyframe_ldp_vec_);
-
-    // Publish map
-    last_published_ = ros::Time::now();
-    map_pub_.publish(occupancy_grid_msg_);
-
-    first_map_published_ = true;
-  }
-  // Publish map
-  if (ros::Time::now() - last_published_ > ros::Duration(1)){
-    map_pub_.publish(occupancy_grid_msg_);
+    first_map_calculated_ = true;
   }
 }
 
+bool GraphOptimiser::getMapServiceCallback(
+    crowdbot_active_slam::get_map::Request &request,
+    crowdbot_active_slam::get_map::Response &response){
+  // Return current occupancy grid map
+  response.map_msg = occupancy_grid_msg_;
+  return true;
+}
+
+void GraphOptimiser::pubMap(){
+  ros::NodeHandle nh;
+  ros::Rate map_pub_rate(0.5);
+  while (ros::ok()){
+    map_pub_.publish(occupancy_grid_msg_);
+    map_pub_rate.sleep();
+  }
+}
 
 int main(int argc, char **argv){
   ros::init(argc, argv, "graph_optimisation");
   ros::NodeHandle nh;
   ros::NodeHandle nh_("~");
   GraphOptimiser optimiser(nh, nh_);
+
+  // Publish map in other thread
+  boost::thread map_pub_thread(&GraphOptimiser::pubMap, &optimiser);
+
   ros::spin();
+
   return 0;
 }

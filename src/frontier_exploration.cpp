@@ -23,10 +23,9 @@ FrontierExploration::FrontierExploration(ros::NodeHandle nh,
                                   &FrontierExploration::serviceCallback, this);
   ROS_INFO("frontier_exploration_service started!");
 
-  // Init map subscriber
-  map_initialized_ = false;
-  map_sub_ = nh_.subscribe("/occupancy_map", 1,
-                           &FrontierExploration::mapCallback, this);
+  // Init service clients
+  get_map_client_ = nh_.serviceClient<crowdbot_active_slam::get_map>
+                    ("/get_map_service");
 
   // Init publisher
   frontier_cell_pub_ = nh_.advertise<nav_msgs::GridCells>("frontier_points_grid_cell", 1);
@@ -39,12 +38,6 @@ bool FrontierExploration::serviceCallback(
     crowdbot_active_slam::get_frontier_list::Response &response) {
   // Frontier exploration calculations
   // based on implementation http://wiki.ros.org/frontier_exploration
-
-  // Check if map already subscribed
-  if (!map_initialized_){
-    ROS_WARN("Service aborted! Map was not subscribed until now!");
-    return false;
-  }
 
   // Init Transform listener and get current robot pose
   tf::StampedTransform robot_pose_tf;
@@ -60,6 +53,20 @@ bool FrontierExploration::serviceCallback(
   response.start_pose.x = robot_x;
   response.start_pose.y = robot_y;
   response.start_pose.theta = robot_theta;
+
+  // Service call for latest occupancy grid map
+  crowdbot_active_slam::get_map get_map_srv;
+
+  if (get_map_client_.call(get_map_srv))
+  {
+    ROS_INFO("OccupancyGrid map call successfull");
+  }
+  else
+  {
+    ROS_ERROR("Failed to call OccupancyGrid map");
+  }
+
+  latest_map_msg_ = get_map_srv.response.map_msg;
 
   // Save map information
   unsigned int width = latest_map_msg_.info.width;
@@ -289,12 +296,6 @@ std::vector<unsigned int> FrontierExploration::neighbour4(unsigned int id,
     neighbour4_vec.push_back(id + 1);
   }
   return neighbour4_vec;
-}
-
-void FrontierExploration::mapCallback(
-    const nav_msgs::OccupancyGrid::ConstPtr &map_msg){
-  latest_map_msg_ = *map_msg;
-  map_initialized_ = true;
 }
 
 

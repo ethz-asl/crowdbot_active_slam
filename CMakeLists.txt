@@ -25,6 +25,7 @@ add_compile_options(-std=c++11)
 add_service_files(
   FILES
   get_frontier_list.srv
+  get_map.srv
   service_call.srv
   utility_calc.srv
 )

@@ -10,6 +10,7 @@
 #include <queue>
 
 #include <crowdbot_active_slam/get_frontier_list.h>
+#include <crowdbot_active_slam/get_map.h>
 
 
 class FrontierExploration {
@@ -69,11 +70,6 @@ public:
   std::vector<unsigned int> neighbour4(unsigned int id, unsigned int width,
                                        unsigned int height);
 
-  /**
-   *  This callback saves the current occupancy grid map.
-   */
-  void mapCallback(const nav_msgs::OccupancyGrid::ConstPtr& map_msg);
-
 private:
   // Rosparam
   int frontier_size_;
@@ -84,6 +80,7 @@ private:
 
   // Service, Subscriber, Publisher
   ros::ServiceServer service_;
+  ros::ServiceClient get_map_client_;
   ros::Subscriber map_sub_;
   ros::Publisher frontier_cell_pub_;
 
@@ -94,7 +91,7 @@ private:
   tf::TransformListener robot_pose_listener_;
 
   // others
-  bool map_initialized_;
+
 };
 
 #endif // FRONTIER_EXPLORATION_H

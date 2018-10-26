@@ -10,6 +10,7 @@
 
 #include <fstream>
 #include <ctime>
+#include <boost/thread/thread.hpp>
 
 #include <ros/ros.h>
 #include <ros/package.h>
@@ -27,6 +28,7 @@
 #include <nav_msgs/OccupancyGrid.h>
 #include <crowdbot_active_slam/service_call.h>
 #include <crowdbot_active_slam/utility_calc.h>
+#include <crowdbot_active_slam/get_map.h>
 
 #include <gtsam/nonlinear/NonlinearFactorGraph.h>
 #include <gtsam/nonlinear/Marginals.h>
@@ -121,6 +123,15 @@ public:
     crowdbot_active_slam::utility_calc::Request &request,
     crowdbot_active_slam::utility_calc::Response &response);
 
+  /**
+   *  Service callback for receiving current occupancy grid map msg
+   */
+  bool getMapServiceCallback(
+    crowdbot_active_slam::get_map::Request &request,
+    crowdbot_active_slam::get_map::Response &response);
+
+  void pubMap();
+
 private:
   // Node handler
   ros::NodeHandle nh_;
@@ -137,7 +148,8 @@ private:
   ros::Publisher path_pub_;
   ros::Publisher action_path_pub_;
   ros::Publisher map_pub_;
-  ros::ServiceServer map_service_;
+  ros::ServiceServer map_recalc_service_;
+  ros::ServiceServer get_map_service_;
   ros::ServiceServer utility_calc_service_;
   ros::ServiceServer uncertainty_service_;
 
@@ -185,8 +197,7 @@ private:
   bool first_scan_pose_;
   bool scan_callback_initialized_;
   bool new_node_;
-  bool first_map_published_;
-  ros::Time last_published_;
+  bool first_map_calculated_;
   int node_counter_;
   unsigned int scan_ranges_size_;
   double scan_angle_increment_;

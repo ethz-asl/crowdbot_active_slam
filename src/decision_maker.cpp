@@ -10,10 +10,6 @@ DecisionMaker::DecisionMaker(ros::NodeHandle nh, ros::NodeHandle nh_)
   // Publisher
   plan_pub_ = nh_.advertise<nav_msgs::Path>("plans_path", 1);
 
-  // Subscriber
-  map_sub_ = nh_.subscribe("/occupancy_map", 1,
-                           &DecisionMaker::mapCallback, this);
-
   // Init service clients
   frontier_exploration_client_ = nh_.serviceClient
         <crowdbot_active_slam::get_frontier_list>
@@ -24,6 +20,8 @@ DecisionMaker::DecisionMaker(ros::NodeHandle nh, ros::NodeHandle nh_)
   map_recalculation_client_ = nh_.serviceClient
         <crowdbot_active_slam::service_call>
         ("/map_recalculation_service");
+  get_map_client_ = nh_.serviceClient<crowdbot_active_slam::get_map>
+                    ("/get_map_service");
   get_plan_move_base_client_ = nh_.serviceClient
         <nav_msgs::GetPlan>("/move_base/make_plan");
   utility_calc_client_ = nh_.serviceClient
@@ -122,6 +120,20 @@ void DecisionMaker::createFootprint(std::vector<sbpl_2Dpt_t>& perimeter,
 
 nav_msgs::Path DecisionMaker::planPathSBPL(geometry_msgs::Pose2D start_pose,
                                        geometry_msgs::Pose2D goal_pose){
+  // Service call for latest occupancy grid map
+  crowdbot_active_slam::get_map get_map_srv;
+
+  if (get_map_client_.call(get_map_srv))
+  {
+   ROS_INFO("OccupancyGrid map call successfull");
+  }
+  else
+  {
+   ROS_ERROR("Failed to call OccupancyGrid map");
+  }
+
+  latest_map_msg_ = get_map_srv.response.map_msg;
+
   // Update cost
   unsigned int ix, iy;
   for (int i = 0; i < latest_map_msg_.data.size(); i++){
@@ -184,12 +196,7 @@ nav_msgs::Path DecisionMaker::planPathSBPL(geometry_msgs::Pose2D start_pose,
 }
 
 void DecisionMaker::startExploration(){
-  // Check if map already subscribed
-  if (!map_initialized_){
-    ROS_WARN("Map was not subscribed until now!");
-    return;
-  }
-
+  // Get frontiers
   crowdbot_active_slam::get_frontier_list frontier_srv;
 
   if (frontier_exploration_client_.call(frontier_srv))
@@ -327,6 +334,20 @@ void DecisionMaker::saveGridMap(){
   std::string save_path = package_path + "/test_results/occupancy_grid_map" +
                           char_time + ".txt";
 
+  // Service call for latest occupancy grid map
+  crowdbot_active_slam::get_map get_map_srv;
+
+  if (get_map_client_.call(get_map_srv))
+  {
+    ROS_INFO("OccupancyGrid map call successfull");
+  }
+  else
+  {
+    ROS_ERROR("Failed to call OccupancyGrid map");
+  }
+
+  latest_map_msg_ = get_map_srv.response.map_msg;
+
   // Save map
   std::ofstream map_file(save_path.c_str());
   if (map_file.is_open()){
@@ -370,8 +391,6 @@ void DecisionMaker::saveGeneralResults(){
     result_file << "World: " << "FILL IN" << std::endl;
     result_file << "Optimality: " << "FILL IN" << std::endl;
 
-
-
     // Close file
     result_file.close();
   }
@@ -380,19 +399,15 @@ void DecisionMaker::saveGeneralResults(){
   }
 }
 
-void DecisionMaker::mapCallback(
-    const nav_msgs::OccupancyGrid::ConstPtr &map_msg){
-  latest_map_msg_ = *map_msg;
-  map_initialized_ = true;
-  startExploration();
-}
 
 int main(int argc, char **argv) {
   ros::init(argc, argv, "decision_maker");
   ros::NodeHandle nh;
   ros::NodeHandle nh_("~");
   DecisionMaker decision_maker(nh, nh_);
-  ros::spin();
+  while (ros::ok()){
+    decision_maker.startExploration();
+  }
 
   return 0;
 }
