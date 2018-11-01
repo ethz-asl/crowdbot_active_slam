@@ -31,6 +31,9 @@ DecisionMaker::DecisionMaker(ros::NodeHandle nh, ros::NodeHandle nh_)
   nh_.getParam("/graph_optimisation/map_width", map_width_);
   nh_.getParam("/graph_optimisation/map_height", map_height_);
   nh_.getParam("/graph_optimisation/map_resolution", map_resolution_);
+  nh_.getParam("/graph_optimisation/node_dist_linear", node_dist_linear_);
+  nh_.getParam("/graph_optimisation/node_dist_angular", node_dist_angular_);
+  nh_.getParam("/graph_optimisation/loop_closing_radius", lc_radius_);
 
   // Init SBPL env
   // set the perimeter of the robot
@@ -384,9 +387,9 @@ void DecisionMaker::saveGeneralResults(){
     result_file << "Map width: " << map_width_ << std::endl;
     result_file << "Map height: " << map_height_ << std::endl;
     result_file << "Map resolution: " << map_resolution_ << std::endl;
-    result_file << "node_dist_linear: " << "FILL IN" << std::endl;
-    result_file << "node_dist_angular: " << "FILL IN" << std::endl;
-    result_file << "loop_closing_radius: " << "FILL IN" << std::endl;
+    result_file << "node_dist_linear: " << node_dist_linear_ << std::endl;
+    result_file << "node_dist_angular: " << node_dist_angular_ << std::endl;
+    result_file << "loop_closing_radius: " << lc_radius_ << std::endl;
     result_file << "Node number: " << "FILL IN" << std::endl;
     result_file << "World: " << "FILL IN" << std::endl;
     result_file << "Optimality: " << "FILL IN" << std::endl;

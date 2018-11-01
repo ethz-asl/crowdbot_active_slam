@@ -88,10 +88,13 @@ private:
   ros::ServiceClient uncertainty_client_;
   ros::ServiceClient get_map_client_;
 
-  // others
+  // ros params
   int map_width_;
   int map_height_;
   float map_resolution_;
+  double node_dist_linear_;
+  double node_dist_angular_;
+  double lc_radius_;
 
   std::string primitive_filename_;
   std::string exploration_type_;
