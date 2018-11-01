@@ -74,7 +74,7 @@ geometry_msgs::Pose xythetaToPose(double x, double y, double theta){
   pose_position.y = y;
   pose_position.z = 0;
 
-  tf::Quaternion q = tf::createQuaternionFromRPY(0, 0, 0);
+  tf::Quaternion q = tf::createQuaternionFromRPY(0, 0, theta);
   geometry_msgs::Quaternion pose_orientation;
   quaternionTFToMsg(q, pose_orientation);
 
