@@ -188,8 +188,8 @@ private:
 
   // Map parameters
   float map_resolution_;
-  unsigned int map_width_;
-  unsigned int map_height_;
+  int map_width_;
+  int map_height_;
   Eigen::MatrixXf log_odds_array_;
   float l_0_;
   float p_occ_;
@@ -197,7 +197,7 @@ private:
   float l_occ_;
   float l_free_;
 
-  // Scan matcher
+  // Scan matcher libpointmatcher
   PointMatcher<float>::DataPoints laser_ref_;
   PointMatcher<float>::DataPoints laser_sens_;
   PointMatcher<float>::DataPoints::Labels feature_labels_;

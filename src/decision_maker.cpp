@@ -28,6 +28,10 @@ DecisionMaker::DecisionMaker(ros::NodeHandle nh, ros::NodeHandle nh_)
         <crowdbot_active_slam::utility_calc>
         ("/utility_calc_service");
 
+  nh_.getParam("/graph_optimisation/map_width", map_width_);
+  nh_.getParam("/graph_optimisation/map_height", map_height_);
+  nh_.getParam("/graph_optimisation/map_resolution", map_resolution_);
+
   // Init SBPL env
   // set the perimeter of the robot
   std::vector<sbpl_2Dpt_t> perimeter;
@@ -37,15 +41,11 @@ DecisionMaker::DecisionMaker(ros::NodeHandle nh, ros::NodeHandle nh_)
   double robot_width = 0.3;
   createFootprint(perimeter, robot_width, robot_length);
 
-  width_ = 1000;
-  height_ = 1000;
-  resolution_ = 0.05;
-
-  env_.InitializeEnv(width_, height_, 0, //map data
+  env_.InitializeEnv(map_width_, map_height_, 0, //map data
                                       0, 0, 0, // start
                                       0, 0, 0, // goal
                                       0, 0, 0, // goal tolerance
-                                      perimeter, resolution_,
+                                      perimeter, map_resolution_,
                                       0.5, // nominal vel (m/s)
                                       1.0, // time to turn 45 degs in place (s)
                                       20, // obstacle threshold
@@ -95,7 +95,7 @@ unsigned int DecisionMaker::mapToSBPLCost(int occupancy){
 }
 
 void DecisionMaker::idToCell(unsigned int id, unsigned int& x, unsigned int& y,
-                             unsigned int width, unsigned int height){
+                             int width, int height){
     y = id / width;
     x = id - y * width;
   }
@@ -136,8 +136,8 @@ nav_msgs::Path DecisionMaker::planPathSBPL(geometry_msgs::Pose2D start_pose,
 
   // Update cost
   unsigned int ix, iy;
-  for (int i = 0; i < latest_map_msg_.data.size(); i++){
-    idToCell(i, ix, iy, width_, height_);
+  for (unsigned int i = 0; i < latest_map_msg_.data.size(); i++){
+    idToCell(i, ix, iy, map_width_, map_height_);
     env_.UpdateCost(ix, iy, mapToSBPLCost(latest_map_msg_.data[i]));
   }
 
@@ -240,7 +240,7 @@ void DecisionMaker::startExploration(){
   std::vector<int> path_sizes;
   std::vector<double>::iterator max_utility;
   std::vector<int>::iterator path_sizes_it;
-  int goal_id;
+  int goal_id = 0;
 
   for (int i = 0; i < frontier_size; i++){
     // Get action plan
@@ -351,7 +351,7 @@ void DecisionMaker::saveGridMap(){
   // Save map
   std::ofstream map_file(save_path.c_str());
   if (map_file.is_open()){
-    for (int i = 0; i < width_ * height_; i++){
+    for (int i = 0; i < map_width_ * map_height_; i++){
       map_file << int(latest_map_msg_.data[i]) << std::endl;
     }
     map_file.close();
@@ -381,9 +381,9 @@ void DecisionMaker::saveGeneralResults(){
     // Add information to file
     result_file << "Exploration type: " << exploration_type_ << std::endl;
     result_file << "Exploration time: " << diff_time << "s" << std::endl;
-    result_file << "Map width: " << width_ << std::endl;
-    result_file << "Map height: " << height_ << std::endl;
-    result_file << "Map resolution: " << resolution_ << std::endl;
+    result_file << "Map width: " << map_width_ << std::endl;
+    result_file << "Map height: " << map_height_ << std::endl;
+    result_file << "Map resolution: " << map_resolution_ << std::endl;
     result_file << "node_dist_linear: " << "FILL IN" << std::endl;
     result_file << "node_dist_angular: " << "FILL IN" << std::endl;
     result_file << "loop_closing_radius: " << "FILL IN" << std::endl;

@@ -41,7 +41,7 @@ public:
    *  Calculate cell ids from map id
    */
   void idToCell(unsigned int id, unsigned int& x, unsigned int& y,
-                unsigned int width, unsigned int height);
+                int width, int height);
 
   /**
    *  Creates the robot footprint for SBPL planner
@@ -89,9 +89,9 @@ private:
   ros::ServiceClient get_map_client_;
 
   // others
-  unsigned int width_;
-  unsigned int height_;
-  float resolution_;
+  int map_width_;
+  int map_height_;
+  float map_resolution_;
 
   std::string primitive_filename_;
   std::string exploration_type_;

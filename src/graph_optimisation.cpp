@@ -35,6 +35,9 @@ void GraphOptimiser::initParams(){
   nh_private_.param<double>("node_dist_angular", node_dist_angular_, 0.175);
   nh_private_.param<double>("loop_closing_radius", lc_radius_, 0.175);
   nh_private_.param<bool>("const_map_update_steps", const_map_update_steps_, false);
+  nh_private_.param<int>("map_width", map_width_, 1000);
+  nh_private_.param<int>("map_height", map_height_, 1000);
+  nh_private_.param<float>("map_resolution", map_resolution_, 0.05);
 
   // Initialise subscriber and publisher
   pose_sub_ = nh_.subscribe("pose2D", 1, &GraphOptimiser::scanMatcherCallback, this);
@@ -112,11 +115,6 @@ void GraphOptimiser::initParams(){
   parameters.relinearizeSkip = 1;
   isam_ = ISAM2(parameters);
 
-  // Map paramters
-  map_resolution_ = 0.05;
-  map_width_ = 2000;
-  map_height_ = 2000;
-
   // Init OccupancyGrid msg
   occupancy_grid_msg_.header.frame_id = "map";
   occupancy_grid_msg_.info.resolution = map_resolution_;
@@ -130,8 +128,8 @@ void GraphOptimiser::initParams(){
                               0);
   occupancy_grid_msg_.info.origin = origin_pose;
 
-  for (unsigned int i = 0; i < map_width_; i++){
-    for (unsigned int j = 0; j < map_height_; j++){
+  for (int i = 0; i < map_width_; i++){
+    for (int j = 0; j < map_height_; j++){
       occupancy_grid_msg_.data.push_back(-1);
     }
   }
@@ -412,8 +410,8 @@ void GraphOptimiser::updateLogOdsWithBresenham(int x0, int y0, int x1, int y1,
 void GraphOptimiser::drawMap(gtsam::Values pose_estimates,
                              std::vector<LDP> keyframe_ldp_vec){
   // Init log_odds_array_
-  for (unsigned int i = 0; i < map_width_; i++){
-    for (unsigned int j = 0; j < map_height_; j++){
+  for (int i = 0; i < map_width_; i++){
+    for (int j = 0; j < map_height_; j++){
       log_odds_array_(i, j) = l_0_;
     }
   }
@@ -522,8 +520,8 @@ void GraphOptimiser::drawMap(gtsam::Values pose_estimates,
   }
 
   // Update occupancy_grid_msg_
-  for (unsigned int i = 0; i < map_width_; i++){
-    for (unsigned int j = 0; j < map_height_; j++){
+  for (int i = 0; i < map_width_; i++){
+    for (int j = 0; j < map_height_; j++){
       if (log_odds_array_(i, j) == l_0_){
         occupancy_grid_msg_.data[mapIndexToId(i, j, map_width_)] = -1;
       }else {

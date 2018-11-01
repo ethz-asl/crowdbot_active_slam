@@ -5,5 +5,8 @@
     <param name="node_dist_angular" value="0.3"/>
     <param name="loop_closing_radius" value="0.7"/>
     <param name="const_map_update_steps" value="false"/>
+    <param name="map_width" value="2000"/>
+    <param name="map_height" value="2000"/>
+    <param name="map_resolution" value="0.05"/>
   </node>
 </launch>
