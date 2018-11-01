@@ -17,6 +17,7 @@ find_package(PCL REQUIRED QUIET)
 find_package(PkgConfig REQUIRED)
 find_package(Eigen3 REQUIRED)
 find_package(plotty REQUIRED)
+find_package(libpointmatcher REQUIRED)
 pkg_check_modules(csm REQUIRED csm)
 pkg_check_modules(SBPL REQUIRED sbpl)
 
@@ -40,11 +41,13 @@ generate_messages(
 catkin_package(
 INCLUDE_DIRS include
 CATKIN_DEPENDS roscpp roslib tf std_msgs sensor_msgs geometry_msgs
-DEPENDS Eigen3 plotty)
+DEPENDS EIGEN3 plotty)
 
 include_directories(include ${catkin_INCLUDE_DIRS} ${csm_INCLUDE_DIRS}
-                            ${Eigen3_INCLUDE_DIRS} ${SBPL_INCLUDE_DIRS}
-                            ${plotty_INCLUDE_DIRS})
+                            ${EIGEN3_INCLUDE_DIRS} ${SBPL_INCLUDE_DIRS}
+                            ${plotty_INCLUDE_DIRS} ${libpointmatcher_INCLUDE_DIRS}
+                            ${GTSAM_INCLUDE_DIRS})
+
 link_directories(${csm_LIBRARY_DIRS} ${SBPL_LIBRARY_DIRS})
 
 add_executable(graph_optimisation src/graph_optimisation.cpp)
@@ -55,7 +58,7 @@ add_executable(calculate_map_error test_results/scripts/calculate_map_error.cpp)
 add_executable(plot_cov_along_path test_results/scripts/plot_cov_along_path.cpp)
 
 target_link_libraries(graph_optimisation gtsam
-                      ${catkin_LIBRARIES} ${csm_LIBRARIES})
+                      ${catkin_LIBRARIES} ${csm_LIBRARIES} ${EIGEN3_LIBRARIES} ${GTSAM_LIBRARIES} ${libpointmatcher_LIBRARIES})
 target_link_libraries(frontier_exploration ${catkin_LIBRARIES})
 target_link_libraries(decision_maker ${catkin_LIBRARIES} ${SBPL_LIBRARIES})
 
