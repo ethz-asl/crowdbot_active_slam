@@ -11,7 +11,7 @@ TrajectoryPlannerROS:
   xy_goal_tolerance: 0.5
   yaw_goal_tolerance: 3.14
   holonomic_robot: false
-  sim_time: 1.5
+  sim_time: 1.6
   vx_samples: 15
   vtheta_samples: 30
   meter_scoring: true
@@ -21,7 +21,7 @@ TrajectoryPlannerROS:
   gdist_scale: 0.8
   heading_scoring: true
   heading_scoring_timestep: 1.4
-controller_frequency: 5.0
+controller_frequency: 10.0
 planner_frequency: 0.5
 recovery_behavior_enabled: false
 
