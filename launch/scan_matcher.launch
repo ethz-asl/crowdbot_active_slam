@@ -11,8 +11,11 @@
     <param name="max_correspondence_dist" value="0.5"/>
     <param name="max_angular_correction_deg" value="65"/>
     <param name="max_linear_correction" value="0.2"/>
-    <param name="outliers_maxPerc" value="0.95"/>
+    <param name="outliers_maxPerc" value="0.99"/>
     <param name="kf_dist_linear" value="0.1"/>
-    <param name="kf_dist_angular" value="0.5"/>
+    <param name="kf_dist_angular" value="0.1"/>
+    <param name="orientation_neighbourhood" value="10"/>
+
+    <param name="outliers_adaptive_order" value="0.99"/>
   </node>
 </launch>

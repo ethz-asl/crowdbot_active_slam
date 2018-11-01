@@ -42,6 +42,8 @@ void GraphOptimiser::initParams(){
   path_pub_ = nh_.advertise<nav_msgs::Path>("graph_path", 1);
   action_path_pub_ = nh_.advertise<nav_msgs::Path>("action_graph", 1);
   map_pub_ = nh_.advertise<nav_msgs::OccupancyGrid>("occupancy_map", 1);
+  test_pose2D_pub_ = nh_.advertise<geometry_msgs::Pose2D>("test_pose2D", 1);
+  test_pose_pub_ = nh_.advertise<geometry_msgs::PoseStamped>("test_pose", 1);
 
   // Initialise map service
   uncertainty_service_ = nh_.advertiseService("save_uncertainty_service",
@@ -128,8 +130,8 @@ void GraphOptimiser::initParams(){
                               0);
   occupancy_grid_msg_.info.origin = origin_pose;
 
-  for (int i = 0; i < map_width_; i++){
-    for (int j = 0; j < map_height_; j++){
+  for (unsigned int i = 0; i < map_width_; i++){
+    for (unsigned int j = 0; j < map_height_; j++){
       occupancy_grid_msg_.data.push_back(-1);
     }
   }
@@ -152,13 +154,37 @@ void GraphOptimiser::initParams(){
   new_node_ = false;
   first_map_calculated_ = false;
   node_counter_ = 0;
+
+  feature_labels_.push_back(PointMatcher<float>::DataPoints::Label("x", 1));
+  feature_labels_.push_back(PointMatcher<float>::DataPoints::Label("y", 1));
+  feature_labels_.push_back(PointMatcher<float>::DataPoints::Label("pad", 1));
+
+  // Get path and file name
+  std::string package_path = ros::package::getPath("crowdbot_active_slam");
+  std::string config_path = package_path + "/config/icp_cfg.yaml";
+
+  std::ifstream config_file(config_path.c_str());
+
+  icp_.loadFromYaml(config_file);
+}
+
+void GraphOptimiser::laserScanToMatrix(sensor_msgs::LaserScan& scan_msg, Eigen::MatrixXf& matrix){
+  Eigen::MatrixXf temp_mat(3, scan_ranges_size_);
+
+  for (unsigned int i = 0; i < scan_ranges_size_; i++){
+    temp_mat(0, i) = scan_msg.ranges[i] * cos(scan_msg.angle_min + i * scan_angle_increment_);
+    temp_mat(1, i) = scan_msg.ranges[i] * sin(scan_msg.angle_min + i * scan_angle_increment_);
+    temp_mat(2, i) = 1;
+  }
+
+  matrix = temp_mat;
 }
 
 void GraphOptimiser::laserScanToLDP(sensor_msgs::LaserScan& scan_msg, LDP& ldp){
   unsigned int n = scan_ranges_size_;
   ldp = ld_alloc_new(n);
 
-  for (int i = 0; i < n; i++){
+  for (unsigned int i = 0; i < n; i++){
     double r = scan_msg.ranges[i];
 
     if (r > scan_range_min_ && r < scan_range_max_){
@@ -206,7 +232,7 @@ void GraphOptimiser::getSubsetOfMap(nav_msgs::Path action_path,
 
     // Bresenham
     double theta = 0;
-    for (int j = 0; j < scan_ranges_size_; j++){
+    for (unsigned int j = 0; j < scan_ranges_size_; j++){
       bool wall_reached = false;
       int dx = cos(theta);
       int dy = sin(theta);
@@ -234,7 +260,7 @@ void GraphOptimiser::getSubsetOfMap(nav_msgs::Path action_path,
             fraction -= twodx;
           }
           // Check if x,y still in map
-          if (x >= 0 && x < map_width_ && y >= 0 && y < map_height_){
+          if (x >= 0 && x < int(map_width_) && y >= 0 && y < int(map_height_)){
             int temp_id = mapIndexToId(x, y, map_width_);
             // Check if next cell is not wall and not unknown
             int temp_prob = int(occupancy_grid_msg_.data[temp_id]);
@@ -280,7 +306,7 @@ void GraphOptimiser::getSubsetOfMap(nav_msgs::Path action_path,
             fraction -= twody;
           }
           // Check if x,y still in map
-          if (x >= 0 && x < map_width_ && y >= 0 && y < map_height_){
+          if (x >= 0 && x < int(map_width_) && y >= 0 && y < int(map_height_)){
             int temp_id = mapIndexToId(x, y, map_width_);
             // Check if next cell is not a wall or unkown
             int temp_prob = int(occupancy_grid_msg_.data[temp_id]);
@@ -344,7 +370,7 @@ void GraphOptimiser::updateLogOdsWithBresenham(int x0, int y0, int x1, int y1,
     int fraction = 2 * dy - dx;
     int x = x0 + xstep;
     int y = y0;
-    for (x, y; x != x1; x += xstep){
+    for (; x != x1; x += xstep){
       fraction += fraction_increment;
       if (fraction >= 0){
         y += ystep;
@@ -365,7 +391,7 @@ void GraphOptimiser::updateLogOdsWithBresenham(int x0, int y0, int x1, int y1,
     int fraction = 2 * dx - dy;
     int x = x0;
     int y = y0 + ystep;
-    for (x, y; y != y1; y += ystep){
+    for (; y != y1; y += ystep){
       fraction += fraction_increment;
       if (fraction >= 0){
         x += xstep;
@@ -386,14 +412,14 @@ void GraphOptimiser::updateLogOdsWithBresenham(int x0, int y0, int x1, int y1,
 void GraphOptimiser::drawMap(gtsam::Values pose_estimates,
                              std::vector<LDP> keyframe_ldp_vec){
   // Init log_odds_array_
-  for (int i = 0; i < map_width_; i++){
-    for (int j = 0; j < map_height_; j++){
+  for (unsigned int i = 0; i < map_width_; i++){
+    for (unsigned int j = 0; j < map_height_; j++){
       log_odds_array_(i, j) = l_0_;
     }
   }
 
   // Loop over each keyframe
-  for (int i = 0; i < keyframe_ldp_vec.size(); i++){
+  for (unsigned int i = 0; i < keyframe_ldp_vec.size(); i++){
     Pose2 pose2_estimate = *dynamic_cast<const Pose2*>(&pose_estimates.at(i));
     tf::Transform map_to_laser_tf;
     map_to_laser_tf = xythetaToTF(pose2_estimate.x(),
@@ -496,8 +522,8 @@ void GraphOptimiser::drawMap(gtsam::Values pose_estimates,
   }
 
   // Update occupancy_grid_msg_
-  for (int i = 0; i < map_width_; i++){
-    for (int j = 0; j < map_height_; j++){
+  for (unsigned int i = 0; i < map_width_; i++){
+    for (unsigned int j = 0; j < map_height_; j++){
       if (log_odds_array_(i, j) == l_0_){
         occupancy_grid_msg_.data[mapIndexToId(i, j, map_width_)] = -1;
       }else {
@@ -641,7 +667,7 @@ bool GraphOptimiser::saveUncertaintyMatServiceCallback(
   // Save uncertainty
   std::ofstream map_file(save_path.c_str());
   if (map_file.is_open()){
-    for (int i = 0; i < uncertainty_matrices_path_.size(); i++){
+    for (unsigned int i = 0; i < uncertainty_matrices_path_.size(); i++){
       if (i == 0){
         map_file << path_length << " " << uncertainty_matrices_path_[i] << std::endl;
         previous_pose = *dynamic_cast<const Pose2*>(&pose_estimates_.at(i));
@@ -713,7 +739,7 @@ bool GraphOptimiser::utilityCalcServiceCallback(
   double prev_angle = current_estimate.theta();
   double path_length = 0;
 
-  for (int i = 0; i < request.plan.poses.size(); i++){
+  for (unsigned int i = 0; i < request.plan.poses.size(); i++){
     // Check if distance/angle diff is bigger than threshold as done in SLAM algo below
     double x_diff = request.plan.poses[i].pose.position.x -
                     request.plan.poses[prev_i].pose.position.x;
@@ -746,7 +772,7 @@ bool GraphOptimiser::utilityCalcServiceCallback(
       double y_low = next_pose.y() - lc_radius_;
       double lc_radius_squared = lc_radius_ * lc_radius_;
 
-      for (int j = 0; j < pose_estimates_.size() - 1; j++){
+      for (unsigned int j = 0; j < pose_estimates_.size() - 1; j++){
         Pose2 tmp_pose2 = *dynamic_cast<const Pose2*>(&pose_estimates_.at(j));
 
         // Check if tmp_pose2 is in square region around current pose estimate
@@ -863,8 +889,50 @@ void GraphOptimiser::scanCallback(const sensor_msgs::LaserScan::ConstPtr& scan_m
     scan_angle_increment_ = latest_scan_msg_.angle_increment;
     scan_range_min_ = latest_scan_msg_.range_min;
     scan_range_max_ = latest_scan_msg_.range_max;
+
+    // laserScanToMatrix(latest_scan_msg_, current_scan_eigen_);
+    // laser_ref_ = PointMatcher<float>::DataPoints(current_scan_eigen_, feature_labels_);
+    //
+    // keyframe_tf_.setIdentity();
+
+    scan_callback_initialized_ = true;
   }
-  scan_callback_initialized_ = true;
+  // laserScanToMatrix(latest_scan_msg_, current_scan_eigen_);
+  // laser_sens_ = PointMatcher<float>::DataPoints(current_scan_eigen_, feature_labels_);
+  //
+  // PointMatcher<float>::TransformationParameters T = icp_(laser_sens_, laser_ref_);
+  // //std::cout << "Final transformation:" << std::endl << T << std::endl;
+  //
+  // tf::Matrix3x3 rot_mat(T(0, 0), T(0, 1), 0, T(1, 0), T(1, 1), 0, 0, 0, 1);
+  // tf::Vector3 origin(T(0, 2), T(1, 2), 0);
+  // tf::Transform temp_estimated_tf(rot_mat, origin);
+  //
+  // double dist = sqrt(pow(temp_estimated_tf.getOrigin().getX(), 2) +
+  //                    pow(temp_estimated_tf.getOrigin().getY(), 2));
+  //
+  // if (abs(tf::getYaw(temp_estimated_tf.getRotation())) > 0.05 || dist > 0.03){
+  //   keyframe_tf_ = keyframe_tf_ * temp_estimated_tf;
+  //   estimated_tf_ = keyframe_tf_;
+  //   laser_ref_ = laser_sens_;
+  // }
+  // else {
+  //   estimated_tf_ = keyframe_tf_ * temp_estimated_tf;
+  // }
+  //
+  // geometry_msgs::Pose2D pose2D_msg;
+  // pose2D_msg.x = estimated_tf_.getOrigin().getX();
+  // pose2D_msg.y = estimated_tf_.getOrigin().getY();
+  // pose2D_msg.theta = tf::getYaw(estimated_tf_.getRotation());
+  //
+  // test_pose2D_pub_.publish(pose2D_msg);
+  //
+  // geometry_msgs::Pose pose_pu = xythetaToPose(pose2D_msg.x, pose2D_msg.y, pose2D_msg.theta);
+  // geometry_msgs::PoseStamped posestamp;
+  // posestamp.header.frame_id = "odom";
+  // posestamp.pose = pose_pu;
+  //
+  // test_pose_pub_.publish(posestamp);
+
 }
 
 void GraphOptimiser::scanMatcherCallback(const geometry_msgs::Pose2D::ConstPtr& pose2D_msg){
@@ -1017,7 +1085,7 @@ void GraphOptimiser::scanMatcherCallback(const geometry_msgs::Pose2D::ConstPtr& 
     Pose2 tmp_pose2;
 
     // Iterate over all node estimates
-    for (int i = 0; i < pose_estimates_.size(); i++){
+    for (unsigned int i = 0; i < pose_estimates_.size(); i++){
       // Cast Pose2 from Value
       tmp_pose2 = *dynamic_cast<const Pose2*>(&pose_estimates_.at(i));
 

@@ -40,6 +40,8 @@
 #include <gtsam/inference/Symbol.h>
 #include <gtsam/nonlinear/ISAM2.h>
 
+#include <pointmatcher/PointMatcher.h>
+
 #include <csm/csm_all.h>
 #undef min
 #undef max
@@ -61,6 +63,11 @@ public:
    *  Helper function which initialises some parameters
    */
   void initParams();
+
+  /**
+   *  A helper function which creates Eigen matrix from laser scans.
+   */
+  void laserScanToMatrix(sensor_msgs::LaserScan& scan_msg, Eigen::MatrixXf& matrix);
 
   /**
    *  A helper function which creates LDP from laser scans.
@@ -100,7 +107,7 @@ public:
    *  A callback function on Pose2D scans from the laser scan matcher
    *  which does Graph construction and optimisation.
    */
-  void scanMatcherCallback(const geometry_msgs::Pose2D::ConstPtr& pose2D_msg);
+ void scanMatcherCallback(const geometry_msgs::Pose2D::ConstPtr& pose2D_msg);
 
   /**
    *  Service callback for saving current uncertainty matrix along path
@@ -148,6 +155,8 @@ private:
   ros::Publisher path_pub_;
   ros::Publisher action_path_pub_;
   ros::Publisher map_pub_;
+  ros::Publisher test_pose2D_pub_;
+  ros::Publisher test_pose_pub_;
   ros::ServiceServer map_recalc_service_;
   ros::ServiceServer get_map_service_;
   ros::ServiceServer utility_calc_service_;
@@ -187,6 +196,15 @@ private:
   float p_free_;
   float l_occ_;
   float l_free_;
+
+  // Scan matcher
+  PointMatcher<float>::DataPoints laser_ref_;
+  PointMatcher<float>::DataPoints laser_sens_;
+  PointMatcher<float>::DataPoints::Labels feature_labels_;
+  PointMatcher<float>::ICP icp_;
+  Eigen::MatrixXf current_scan_eigen_;
+  tf::Transform estimated_tf_;
+  tf::Transform keyframe_tf_;
 
   // Other variables
   double node_dist_linear_;
