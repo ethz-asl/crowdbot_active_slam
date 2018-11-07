@@ -1,30 +1,81 @@
-TrajectoryPlannerROS:
+TebLocalPlannerROS:
+  odom_topic: mobile_base_controller/odom
+  map_frame: /map
+
+  # Trajectory
+
+  teb_autosize: True
+  dt_ref: 0.3
+  dt_hysteresis: 0.1
+  global_plan_overwrite_orientation: True
+  max_global_plan_lookahead_dist: 3.0
+  feasibility_check_no_poses: 5
+
+  # Robot
+
   max_vel_x: 1.0
-  min_vel_x: 0.0
+  max_vel_x_backwards: 0.2
   max_vel_theta: 1.5
-  min_vel_theta: -1.5
-  min_in_place_vel_theta: 0.4
-  escape_vel: -0.2
-  acc_lim_theta: 1.0
   acc_lim_x: 0.5
-  acc_lim_y: 0.0
+  acc_lim_theta: 1.0
+  min_turning_radius: 0.0
+  footprint_model: # types: "point", "circular", "two_circles", "line", "polygon"
+    type: "polygon"
+    vertices: [[0.20, 0.20], [0.20, -0.20], [-0.30, -0.20], [-0.30, 0.20]]
+
+  # GoalTolerance
+
   xy_goal_tolerance: 0.5
-  yaw_goal_tolerance: 3.14
-  holonomic_robot: false
-  sim_time: 1.6
-  vx_samples: 15
-  vtheta_samples: 30
-  meter_scoring: true
-  occdist_scale: 0.01
-  heading_lookahead: 0.225
-  pdist_scale: 0.6
-  gdist_scale: 0.8
-  heading_scoring: true
-  heading_scoring_timestep: 1.4
-controller_frequency: 10.0
+  yaw_goal_tolerance: 3.15
+  free_goal_vel: False
+
+  # Obstacles
+
+  min_obstacle_dist: 0.1
+  inflation_dist: 0.2
+  include_costmap_obstacles: True
+  costmap_obstacles_behind_robot_dist: 1.0
+  obstacle_poses_affected: 30
+  costmap_converter_plugin: "costmap_converter::CostmapToPolygonsDBSMCCH"
+  costmap_converter_spin_thread: True
+  costmap_converter_rate: 5
+
+  # Optimization
+
+  no_inner_iterations: 5
+  no_outer_iterations: 4
+  optimization_activate: True
+  optimization_verbose: False
+  penalty_epsilon: 0.1
+  weight_max_vel_x: 2
+  weight_max_vel_theta: 1
+  weight_acc_lim_x: 1
+  weight_acc_lim_theta: 1
+  weight_kinematics_nh: 1000
+  weight_kinematics_forward_drive: 1
+  weight_kinematics_turning_radius: 1
+  weight_optimaltime: 1
+  weight_obstacle: 50
+  weight_dynamic_obstacle: 10 # not in use yet
+  alternative_time_cost: False # not in use yet
+
+  # Homotopy Class Planner
+
+  enable_homotopy_class_planning: True
+  enable_multithreading: True
+  simple_exploration: False
+  max_number_classes: 4
+  roadmap_graph_no_samples: 15
+  roadmap_graph_area_width: 5
+  h_signature_prescaler: 0.5
+  h_signature_threshold: 0.1
+  obstacle_keypoint_offset: 0.1
+  obstacle_heading_threshold: 0.45
+  visualize_hc_graph: False
+
 planner_frequency: 0.5
 recovery_behavior_enabled: false
 
 NavfnROS:
   allow_unknown: false
-  default_tolerance: 0.5
+  default_tolerance: 2.5
