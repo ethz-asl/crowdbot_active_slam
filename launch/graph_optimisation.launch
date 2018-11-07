@@ -8,5 +8,6 @@
     <param name="map_width" value="2000"/>
     <param name="map_height" value="2000"/>
     <param name="map_resolution" value="0.05"/>
+    <param name="using_gazebo" value="true"/>
   </node>
 </launch>

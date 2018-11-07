@@ -16,6 +16,7 @@
   <build_depend>sensor_msgs</build_depend>
   <build_depend>geometry_msgs</build_depend>
   <build_depend>nav_msgs</build_depend>
+  <build_depend>gazebo_msgs</build_depend>
   <build_depend>csm</build_depend>
   <build_depend>cmake_modules</build_depend>
   <build_depend>message_generation</build_depend>
@@ -28,6 +29,7 @@
   <run_depend>sensor_msgs</run_depend>
   <run_depend>geometry_msgs</run_depend>
   <run_depend>nav_msgs</run_depend>
+  <run_depend>gazebo_msgs</run_depend>
   <run_depend>csm</run_depend>
   <run_depend>message_runtime</run_depend>
   <run_depend>plotty</run_depend>

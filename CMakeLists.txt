@@ -8,6 +8,7 @@ find_package(catkin REQUIRED COMPONENTS
   std_msgs
   sensor_msgs
   geometry_msgs
+  gazebo_msgs
   nav_msgs
   cmake_modules
   message_generation)
@@ -40,7 +41,7 @@ generate_messages(
 
 catkin_package(
 INCLUDE_DIRS include
-CATKIN_DEPENDS roscpp roslib tf std_msgs sensor_msgs geometry_msgs
+CATKIN_DEPENDS roscpp roslib tf std_msgs sensor_msgs geometry_msgs gazebo_msgs
 DEPENDS EIGEN3 plotty)
 
 include_directories(include ${catkin_INCLUDE_DIRS} ${csm_INCLUDE_DIRS}
