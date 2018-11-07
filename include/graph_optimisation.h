@@ -29,6 +29,7 @@
 #include <crowdbot_active_slam/service_call.h>
 #include <crowdbot_active_slam/utility_calc.h>
 #include <crowdbot_active_slam/get_map.h>
+#include <gazebo_msgs/GetModelState.h>
 
 #include <gtsam/nonlinear/NonlinearFactorGraph.h>
 #include <gtsam/nonlinear/Marginals.h>
@@ -161,6 +162,7 @@ private:
   ros::ServiceServer get_map_service_;
   ros::ServiceServer utility_calc_service_;
   ros::ServiceServer uncertainty_service_;
+  ros::ServiceClient get_ground_truth_client_;
 
   // TF
   tf::Transform map_to_odom_tf_;
@@ -174,6 +176,7 @@ private:
   gtsam::Pose2 prev_pose2_;
   gtsam::Pose2 current_pose2_;
   gtsam::Pose2 last_pose2_;
+  gtsam::Pose2 init_pose2_;
   gtsam::NonlinearFactorGraph graph_;
   gtsam::noiseModel::Diagonal::shared_ptr scan_match_noise_;
   gtsam::Values pose_estimates_;
@@ -216,6 +219,7 @@ private:
   bool scan_callback_initialized_;
   bool new_node_;
   bool first_map_calculated_;
+  bool using_gazebo_;
   int node_counter_;
   unsigned int scan_ranges_size_;
   double scan_angle_increment_;
