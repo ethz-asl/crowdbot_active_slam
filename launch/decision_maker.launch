@@ -3,6 +3,8 @@
         type="decision_maker" output="screen">
     <param name="primitive_filename"
            value="$(find crowdbot_active_slam)/matlab/mprim/pioneer.mprim"/>
-    <param name="exploration_type" value="utility"/>
+   <!-- Choose exploration type:
+        shortest_frontier, utility_standard or utility_normalized -->
+    <param name="exploration_type" value="utility_standard"/>
   </node>
 </launch>

@@ -259,9 +259,11 @@ void DecisionMaker::startExploration(){
       path_sizes.push_back(action_plan.poses.size());
     }
 
-    if (exploration_type_ == "utility"){
+    if (exploration_type_ == "utility_standard" ||
+        exploration_type_ == "utility_normalized"){
       // Get utility of action plan
       utility.request.plan = action_plan;
+      utility.request.exploration_type = exploration_type_;
       utility_calc_client_.call(utility);
 
       std::cout << "utility: " << utility.response.utility << std::endl;
@@ -275,7 +277,8 @@ void DecisionMaker::startExploration(){
     goal_id = std::distance(path_sizes.begin(), path_sizes_it);
   }
 
-  if (exploration_type_ == "utility"){
+  if (exploration_type_ == "utility_standard" ||
+      exploration_type_ == "utility_normalized"){
     // Get id of max utility
     max_utility = std::max_element(utility_vec.begin(), utility_vec.end());
     int max_utility_id = std::distance(utility_vec.begin(), max_utility);

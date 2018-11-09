@@ -1,5 +1,6 @@
 #request
 nav_msgs/Path plan
+string exploration_type
 ---
 #response
 float32 utility

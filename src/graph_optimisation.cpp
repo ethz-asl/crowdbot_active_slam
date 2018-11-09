@@ -760,7 +760,9 @@ bool GraphOptimiser::utilityCalcServiceCallback(
       Pose2 next_mean = prev_pose.between(next_pose);
 
       // Update path length
-      path_length += next_mean.t().norm();
+      if (request.exploration_type == "utility_normalized"){
+        path_length += next_mean.t().norm();
+      }
 
       action_graph.add(BetweenFactor<Pose2>(node_counter - 1, node_counter,
         next_mean, scan_match_noise_));
@@ -878,7 +880,9 @@ bool GraphOptimiser::utilityCalcServiceCallback(
     }
   }
   // normalize utility by path path_length
-  utility = utility / path_length;
+  if (request.exploration_type == "utility_normalized"){
+    utility = utility / path_length;
+  }
   response.utility = utility;
   return true;
 }
