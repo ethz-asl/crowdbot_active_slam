@@ -34,6 +34,7 @@ int main(int argc, char **argv)
         double p_ref;
         ss_ref >> p_ref;
 
+        // Map Scoring
         if (p_test == -1){
           p_test = 0.5;
           if (p_ref == -1){
