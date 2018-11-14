@@ -237,10 +237,10 @@ std::vector<unsigned int> FrontierExploration::neighbourXCells(unsigned int id,
                 int map_width, int map_height, unsigned int n_cells){
   std::vector<unsigned int> neighbour_vec;
 
-  int bl_corner = id - n_cells - n_cells * map_width;
-  for (unsigned int i = 0; i < 2 * n_cells; i++){
-    for (unsigned int j = 0; j < 2 * n_cells; j++){
-      int new_id =  bl_corner + j + i * map_width;
+  int br_corner = id - n_cells - n_cells * map_width;
+  for (unsigned int i = 0; i <= 2 * n_cells; i++){
+    for (unsigned int j = 0; j <= 2 * n_cells; j++){
+      int new_id = br_corner + j + i * map_width;
       if (new_id >= 0 && new_id <= map_width * map_height && new_id != int(id)){
         neighbour_vec.push_back(new_id);
       }
