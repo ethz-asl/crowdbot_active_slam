@@ -99,10 +99,10 @@ int main(int argc, char **argv)
 
   // Plot results
   for (int i = 1; i < nr_of_tests; i++){
-    if (i < 4){
+    if (i < 6){
       plotty::plot(path_length_vecs[i - 1], uncertainty_vecs[i - 1], "b");
     }
-    else if (i < 7){
+    else if (i < 9){
       plotty::plot(path_length_vecs[i - 1], uncertainty_vecs[i - 1], "r");
     }
     else {

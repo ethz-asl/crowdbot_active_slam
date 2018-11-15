@@ -7,8 +7,8 @@ int main(int argc, char **argv)
 {
   // Get path and file name
   std::string package_path = ros::package::getPath("crowdbot_active_slam");
-  std::string test_results_path = package_path + "/test_results/" + argv[1];
-  std::string ground_truth_map_path = package_path + "/worlds/" + argv[2];
+  std::string test_results_path = package_path + "/" + argv[1];
+  std::string ground_truth_map_path = package_path + "/" + argv[2];
 
   std::ifstream test_map_file(test_results_path.c_str());
   std::ifstream ground_truth_map_file(ground_truth_map_path.c_str());
