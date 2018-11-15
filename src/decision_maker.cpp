@@ -318,6 +318,7 @@ void DecisionMaker::startExploration(){
   else
     ROS_INFO("Action did not finish before the time out.");
 
+  ros::Duration(1).sleep();
   crowdbot_active_slam::service_call map_srv;
   if (map_recalculation_client_.call(map_srv))
   {
