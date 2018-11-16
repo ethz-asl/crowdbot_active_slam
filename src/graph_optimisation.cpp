@@ -411,7 +411,7 @@ void GraphOptimiser::updateLogOdsWithBresenham(int x0, int y0, int x1, int y1,
 }
 
 void GraphOptimiser::drawMap(gtsam::Values pose_estimates,
-                             std::vector<LDP> keyframe_ldp_vec){
+                             std::vector<LDP>& keyframe_ldp_vec){
   // Init log_odds_array_
   for (int i = 0; i < map_width_; i++){
     for (int j = 0; j < map_height_; j++){
@@ -536,7 +536,7 @@ void GraphOptimiser::drawMap(gtsam::Values pose_estimates,
 }
 
 void GraphOptimiser::updateMap(gtsam::Values pose_estimates,
-                               std::vector<LDP> keyframe_ldp_vec){
+                               std::vector<LDP>& keyframe_ldp_vec){
   int i = keyframe_ldp_vec.size() - 1;
   Pose2 pose2_estimate = *dynamic_cast<const Pose2*>(&pose_estimates.at(i));
   tf::Transform map_to_laser_tf;
