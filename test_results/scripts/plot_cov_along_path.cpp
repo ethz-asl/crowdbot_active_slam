@@ -102,7 +102,7 @@ int main(int argc, char **argv)
     if (i < 6){
       plotty::plot(path_length_vecs[i - 1], uncertainty_vecs[i - 1], "b");
     }
-    else if (i < 9){
+    else if (i < 11){
       plotty::plot(path_length_vecs[i - 1], uncertainty_vecs[i - 1], "r");
     }
     else {
