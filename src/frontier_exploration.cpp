@@ -4,10 +4,10 @@
  *  A helper function which creates map index from position information.
  */
 std::vector<int> positionToMapIndex(double x, double y,
-   unsigned int width, unsigned int height, float resolution){
+  int map_width, int map_height, float map_resolution){
   std::vector<int> index(2);
-  index[0] = floor(x / resolution) + width / 2;
-  index[1] = floor(y / resolution) + height / 2;
+  index[0] = floor(x / map_resolution) + map_width / 2;
+  index[1] = floor(y / map_resolution) + map_height / 2;
 
   return index;
 }
@@ -23,13 +23,16 @@ FrontierExploration::FrontierExploration(ros::NodeHandle nh,
                                   &FrontierExploration::serviceCallback, this);
   ROS_INFO("frontier_exploration_service started!");
 
-  // Init map subscriber
-  map_initialized_ = false;
-  map_sub_ = nh_.subscribe("/occupancy_map", 1,
-                           &FrontierExploration::mapCallback, this);
+  // Init service clients
+  get_map_client_ = nh_.serviceClient<crowdbot_active_slam::get_map>
+                    ("/get_map_service");
 
   // Init publisher
   frontier_cell_pub_ = nh_.advertise<nav_msgs::GridCells>("frontier_points_grid_cell", 1);
+
+  nh_.getParam("/graph_optimisation/map_width", map_width_);
+  nh_.getParam("/graph_optimisation/map_height", map_height_);
+  nh_.getParam("/graph_optimisation/map_resolution", map_resolution_);
 }
 
 FrontierExploration::~FrontierExploration() {}
@@ -39,12 +42,6 @@ bool FrontierExploration::serviceCallback(
     crowdbot_active_slam::get_frontier_list::Response &response) {
   // Frontier exploration calculations
   // based on implementation http://wiki.ros.org/frontier_exploration
-
-  // Check if map already subscribed
-  if (!map_initialized_){
-    ROS_WARN("Service aborted! Map was not subscribed until now!");
-    return false;
-  }
 
   // Init Transform listener and get current robot pose
   tf::StampedTransform robot_pose_tf;
@@ -61,35 +58,44 @@ bool FrontierExploration::serviceCallback(
   response.start_pose.y = robot_y;
   response.start_pose.theta = robot_theta;
 
-  // Save map information
-  unsigned int width = latest_map_msg_.info.width;
-  unsigned int height = latest_map_msg_.info.height;
-  float resolution = latest_map_msg_.info.resolution;
+  // Service call for latest occupancy grid map
+  crowdbot_active_slam::get_map get_map_srv;
+
+  if (get_map_client_.call(get_map_srv))
+  {
+    ROS_INFO("OccupancyGrid map call successfull");
+  }
+  else
+  {
+    ROS_ERROR("Failed to call OccupancyGrid map");
+  }
+
+  latest_map_msg_ = get_map_srv.response.map_msg;
 
   // Update map with freespace threshold
-  for (int i = 0; i < latest_map_msg_.data.size(); i++){
+  for (unsigned int i = 0; i < latest_map_msg_.data.size(); i++){
     if (int(latest_map_msg_.data[i]) <= 25 && int(latest_map_msg_.data[i]) != -1){
       latest_map_msg_.data[i] = 0;
     }
   }
 
   // Get robot position in map indices
-  int robot_x_cell = positionToMapIndex(robot_x, robot_y, width, height, resolution)[0];
-  int robot_y_cell = positionToMapIndex(robot_x, robot_y, width, height, resolution)[1];
+  int robot_x_cell = positionToMapIndex(robot_x, robot_y, map_width_, map_height_, map_resolution_)[0];
+  int robot_y_cell = positionToMapIndex(robot_x, robot_y, map_width_, map_height_, map_resolution_)[1];
 
   // Print result
   std::cout << "Robot cell: (" << robot_x_cell << ", " << robot_y_cell << ")" << std::endl;
 
   // Init frontier and visited flag to keep record while searching for frontiers
-  std::vector<bool> frontier_flag(width * height, false);
-  std::vector<bool> visited_flag(width * height, false);
+  std::vector<bool> frontier_flag(map_width_ * map_height_, false);
+  std::vector<bool> visited_flag(map_width_ * map_height_, false);
 
   // Init breadth first search queue object
   std::queue<unsigned int> breadth_first_search;
 
   // Init with robot pose as a starting point of the search.
   // Assumption: robot pose is a free space
-  breadth_first_search.push(robot_x_cell + robot_y_cell * width);
+  breadth_first_search.push(robot_x_cell + robot_y_cell * map_width_);
   visited_flag[breadth_first_search.front()] = true;
 
   // Search for frontiers
@@ -97,8 +103,8 @@ bool FrontierExploration::serviceCallback(
     unsigned int id = breadth_first_search.front();
     breadth_first_search.pop();
 
-    std::vector<unsigned int> neighbour_vec = neighbour4(id, width, height);
-    for (int i = 0; i < neighbour_vec.size(); i++){
+    std::vector<unsigned int> neighbour_vec = neighbour4(id, map_width_, map_height_);
+    for (unsigned int i = 0; i < neighbour_vec.size(); i++){
       // Check if cell is free and has not been visited, then add to queue
       if (int(latest_map_msg_.data[neighbour_vec[i]]) == 0 &&
           !visited_flag[neighbour_vec[i]]){
@@ -112,8 +118,8 @@ bool FrontierExploration::serviceCallback(
 
         // Get frontier centroid around current cell
         geometry_msgs::Pose2D frontier_centroid;
-        if (getFrontierCentroid(neighbour_vec[i], frontier_flag, width, height,
-                                resolution, frontier_centroid)){
+        if (getFrontierCentroid(neighbour_vec[i], frontier_flag, map_width_, map_height_,
+                                map_resolution_, frontier_centroid)){
           response.frontier_list.push_back(frontier_centroid);
         }
       }
@@ -125,7 +131,7 @@ bool FrontierExploration::serviceCallback(
   frontier_points_msg.header.frame_id = "map";
   frontier_points_msg.cell_width = 0.1;
   frontier_points_msg.cell_height = 0.1;
-  for (int i = 0; i < response.frontier_list.size(); i++){
+  for (unsigned int i = 0; i < response.frontier_list.size(); i++){
     geometry_msgs::Point point;
     point.x = response.frontier_list[i].x;
     point.y = response.frontier_list[i].y;
@@ -140,18 +146,18 @@ bool FrontierExploration::serviceCallback(
 
 bool FrontierExploration::getFrontierCentroid(unsigned int initial_cell,
                                               std::vector<bool>& frontier_flag,
-                                              unsigned int width,
-                                              unsigned int height,
-                                              float resolution,
+                                              int map_width,
+                                              int map_height,
+                                              float map_resolution,
                                               geometry_msgs::Pose2D& centroid){
 
   geometry_msgs::Pose2D centroid_pose2D;
-  unsigned int size = 1;
+  int size = 1;
   double centroid_x, centroid_y;
 
   // Get x,y world coordinates of initial cell id and init centroid values
   double ix, iy;
-  idToWorldXY(initial_cell, ix, iy, width, height, resolution);
+  idToWorldXY(initial_cell, ix, iy, map_width, map_height, map_resolution);
   centroid_x = ix;
   centroid_y = iy;
 
@@ -164,16 +170,16 @@ bool FrontierExploration::getFrontierCentroid(unsigned int initial_cell,
     unsigned int id = breadth_first_search.front();
     breadth_first_search.pop();
 
-    std::vector<unsigned int> neighbour8_vec = neighbour8(id, width, height);
-    for (int i = 0; i < neighbour8_vec.size(); i++){
+    std::vector<unsigned int> neighbour8_vec = neighbour8(id, map_width, map_height);
+    for (unsigned int i = 0; i < neighbour8_vec.size(); i++){
       // Check if cell is unknown and has not been marked as a frontier cell
       if (int(latest_map_msg_.data[neighbour8_vec[i]]) == -1 &&
           !frontier_flag[neighbour8_vec[i]]){
         bool has_free_neighbour4 = false;
         std::vector<unsigned int> neighbour4_vec =
-                                    neighbour4(neighbour8_vec[i], width, height);
+                                    neighbour4(neighbour8_vec[i], map_width, map_height);
         // Check if a neighbour is a free cell
-        for (int j = 0; j < neighbour4_vec.size(); j++){
+        for (unsigned int j = 0; j < neighbour4_vec.size(); j++){
           if (int(latest_map_msg_.data[neighbour4_vec[j]]) == 0){
             has_free_neighbour4 = true;
           }
@@ -183,7 +189,7 @@ bool FrontierExploration::getFrontierCentroid(unsigned int initial_cell,
           frontier_flag[neighbour8_vec[i]] = true;
 
           double new_x, new_y;
-          idToWorldXY(neighbour8_vec[i], new_x, new_y, width, height, resolution);
+          idToWorldXY(neighbour8_vec[i], new_x, new_y, map_width, map_height, map_resolution);
           centroid_x += new_x;
           centroid_y += new_y;
           size++;
@@ -203,11 +209,11 @@ bool FrontierExploration::getFrontierCentroid(unsigned int initial_cell,
 
   // Check if size of frontier is big enough and if a neighbour is a wall
   if (size > frontier_size_){
-    std::vector<int> cell = positionToMapIndex(centroid_x, centroid_y, width,
-                                               height, resolution);
-    unsigned int id = cell[0] + cell[1] * width;
-    std::vector<unsigned int> neighbour_x_cells = neighbourXCells(id, width, height, 5);
-    for (int i = 0; i < neighbour_x_cells.size(); i++){
+    std::vector<int> cell = positionToMapIndex(centroid_x, centroid_y, map_width,
+                                               map_height, map_resolution);
+    unsigned int id = cell[0] + cell[1] * map_width;
+    std::vector<unsigned int> neighbour_x_cells = neighbourXCells(id, map_width, map_height, 5);
+    for (unsigned int i = 0; i < neighbour_x_cells.size(); i++){
       if (int(latest_map_msg_.data[neighbour_x_cells[i]]) > 90){
         return false;
       }
@@ -220,22 +226,22 @@ bool FrontierExploration::getFrontierCentroid(unsigned int initial_cell,
 }
 
 void FrontierExploration::idToWorldXY(unsigned int id, double& x, double& y,
-  unsigned int width, unsigned int height, float resolution){
-    unsigned int iy_cell = id / width;
-    unsigned int ix_cell = id - iy_cell * width;
-    x = int((ix_cell - width / 2)) * resolution + resolution / 2.0;
-    y = int((iy_cell - height / 2)) * resolution + resolution / 2.0;
+  int map_width, int map_height, float map_resolution){
+    unsigned int iy_cell = id / map_width;
+    unsigned int ix_cell = id - iy_cell * map_width;
+    x = int((ix_cell - map_width / 2)) * map_resolution + map_resolution / 2.0;
+    y = int((iy_cell - map_height / 2)) * map_resolution + map_resolution / 2.0;
   }
 
 std::vector<unsigned int> FrontierExploration::neighbourXCells(unsigned int id,
-                unsigned int width, unsigned int height, unsigned int n_cells){
+                int map_width, int map_height, unsigned int n_cells){
   std::vector<unsigned int> neighbour_vec;
 
-  int bl_corner = id - n_cells - n_cells * width;
-  for (unsigned int i = 0; i < 2 * n_cells; i++){
-    for (unsigned int j = 0; j < 2 * n_cells; j++){
-      int new_id =  bl_corner + j + i * width;
-      if (new_id >= 0 && new_id <= width * height && new_id != id){
+  int br_corner = id - n_cells - n_cells * map_width;
+  for (unsigned int i = 0; i <= 2 * n_cells; i++){
+    for (unsigned int j = 0; j <= 2 * n_cells; j++){
+      int new_id = br_corner + j + i * map_width;
+      if (new_id >= 0 && new_id <= map_width * map_height && new_id != int(id)){
         neighbour_vec.push_back(new_id);
       }
     }
@@ -245,27 +251,28 @@ std::vector<unsigned int> FrontierExploration::neighbourXCells(unsigned int id,
 }
 
 std::vector<unsigned int> FrontierExploration::neighbour8(unsigned int id,
-                                      unsigned int width, unsigned int height){
+                                      int map_width, int map_height){
   std::vector<unsigned int> neighbour8_vec;
+  int id_int = int(id);
 
-  if (id >= width){
-    neighbour8_vec.push_back(id - width);
-    if (id % width > 0){
-      neighbour8_vec.push_back(id - 1);
-      neighbour8_vec.push_back(id - width - 1);
+  if (id_int >= map_width){
+    neighbour8_vec.push_back(id_int - map_width);
+    if (id_int % map_width > 0){
+      neighbour8_vec.push_back(id_int - 1);
+      neighbour8_vec.push_back(id_int - map_width - 1);
     }
-    if (id % width < width - 1){
-      neighbour8_vec.push_back(id + 1);
-      neighbour8_vec.push_back(id - width + 1);
+    if (id_int % map_width < map_width - 1){
+      neighbour8_vec.push_back(id_int + 1);
+      neighbour8_vec.push_back(id_int - map_width + 1);
     }
   }
-  if (id < width * (height - 1)){
-    neighbour8_vec.push_back(id + width);
-    if (id % width > 0){
-      neighbour8_vec.push_back(id + width - 1);
+  if (id_int < map_width * (map_height - 1)){
+    neighbour8_vec.push_back(id_int + map_width);
+    if (id_int % map_width > 0){
+      neighbour8_vec.push_back(id_int + map_width - 1);
     }
-    if (id % width < width - 1){
-      neighbour8_vec.push_back(id + width + 1);
+    if (id_int % map_width < map_width - 1){
+      neighbour8_vec.push_back(id_int + map_width + 1);
     }
   }
 
@@ -273,28 +280,23 @@ std::vector<unsigned int> FrontierExploration::neighbour8(unsigned int id,
 }
 
 std::vector<unsigned int> FrontierExploration::neighbour4(unsigned int id,
-                                      unsigned int width, unsigned int height){
+                                      int map_width, int map_height){
   std::vector<unsigned int> neighbour4_vec;
+  int id_int = int(id);
 
-  if (id >= width){
-    neighbour4_vec.push_back(id - width);
+  if (id_int >= map_width){
+    neighbour4_vec.push_back(id_int - map_width);
   }
-  if (id < width * (height - 1)){
-    neighbour4_vec.push_back(id + width);
+  if (id_int < map_width * (map_height - 1)){
+    neighbour4_vec.push_back(id_int + map_width);
   }
-  if (id % width > 0){
-    neighbour4_vec.push_back(id - 1);
+  if (id_int % map_width > 0){
+    neighbour4_vec.push_back(id_int - 1);
   }
-  if (id % width < width - 1){
-    neighbour4_vec.push_back(id + 1);
+  if (id_int % map_width < map_width - 1){
+    neighbour4_vec.push_back(id_int + 1);
   }
   return neighbour4_vec;
-}
-
-void FrontierExploration::mapCallback(
-    const nav_msgs::OccupancyGrid::ConstPtr &map_msg){
-  latest_map_msg_ = *map_msg;
-  map_initialized_ = true;
 }
 
 

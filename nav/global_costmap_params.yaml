@@ -4,4 +4,4 @@ global_costmap:
   update_frequency: 5.0
   publish_frequency: 1.0
   static_map: true
-  cost_scaling_factor: 2.0
+  cost_scaling_factor: 5.0

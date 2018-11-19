@@ -17,6 +17,7 @@
 #include <crowdbot_active_slam/utility_calc.h>
 #include <move_base_msgs/MoveBaseAction.h>
 #include <nav_msgs/GetPlan.h>
+#include <crowdbot_active_slam/get_map.h>
 
 
 class DecisionMaker {
@@ -40,7 +41,7 @@ public:
    *  Calculate cell ids from map id
    */
   void idToCell(unsigned int id, unsigned int& x, unsigned int& y,
-                unsigned int width, unsigned int height);
+                int width, int height);
 
   /**
    *  Creates the robot footprint for SBPL planner
@@ -68,11 +69,6 @@ public:
     */
    void saveGeneralResults();
 
-  /**
-   *  Occupancy map callback which starts startExploration
-   */
-  void mapCallback(const nav_msgs::OccupancyGrid::ConstPtr &map_msg);
-
 private:
   // Node handler
   ros::NodeHandle nh_;
@@ -90,13 +86,16 @@ private:
   ros::ServiceClient utility_calc_client_;
   ros::ServiceClient get_plan_move_base_client_;
   ros::ServiceClient uncertainty_client_;
+  ros::ServiceClient get_map_client_;
 
-  // others
-  unsigned int width_;
-  unsigned int height_;
-  float resolution_;
+  // ros params
+  int map_width_;
+  int map_height_;
+  float map_resolution_;
+  double node_dist_linear_;
+  double node_dist_angular_;
+  double lc_radius_;
 
-  bool map_initialized_;
   std::string primitive_filename_;
   std::string exploration_type_;
   SBPLPlanner* planner_;

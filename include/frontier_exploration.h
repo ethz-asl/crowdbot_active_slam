@@ -10,6 +10,7 @@
 #include <queue>
 
 #include <crowdbot_active_slam/get_frontier_list.h>
+#include <crowdbot_active_slam/get_map.h>
 
 
 class FrontierExploration {
@@ -40,39 +41,34 @@ public:
    */
   bool getFrontierCentroid(unsigned int initial_cell,
                            std::vector<bool>& frontier_flag,
-                           unsigned int width,
-                           unsigned int height,
+                           int map_width,
+                           int map_height,
                            float resolution,
                            geometry_msgs::Pose2D& centroid);
 
   /**
    *  Transforms a cell id to x, y world coordinates.
    */
-  void idToWorldXY(unsigned int id, double& x, double& y, unsigned int width,
-                   unsigned int height, float resolution);
+  void idToWorldXY(unsigned int id, double& x, double& y, int map_width,
+                   int map_height, float map_resolution);
 
    /**
     *  Returns a list of cell id's for the neighbourhood around #x cells.
     */
-   std::vector<unsigned int> neighbourXCells(unsigned int id,
-                 unsigned int width, unsigned int height, unsigned int n_cells);
+   std::vector<unsigned int> neighbourXCells(unsigned int id, int map_width,
+                                         int map_height, unsigned int n_cells);
 
   /**
    *  Returns a list of cell id's for the 8-neighbourhood around an id cell.
    */
-  std::vector<unsigned int> neighbour8(unsigned int id, unsigned int width,
-                                       unsigned int height);
+  std::vector<unsigned int> neighbour8(unsigned int id, int map_width,
+                                                        int map_height);
 
   /**
    *  Returns a list of cell id's for the 4-neighbourhood around an id cell.
    */
-  std::vector<unsigned int> neighbour4(unsigned int id, unsigned int width,
-                                       unsigned int height);
-
-  /**
-   *  This callback saves the current occupancy grid map.
-   */
-  void mapCallback(const nav_msgs::OccupancyGrid::ConstPtr& map_msg);
+  std::vector<unsigned int> neighbour4(unsigned int id, int map_width,
+                                                        int map_height);
 
 private:
   // Rosparam
@@ -84,6 +80,7 @@ private:
 
   // Service, Subscriber, Publisher
   ros::ServiceServer service_;
+  ros::ServiceClient get_map_client_;
   ros::Subscriber map_sub_;
   ros::Publisher frontier_cell_pub_;
 
@@ -94,7 +91,10 @@ private:
   tf::TransformListener robot_pose_listener_;
 
   // others
-  bool map_initialized_;
+  int map_width_;
+  int map_height_;
+  float map_resolution_;
+
 };
 
 #endif // FRONTIER_EXPLORATION_H

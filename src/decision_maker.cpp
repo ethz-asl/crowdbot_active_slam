@@ -10,10 +10,6 @@ DecisionMaker::DecisionMaker(ros::NodeHandle nh, ros::NodeHandle nh_)
   // Publisher
   plan_pub_ = nh_.advertise<nav_msgs::Path>("plans_path", 1);
 
-  // Subscriber
-  map_sub_ = nh_.subscribe("/occupancy_map", 1,
-                           &DecisionMaker::mapCallback, this);
-
   // Init service clients
   frontier_exploration_client_ = nh_.serviceClient
         <crowdbot_active_slam::get_frontier_list>
@@ -24,11 +20,20 @@ DecisionMaker::DecisionMaker(ros::NodeHandle nh, ros::NodeHandle nh_)
   map_recalculation_client_ = nh_.serviceClient
         <crowdbot_active_slam::service_call>
         ("/map_recalculation_service");
+  get_map_client_ = nh_.serviceClient<crowdbot_active_slam::get_map>
+                    ("/get_map_service");
   get_plan_move_base_client_ = nh_.serviceClient
         <nav_msgs::GetPlan>("/move_base/make_plan");
   utility_calc_client_ = nh_.serviceClient
         <crowdbot_active_slam::utility_calc>
         ("/utility_calc_service");
+
+  nh_.getParam("/graph_optimisation/map_width", map_width_);
+  nh_.getParam("/graph_optimisation/map_height", map_height_);
+  nh_.getParam("/graph_optimisation/map_resolution", map_resolution_);
+  nh_.getParam("/graph_optimisation/node_dist_linear", node_dist_linear_);
+  nh_.getParam("/graph_optimisation/node_dist_angular", node_dist_angular_);
+  nh_.getParam("/graph_optimisation/loop_closing_radius", lc_radius_);
 
   // Init SBPL env
   // set the perimeter of the robot
@@ -39,15 +44,11 @@ DecisionMaker::DecisionMaker(ros::NodeHandle nh, ros::NodeHandle nh_)
   double robot_width = 0.3;
   createFootprint(perimeter, robot_width, robot_length);
 
-  width_ = 1000;
-  height_ = 1000;
-  resolution_ = 0.05;
-
-  env_.InitializeEnv(width_, height_, 0, //map data
+  env_.InitializeEnv(map_width_, map_height_, 0, //map data
                                       0, 0, 0, // start
                                       0, 0, 0, // goal
                                       0, 0, 0, // goal tolerance
-                                      perimeter, resolution_,
+                                      perimeter, map_resolution_,
                                       0.5, // nominal vel (m/s)
                                       1.0, // time to turn 45 degs in place (s)
                                       20, // obstacle threshold
@@ -97,7 +98,7 @@ unsigned int DecisionMaker::mapToSBPLCost(int occupancy){
 }
 
 void DecisionMaker::idToCell(unsigned int id, unsigned int& x, unsigned int& y,
-                             unsigned int width, unsigned int height){
+                             int width, int height){
     y = id / width;
     x = id - y * width;
   }
@@ -122,10 +123,24 @@ void DecisionMaker::createFootprint(std::vector<sbpl_2Dpt_t>& perimeter,
 
 nav_msgs::Path DecisionMaker::planPathSBPL(geometry_msgs::Pose2D start_pose,
                                        geometry_msgs::Pose2D goal_pose){
+  // Service call for latest occupancy grid map
+  crowdbot_active_slam::get_map get_map_srv;
+
+  if (get_map_client_.call(get_map_srv))
+  {
+   ROS_INFO("OccupancyGrid map call successfull");
+  }
+  else
+  {
+   ROS_ERROR("Failed to call OccupancyGrid map");
+  }
+
+  latest_map_msg_ = get_map_srv.response.map_msg;
+
   // Update cost
   unsigned int ix, iy;
-  for (int i = 0; i < latest_map_msg_.data.size(); i++){
-    idToCell(i, ix, iy, width_, height_);
+  for (unsigned int i = 0; i < latest_map_msg_.data.size(); i++){
+    idToCell(i, ix, iy, map_width_, map_height_);
     env_.UpdateCost(ix, iy, mapToSBPLCost(latest_map_msg_.data[i]));
   }
 
@@ -184,12 +199,7 @@ nav_msgs::Path DecisionMaker::planPathSBPL(geometry_msgs::Pose2D start_pose,
 }
 
 void DecisionMaker::startExploration(){
-  // Check if map already subscribed
-  if (!map_initialized_){
-    ROS_WARN("Map was not subscribed until now!");
-    return;
-  }
-
+  // Get frontiers
   crowdbot_active_slam::get_frontier_list frontier_srv;
 
   if (frontier_exploration_client_.call(frontier_srv))
@@ -233,7 +243,7 @@ void DecisionMaker::startExploration(){
   std::vector<int> path_sizes;
   std::vector<double>::iterator max_utility;
   std::vector<int>::iterator path_sizes_it;
-  int goal_id;
+  int goal_id = 0;
 
   for (int i = 0; i < frontier_size; i++){
     // Get action plan
@@ -249,9 +259,11 @@ void DecisionMaker::startExploration(){
       path_sizes.push_back(action_plan.poses.size());
     }
 
-    if (exploration_type_ == "utility"){
+    if (exploration_type_ == "utility_standard" ||
+        exploration_type_ == "utility_normalized"){
       // Get utility of action plan
       utility.request.plan = action_plan;
+      utility.request.exploration_type = exploration_type_;
       utility_calc_client_.call(utility);
 
       std::cout << "utility: " << utility.response.utility << std::endl;
@@ -265,7 +277,8 @@ void DecisionMaker::startExploration(){
     goal_id = std::distance(path_sizes.begin(), path_sizes_it);
   }
 
-  if (exploration_type_ == "utility"){
+  if (exploration_type_ == "utility_standard" ||
+      exploration_type_ == "utility_normalized"){
     // Get id of max utility
     max_utility = std::max_element(utility_vec.begin(), utility_vec.end());
     int max_utility_id = std::distance(utility_vec.begin(), max_utility);
@@ -305,6 +318,7 @@ void DecisionMaker::startExploration(){
   else
     ROS_INFO("Action did not finish before the time out.");
 
+  ros::Duration(1).sleep();
   crowdbot_active_slam::service_call map_srv;
   if (map_recalculation_client_.call(map_srv))
   {
@@ -327,10 +341,24 @@ void DecisionMaker::saveGridMap(){
   std::string save_path = package_path + "/test_results/occupancy_grid_map" +
                           char_time + ".txt";
 
+  // Service call for latest occupancy grid map
+  crowdbot_active_slam::get_map get_map_srv;
+
+  if (get_map_client_.call(get_map_srv))
+  {
+    ROS_INFO("OccupancyGrid map call successfull");
+  }
+  else
+  {
+    ROS_ERROR("Failed to call OccupancyGrid map");
+  }
+
+  latest_map_msg_ = get_map_srv.response.map_msg;
+
   // Save map
   std::ofstream map_file(save_path.c_str());
   if (map_file.is_open()){
-    for (int i = 0; i < width_ * height_; i++){
+    for (int i = 0; i < map_width_ * map_height_; i++){
       map_file << int(latest_map_msg_.data[i]) << std::endl;
     }
     map_file.close();
@@ -360,17 +388,15 @@ void DecisionMaker::saveGeneralResults(){
     // Add information to file
     result_file << "Exploration type: " << exploration_type_ << std::endl;
     result_file << "Exploration time: " << diff_time << "s" << std::endl;
-    result_file << "Map width: " << width_ << std::endl;
-    result_file << "Map height: " << height_ << std::endl;
-    result_file << "Map resolution: " << resolution_ << std::endl;
-    result_file << "node_dist_linear: " << "FILL IN" << std::endl;
-    result_file << "node_dist_angular: " << "FILL IN" << std::endl;
-    result_file << "loop_closing_radius: " << "FILL IN" << std::endl;
+    result_file << "Map width: " << map_width_ << std::endl;
+    result_file << "Map height: " << map_height_ << std::endl;
+    result_file << "Map resolution: " << map_resolution_ << std::endl;
+    result_file << "node_dist_linear: " << node_dist_linear_ << std::endl;
+    result_file << "node_dist_angular: " << node_dist_angular_ << std::endl;
+    result_file << "loop_closing_radius: " << lc_radius_ << std::endl;
     result_file << "Node number: " << "FILL IN" << std::endl;
     result_file << "World: " << "FILL IN" << std::endl;
     result_file << "Optimality: " << "FILL IN" << std::endl;
-
-
 
     // Close file
     result_file.close();
@@ -380,19 +406,15 @@ void DecisionMaker::saveGeneralResults(){
   }
 }
 
-void DecisionMaker::mapCallback(
-    const nav_msgs::OccupancyGrid::ConstPtr &map_msg){
-  latest_map_msg_ = *map_msg;
-  map_initialized_ = true;
-  startExploration();
-}
 
 int main(int argc, char **argv) {
   ros::init(argc, argv, "decision_maker");
   ros::NodeHandle nh;
   ros::NodeHandle nh_("~");
   DecisionMaker decision_maker(nh, nh_);
-  ros::spin();
+  while (ros::ok()){
+    decision_maker.startExploration();
+  }
 
   return 0;
 }

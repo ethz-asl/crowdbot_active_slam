@@ -6,18 +6,12 @@
 #include <ros/package.h>
 
 
-int main(int argc, char **argv)
-{
-  // Get path and file name
-  std::string package_path = ros::package::getPath("crowdbot_active_slam");
-  std::string test_results_path = package_path + "/test_results/" + argv[1];
-
-  std::ifstream cov_file(test_results_path.c_str());
-  std::string line;
+void getUncertainty(std::string file_path, std::vector<double>& uncertainty_vec,
+                                              std::vector<double>& path_length_vec){
+  std::ifstream cov_file(file_path.c_str());
   int i = 0;
   double path_length, xx, xy, xtheta, yy, ytheta, thetatheta;
-  std::vector<double> uncertainty_vec;
-  std::vector<double> path_length_vec;
+  std::string line;
 
   if (cov_file.is_open()){
     while (std::getline(cov_file, line)){
@@ -77,12 +71,44 @@ int main(int argc, char **argv)
   else {
     ROS_INFO("Failed to open file!");
   }
+}
+
+
+int main(int argc, char **argv)
+{
+  // Get path and file name
+  std::string package_path = ros::package::getPath("crowdbot_active_slam");
+
+  int nr_of_tests = argc;
+
+  std::vector<std::vector<double>> uncertainty_vecs;
+  std::vector<std::vector<double>> path_length_vecs;
+  std::vector<std::string> paths;
+  for (int i = 1; i < nr_of_tests; i++){
+    paths.push_back(package_path + "/" + argv[i]);
+
+    std::vector<double> uncertainty_vec;
+    std::vector<double> path_length_vec;
+    getUncertainty(paths[i - 1], uncertainty_vec, path_length_vec);
+    uncertainty_vecs.push_back(uncertainty_vec);
+    path_length_vecs.push_back(path_length_vec);
+  }
 
   // Print node number
-  std::cout << "Node number: " << uncertainty_vec.size() << std::endl;
+  std::cout << "Node number: " << uncertainty_vecs[0].size() << std::endl;
 
   // Plot results
-  plotty::plot(path_length_vec, uncertainty_vec);
+  for (int i = 1; i < nr_of_tests; i++){
+    if (i < 6){
+      plotty::plot(path_length_vecs[i - 1], uncertainty_vecs[i - 1], "b");
+    }
+    else if (i < 11){
+      plotty::plot(path_length_vecs[i - 1], uncertainty_vecs[i - 1], "r");
+    }
+    else {
+      plotty::plot(path_length_vecs[i - 1], uncertainty_vecs[i - 1], "g");
+    }
+  }
   plotty::xlabel("path length [m]");
   plotty::ylabel("sigma [1]");
   plotty::show();
