@@ -69,6 +69,11 @@ target_link_libraries(graph_optimisation gtsam
 target_link_libraries(frontier_exploration ${catkin_LIBRARIES})
 target_link_libraries(decision_maker ${catkin_LIBRARIES} ${SBPL_LIBRARIES})
 
+# add dependencies to make sure that srv files are generated before used
+add_dependencies(graph_optimisation crowdbot_active_slam_generate_messages_cpp)
+add_dependencies(frontier_exploration crowdbot_active_slam_generate_messages_cpp)
+add_dependencies(decision_maker crowdbot_active_slam_generate_messages_cpp)
+
 # test scripts
 add_executable(plot_SDF test_results/scripts/plot_SDF.cpp)
 add_executable(get_SDF test_results/scripts/get_SDF.cpp)
