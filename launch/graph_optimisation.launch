@@ -1,4 +1,6 @@
 <launch>
+  <arg name="using_gazebo" default="true"/>
+  <arg name="scan_topic" default="base_scan"/>
   <node name="graph_optimisation" pkg="crowdbot_active_slam"
     type="graph_optimisation" output="screen">
     <param name="node_dist_linear" value="0.2"/>
@@ -8,6 +10,7 @@
     <param name="map_width" value="2000"/>
     <param name="map_height" value="2000"/>
     <param name="map_resolution" value="0.05"/>
-    <param name="using_gazebo" value="true"/>
+    <param name="using_gazebo" value="$(arg using_gazebo)"/>
+    <param name="scan_callback_topic" value="$(arg scan_topic)"/>
   </node>
 </launch>

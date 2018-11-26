@@ -16,6 +16,7 @@
 #include <ros/package.h>
 #include <geometry_msgs/Pose2D.h>
 #include <geometry_msgs/PoseStamped.h>
+#include <geometry_msgs/PoseWithCovariance.h>
 #include <geometry_msgs/Pose.h>
 #include <geometry_msgs/Point.h>
 #include <geometry_msgs/Quaternion.h>
@@ -78,9 +79,8 @@ public:
   /**
    *  ...
    */
-  void getSubsetOfMap(nav_msgs::Path action_path,
-                      std::vector<double> alpha,
-                      std::map<int, double>& subset);
+  void getSubsetOfMap(nav_msgs::Path& action_path,
+                      std::map<int, int>& subset);
 
   /**
    *  ...
@@ -108,7 +108,7 @@ public:
    *  A callback function on Pose2D scans from the laser scan matcher
    *  which does Graph construction and optimisation.
    */
- void scanMatcherCallback(const geometry_msgs::Pose2D::ConstPtr& pose2D_msg);
+ void scanMatcherCallback(const geometry_msgs::PoseWithCovariance::ConstPtr& pose_msg);
 
   /**
    *  Service callback for saving current uncertainty matrix along path
@@ -178,7 +178,7 @@ private:
   gtsam::Pose2 last_pose2_;
   gtsam::Pose2 init_pose2_;
   gtsam::NonlinearFactorGraph graph_;
-  gtsam::noiseModel::Diagonal::shared_ptr scan_match_noise_;
+  gtsam::noiseModel::Diagonal::shared_ptr average_scan_match_noise_;
   gtsam::Values pose_estimates_;
   gtsam::Values new_estimates_;
   gtsam::ISAM2 isam_;
@@ -225,8 +225,9 @@ private:
   double scan_angle_increment_;
   double scan_range_min_;
   double scan_range_max_;
+  double max_range_allowed_;
   std::vector<gtsam::Matrix> uncertainty_matrices_path_;
-
+  std::string scan_callback_topic_;
 };
 
 #endif  // GRAPH_OPTIMISATION_H

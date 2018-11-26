@@ -1,0 +1,7 @@
+<?xml version="1.0"?>
+<launch>
+  <node pkg="crowdbot_active_slam" type="combined_laser_scans" name="combined_laser_scans" output="screen">
+    <remap from="scan1" to="/sick_laser_front/scan"/>
+    <remap from="scan2_cloud" to="/sick_laser_rear/cloud"/>
+  </node>
+</launch>

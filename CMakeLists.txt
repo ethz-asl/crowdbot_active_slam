@@ -11,7 +11,8 @@ find_package(catkin REQUIRED COMPONENTS
   gazebo_msgs
   nav_msgs
   cmake_modules
-  message_generation)
+  message_generation
+  pcl_ros)
 
 find_package(GTSAM REQUIRED)
 find_package(PCL REQUIRED QUIET)
@@ -19,6 +20,7 @@ find_package(PkgConfig REQUIRED)
 find_package(Eigen3 REQUIRED)
 find_package(plotty REQUIRED)
 find_package(libpointmatcher REQUIRED)
+find_package(glog_catkin REQUIRED)
 pkg_check_modules(csm REQUIRED csm)
 pkg_check_modules(SBPL REQUIRED sbpl)
 find_package(OpenCV REQUIRED)
@@ -50,24 +52,32 @@ generate_messages(
 
 catkin_package(
 INCLUDE_DIRS include
-CATKIN_DEPENDS roscpp roslib tf std_msgs sensor_msgs geometry_msgs gazebo_msgs
+CATKIN_DEPENDS roscpp roslib tf std_msgs sensor_msgs geometry_msgs gazebo_msgs pcl_ros
 DEPENDS EIGEN3 plotty OpenMP)
 
 include_directories(include ${catkin_INCLUDE_DIRS} ${csm_INCLUDE_DIRS}
                             ${EIGEN3_INCLUDE_DIRS} ${SBPL_INCLUDE_DIRS}
                             ${plotty_INCLUDE_DIRS} ${libpointmatcher_INCLUDE_DIRS}
-                            ${GTSAM_INCLUDE_DIRS}  ${OpenCV_INCLUDE_DIRS})
+                            ${GTSAM_INCLUDE_DIRS}  ${OpenCV_INCLUDE_DIRS}
+                            ${pcl_ros_INCLUDE_DIRS} ${glog_catkin_INCLUDE_DIRS})
 
 link_directories(${csm_LIBRARY_DIRS} ${SBPL_LIBRARY_DIRS})
 
 add_executable(graph_optimisation src/graph_optimisation.cpp)
 add_executable(frontier_exploration src/frontier_exploration.cpp)
 add_executable(decision_maker src/decision_maker.cpp)
+add_executable(combined_laser_scans src/combined_laser_scans.cpp)
 
 target_link_libraries(graph_optimisation gtsam
                       ${catkin_LIBRARIES} ${csm_LIBRARIES} ${EIGEN3_LIBRARIES} ${GTSAM_LIBRARIES} ${libpointmatcher_LIBRARIES})
 target_link_libraries(frontier_exploration ${catkin_LIBRARIES})
 target_link_libraries(decision_maker ${catkin_LIBRARIES} ${SBPL_LIBRARIES})
+target_link_libraries(combined_laser_scans ${catkin_LIBRARIES} ${pcl_ros_LIBRARIES} ${glog_catkin_LIBRARIES})
+
+# add dependencies to make sure that srv files are generated before used
+add_dependencies(graph_optimisation crowdbot_active_slam_generate_messages_cpp)
+add_dependencies(frontier_exploration crowdbot_active_slam_generate_messages_cpp)
+add_dependencies(decision_maker crowdbot_active_slam_generate_messages_cpp)
 
 # test scripts
 add_executable(plot_SDF test_results/scripts/plot_SDF.cpp)

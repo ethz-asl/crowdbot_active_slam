@@ -39,10 +39,11 @@ void GraphOptimiser::initParams(){
   nh_private_.param<int>("map_height", map_height_, 1000);
   nh_private_.param<float>("map_resolution", map_resolution_, 0.05);
   nh_private_.param<bool>("using_gazebo", using_gazebo_, false);
+  nh_private_.param<std::string>("scan_callback_topic", scan_callback_topic_, "base_scan");
 
   // Initialise subscriber and publisher
-  pose_sub_ = nh_.subscribe("pose2D", 1, &GraphOptimiser::scanMatcherCallback, this);
-  scan_sub_ = nh_.subscribe("base_scan", 1, &GraphOptimiser::scanCallback, this);
+  pose_sub_ = nh_.subscribe("pose_with_covariance", 1, &GraphOptimiser::scanMatcherCallback, this);
+  scan_sub_ = nh_.subscribe(scan_callback_topic_, 1, &GraphOptimiser::scanCallback, this);
   path_pub_ = nh_.advertise<nav_msgs::Path>("graph_path", 1);
   action_path_pub_ = nh_.advertise<nav_msgs::Path>("action_graph", 1);
   map_pub_ = nh_.advertise<nav_msgs::OccupancyGrid>("occupancy_map", 1);
@@ -63,10 +64,33 @@ void GraphOptimiser::initParams(){
 
   // Initialize base to laser tf
   tf::StampedTransform base_to_laser_tf_;
-  base_to_laser_listener_.waitForTransform("base_link", "laser", ros::Time(0),
-                                ros::Duration(1.0));
-  base_to_laser_listener_.lookupTransform("base_link", "laser",
-                                  ros::Time(0), base_to_laser_tf_);
+
+  bool got_transform = false;
+  while (!got_transform){
+    if (using_gazebo_){
+      try {
+        got_transform = base_to_laser_listener_.waitForTransform("base_link",
+                                    "laser", ros::Time(0), ros::Duration(1.0));
+        base_to_laser_listener_.lookupTransform("base_link", "laser",
+                                              ros::Time(0), base_to_laser_tf_);
+      }
+      catch (tf::TransformException ex){
+        ROS_WARN("Could not get initial transform from base to laser frame, %s", ex.what());
+      }
+    }
+    else {
+      try {
+        got_transform = base_to_laser_listener_.waitForTransform("base_footprint",
+                          "sick_laser_front", ros::Time(0), ros::Duration(1.0));
+        base_to_laser_listener_.lookupTransform("base_footprint", "sick_laser_front",
+                                               ros::Time(0), base_to_laser_tf_);
+      }
+      catch (tf::TransformException ex){
+        ROS_WARN("Could not get initial transform from base to laser frame, %s", ex.what());
+      }
+    }
+  }
+
   base_to_laser_ = base_to_laser_tf_;
   laser_to_base_ = base_to_laser_tf_.inverse();
 
@@ -87,14 +111,14 @@ void GraphOptimiser::initParams(){
   sm_icp_params_.max_iterations = 10;
   sm_icp_params_.epsilon_xy = 0.000001;
   sm_icp_params_.epsilon_theta = 0.000001;
-  sm_icp_params_.max_correspondence_dist = 0.3;
+  sm_icp_params_.max_correspondence_dist = 0.5;
   sm_icp_params_.use_corr_tricks = 1;
   sm_icp_params_.restart = 0;
   sm_icp_params_.restart_threshold_mean_error = 0.01;
   sm_icp_params_.restart_dt = 1.0;
   sm_icp_params_.restart_dtheta = 0.1;
-  sm_icp_params_.outliers_maxPerc = 0.99;
-  sm_icp_params_.outliers_adaptive_order = 0.99;
+  sm_icp_params_.outliers_maxPerc = 0.97;
+  sm_icp_params_.outliers_adaptive_order = 0.98;
   sm_icp_params_.outliers_adaptive_mult = 2.0;
   sm_icp_params_.outliers_remove_doubles = 1;
   sm_icp_params_.clustering_threshold = 0.25;
@@ -108,9 +132,10 @@ void GraphOptimiser::initParams(){
   sm_icp_params_.do_compute_covariance = 0;
   sm_icp_params_.debug_verify_tricks = 0;
   sm_icp_params_.sigma = 0.01;
+  sm_icp_params_.do_compute_covariance = 1;
 
   // Initialise noise on scan matching nodes
-  scan_match_noise_ = noiseModel::Diagonal::Sigmas((Vector(3) << 0.1, 0.1, 0.2));
+  average_scan_match_noise_ = noiseModel::Diagonal::Variances((Vector(3) << 0.0000001, 0.0000001, 0.00000001));
 
   // ISAM2
   ISAM2Params parameters;
@@ -136,6 +161,9 @@ void GraphOptimiser::initParams(){
       occupancy_grid_msg_.data.push_back(-1);
     }
   }
+
+  // Init max allowed scan range
+  max_range_allowed_ = 30;
 
   // Init log log_odds_array_
   log_odds_array_ = Eigen::MatrixXf(map_width_, map_height_);
@@ -188,9 +216,17 @@ void GraphOptimiser::laserScanToLDP(sensor_msgs::LaserScan& scan_msg, LDP& ldp){
   for (unsigned int i = 0; i < n; i++){
     double r = scan_msg.ranges[i];
 
-    if (r > scan_range_min_ && r < scan_range_max_){
+    if (r > scan_range_min_ && r < max_range_allowed_){
       ldp->valid[i] = 1;
       ldp->readings[i] = r;
+    }
+    else if (r == 0){
+      ldp->valid[i] = 0;
+      ldp->readings[i] = 0;
+    }
+    else if (r <= scan_range_min_){
+      ldp->valid[i] = 0;
+      ldp->readings[i] = 0;
     }
     else{
       ldp->valid[i] = 0;
@@ -212,10 +248,10 @@ void GraphOptimiser::laserScanToLDP(sensor_msgs::LaserScan& scan_msg, LDP& ldp){
   ldp->true_pose[2] = 0.0;
 }
 
-void GraphOptimiser::getSubsetOfMap(nav_msgs::Path action_path,
-                                    std::vector<double> alpha,
-                                    std::map<int, double>& subset){
+void GraphOptimiser::getSubsetOfMap(nav_msgs::Path& action_path,
+                                    std::map<int, int>& subset){
   //
+  std::map<int,int>::iterator finder;
   int node_size = action_path.poses.size();
   for (int i = 0; i < node_size; i++){
     // Get pose of laser
@@ -233,7 +269,7 @@ void GraphOptimiser::getSubsetOfMap(nav_msgs::Path action_path,
 
     // Bresenham
     double theta = 0;
-    for (unsigned int j = 0; j < scan_ranges_size_; j++){
+    for (int j = 0; j < scan_ranges_size_; j++){
       bool wall_reached = false;
       int dx = cos(theta);
       int dy = sin(theta);
@@ -260,35 +296,31 @@ void GraphOptimiser::getSubsetOfMap(nav_msgs::Path action_path,
             y += ystep;
             fraction -= twodx;
           }
-          // Check if x,y still in map
-          if (x >= 0 && x < int(map_width_) && y >= 0 && y < int(map_height_)){
-            int temp_id = mapIndexToId(x, y, map_width_);
-            // Check if next cell is not wall and not unknown
-            int temp_prob = int(occupancy_grid_msg_.data[temp_id]);
-            if (temp_prob < 90 && temp_prob != -1){
-              // Check if already in subset
-              if (subset.find(temp_id) != subset.end()){
-                subset.find(temp_id)->second = alpha[i];
-              }
-              else {
-                subset.insert(std::make_pair(temp_id, alpha[i]));
-              }
+          int temp_id = mapIndexToId(x, y, map_width_);
+          // Check if next cell is not wall and not unknown
+          int temp_prob = int(occupancy_grid_msg_.data[temp_id]);
+          if (temp_prob < 90 && temp_prob != -1){
+            // Check if already in subset
+            finder = subset.find(temp_id);
+            if (finder != subset.end()){
+              finder->second = i;
             }
-            else if (temp_prob >= 90){
-              // Check if already in subset
-              if (subset.find(temp_id) != subset.end()){
-                subset.find(temp_id)->second = alpha[i];
-              }
-              else {
-                subset.insert(std::make_pair(temp_id, alpha[i]));
-              }
-              wall_reached = true;
-            }
-            // if unknown
             else {
-              wall_reached = true;
+              subset.insert(std::make_pair(temp_id, i));
             }
           }
+          else if (temp_prob >= 90){
+            // Check if already in subset
+            finder = subset.find(temp_id);
+            if (finder != subset.end()){
+              finder->second = i;
+            }
+            else {
+              subset.insert(std::make_pair(temp_id, i));
+            }
+            wall_reached = true;
+          }
+          // if unknown
           else {
             wall_reached = true;
           }
@@ -306,35 +338,31 @@ void GraphOptimiser::getSubsetOfMap(nav_msgs::Path action_path,
             x += xstep;
             fraction -= twody;
           }
-          // Check if x,y still in map
-          if (x >= 0 && x < int(map_width_) && y >= 0 && y < int(map_height_)){
-            int temp_id = mapIndexToId(x, y, map_width_);
-            // Check if next cell is not a wall or unkown
-            int temp_prob = int(occupancy_grid_msg_.data[temp_id]);
-            if (temp_prob < 90 && temp_prob != -1){
-              // Check if already in subset
-              if (subset.find(temp_id) != subset.end()){
-                subset.find(temp_id)->second = alpha[i];
-              }
-              else {
-                subset.insert(std::make_pair(temp_id, alpha[i]));
-              }
+          int temp_id = mapIndexToId(x, y, map_width_);
+          // Check if next cell is not a wall or unkown
+          int temp_prob = int(occupancy_grid_msg_.data[temp_id]);
+          if (temp_prob < 90 && temp_prob != -1){
+            // Check if already in subset
+            finder = subset.find(temp_id);
+            if (finder != subset.end()){
+              finder->second = i;
             }
-            else if (temp_prob >= 90){
-              // Check if already in subset
-              if (subset.find(temp_id) != subset.end()){
-                subset.find(temp_id)->second = alpha[i];
-              }
-              else {
-                subset.insert(std::make_pair(temp_id, alpha[i]));
-              }
-              wall_reached = true;
-            }
-            // if unknown
             else {
-              wall_reached = true;
+              subset.insert(std::make_pair(temp_id, i));
             }
           }
+          else if (temp_prob >= 90){
+            // Check if already in subset
+            finder = subset.find(temp_id);
+            if (finder != subset.end()){
+              finder->second = i;
+            }
+            else {
+              subset.insert(std::make_pair(temp_id, i));
+            }
+            wall_reached = true;
+          }
+          // if unknown
           else {
             wall_reached = true;
           }
@@ -445,9 +473,12 @@ void GraphOptimiser::drawMap(gtsam::Values pose_estimates,
     for (int j = 0; j < keyframe_ldp_vec[i]->nrays; j++){
       double reading = keyframe_ldp_vec[i]->readings[j];
 
-      if (reading == -1){
+      if (reading == 0) {
+        continue;
+      }
+      else if (reading == -1){
         // We can assume that there exist never a reading < 0.1
-        reading = scan_range_max_;
+        reading = max_range_allowed_;
       }
 
       double angle = keyframe_ldp_vec[i]->theta[j];
@@ -471,7 +502,7 @@ void GraphOptimiser::drawMap(gtsam::Values pose_estimates,
       int y1 = end_point_index[1];
 
       // Update log odds of scan points
-      if (reading == scan_range_max_){
+      if (reading == max_range_allowed_){
         log_odds_array_(x1, y1) += l_free_ - l_0_;
       }
       else {
@@ -562,9 +593,12 @@ void GraphOptimiser::updateMap(gtsam::Values pose_estimates,
   for (int j = 0; j < keyframe_ldp_vec[i]->nrays; j++){
     double reading = keyframe_ldp_vec[i]->readings[j];
 
-    if (reading == -1){
+    if (reading == 0) {
+      continue;
+    }
+    else if (reading == -1){
       // We can assume that there exist never a reading < 0.1
-      reading = scan_range_max_;
+      reading = max_range_allowed_;
     }
 
     double angle = keyframe_ldp_vec[i]->theta[j];
@@ -588,7 +622,7 @@ void GraphOptimiser::updateMap(gtsam::Values pose_estimates,
     int y1 = end_point_index[1];
 
     // Update log odds of scan points
-    if (reading == scan_range_max_){
+    if (reading == max_range_allowed_){
       log_odds_array_(x1, y1) += l_free_ - l_0_;
     }
     else {
@@ -717,8 +751,7 @@ bool GraphOptimiser::utilityCalcServiceCallback(
   // Get covariance from current position
   noiseModel::Gaussian::shared_ptr current_marginal_noise;
   if (node_counter_ == 1){
-    current_marginal_noise =
-        noiseModel::Diagonal::Sigmas((Vector(3) << 0.1, 0.1, 0.1));
+    current_marginal_noise = average_scan_match_noise_;
   }
   else {
     current_marginal_noise =
@@ -765,7 +798,7 @@ bool GraphOptimiser::utilityCalcServiceCallback(
       }
 
       action_graph.add(BetweenFactor<Pose2>(node_counter - 1, node_counter,
-        next_mean, scan_match_noise_));
+        next_mean, average_scan_match_noise_));
       action_estimates.insert(node_counter, next_pose);
 
       // Check for loop closings
@@ -796,13 +829,13 @@ bool GraphOptimiser::utilityCalcServiceCallback(
             if (map_of_lc.find(j) != map_of_lc.end()){
               int lc_index = map_of_lc.find(j)->second;
               action_graph.add(BetweenFactor<Pose2>(node_counter, Symbol(lc, lc_index),
-                                              diff_pose2, scan_match_noise_));
+                                              diff_pose2, average_scan_match_noise_));
             }
             else {
               action_graph.add(PriorFactor<Pose2>(Symbol(lc, lc_counter),
                                               tmp_pose2, current_marginal_noise));
               action_graph.add(BetweenFactor<Pose2>(node_counter, Symbol(lc, lc_counter),
-                                              diff_pose2, scan_match_noise_));
+                                              diff_pose2, average_scan_match_noise_));
               action_estimates.insert(Symbol(lc, lc_counter), tmp_pose2);
 
               map_of_lc.insert(std::make_pair(j, lc_counter));
@@ -860,12 +893,12 @@ bool GraphOptimiser::utilityCalcServiceCallback(
     alpha.push_back(1.0 + 1.0 / sigma_temp);
   }
 
-  std::map<int, double> subset;
-  getSubsetOfMap(action_path, alpha, subset);
+  std::map<int, int> subset;
+  getSubsetOfMap(action_path, subset);
 
   // Calculate utility
   double utility = 0;
-  for (std::map<int, double>::iterator it = subset.begin(); it != subset.end(); ++it){
+  for (std::map<int, int>::iterator it = subset.begin(); it != subset.end(); ++it){
     // Get probability
     int p_percent = int(occupancy_grid_msg_.data[it->first]);
     // Check if cell is unkonwn
@@ -873,12 +906,21 @@ bool GraphOptimiser::utilityCalcServiceCallback(
     // Check if not 0 or 1 to avoid nan's
     if (p_percent != 0 && p_percent != 100){
       double p = double(p_percent) / 100.0;
-      utility += -(p * log2(p) + (1 - p) * log2(1 - p)) -
-      1.0 / (1.0 - it->second) * log2(pow(p, it->second) + pow(1 - p, it->second));
-      // std::cout << "percent: " << p_percent << std::endl;
+      if (alpha[it->second] > 1000){
+        utility += -(p * log2(p) + (1 - p) * log2(1 - p)) + std::max(p, 1 - p);
+      }
+      else{
+        utility += -(p * log2(p) + (1 - p) * log2(1 - p)) -
+        1.0 / (1.0 - alpha[it->second]) * log2(pow(p, alpha[it->second]) + pow(1 - p, alpha[it->second]));
+      }
+
+      // std::cout << "aplha: " << it->second << std::endl;
+      // std::cout << "renyi: " << log2(pow(p, it->second) + pow(1 - p, it->second)) << std::endl;
+
       // std::cout << "utility: " << utility << std::endl;
     }
   }
+
   // normalize utility by path path_length
   if (request.exploration_type == "utility_normalized"){
     utility = utility / path_length;
@@ -940,19 +982,39 @@ void GraphOptimiser::scanCallback(const sensor_msgs::LaserScan::ConstPtr& scan_m
 
 }
 
-void GraphOptimiser::scanMatcherCallback(const geometry_msgs::Pose2D::ConstPtr& pose2D_msg){
+void GraphOptimiser::scanMatcherCallback(const geometry_msgs::PoseWithCovariance::ConstPtr& pose_msg){
   // Check if scan callback initialized
   if (!scan_callback_initialized_) return;
 
   // Get newest transform from odom to base_link for later use
   tf::StampedTransform odom_stamped_transform;
-  odom_listener_.lookupTransform("/base_link", "/odom", ros::Time(0),
-                                 odom_stamped_transform);
+  if (using_gazebo_){
+    odom_listener_.waitForTransform("/base_link", "/odom",
+                                    ros::Time(0), ros::Duration(1.0));
+    odom_listener_.lookupTransform("/base_link", "/odom", ros::Time(0),
+                                   odom_stamped_transform);
+  }
+  else{
+    odom_listener_.waitForTransform("/base_footprint", "/odom",
+                                    ros::Time(0), ros::Duration(1.0));
+    odom_listener_.lookupTransform("/base_footprint", "/odom", ros::Time(0),
+                                   odom_stamped_transform);
+  }
+
   tf::Transform odom_transform;
   odom_transform = static_cast<tf::Transform>(odom_stamped_transform);
 
   // Save msg as Pose2
-  current_pose2_ = Pose2((*pose2D_msg).x, (*pose2D_msg).y, (*pose2D_msg).theta);
+  tf::Quaternion temp_orientation;
+  quaternionMsgToTF((*pose_msg).pose.orientation, temp_orientation);
+  current_pose2_ = Pose2((*pose_msg).pose.position.x, (*pose_msg).pose.position.y,
+                         tf::getYaw(temp_orientation));
+
+  noiseModel::Diagonal::shared_ptr temp_scan_match_noise =
+         noiseModel::Diagonal::Variances(
+                               (Vector(3) << (*pose_msg).covariance[0],
+                                             (*pose_msg).covariance[7],
+                                             (*pose_msg).covariance[35]));
 
   // Check if it is the first scan
   if (first_scan_pose_){
@@ -974,7 +1036,7 @@ void GraphOptimiser::scanMatcherCallback(const geometry_msgs::Pose2D::ConstPtr& 
     pose_estimates_.insert(node_counter_, init_pose2_);
     new_estimates_ = pose_estimates_;
     noiseModel::Diagonal::shared_ptr prior_noise =
-      noiseModel::Diagonal::Sigmas((Vector(3) << 0.1, 0.1, 0.1));
+      noiseModel::Diagonal::Sigmas((Vector(3) << 0.001, 0.001, 0.0001));
     graph_.add(PriorFactor<Pose2>(node_counter_, init_pose2_, prior_noise));
 
     // Save scan as LDP
@@ -986,9 +1048,9 @@ void GraphOptimiser::scanMatcherCallback(const geometry_msgs::Pose2D::ConstPtr& 
     sm_icp_params_.max_reading = latest_scan_msg_.range_max;
 
     Matrix initial_covariance(3, 3);
-    initial_covariance << 0.01, 0.0, 0.0,
-                          0.0, 0.01, 0.0,
-                          0.0, 0.0, 0.01;
+    initial_covariance << 0.00001, 0.0, 0.0,
+                          0.0, 0.00001, 0.0,
+                          0.0, 0.0, 0.0000001;
     uncertainty_matrices_path_.push_back(initial_covariance);
 
     // Update variables
@@ -1023,7 +1085,7 @@ void GraphOptimiser::scanMatcherCallback(const geometry_msgs::Pose2D::ConstPtr& 
       pose_estimates_.insert(node_counter_, current_pose2_estimate);
       new_estimates_.insert(node_counter_, current_pose2_estimate);
       graph_.add(BetweenFactor<Pose2>(node_counter_ - 1, node_counter_,
-        next_mean, scan_match_noise_));
+                 next_mean, temp_scan_match_noise));
 
       // look for loop closing factors
       double x_high = current_pose2_estimate.x() + lc_radius_;
@@ -1076,9 +1138,15 @@ void GraphOptimiser::scanMatcherCallback(const geometry_msgs::Pose2D::ConstPtr& 
                           pose_diff_tf.getOrigin().getY(),
                           tf::getYaw(pose_diff_tf.getRotation()));
 
+            noiseModel::Diagonal::shared_ptr scan_match_noise =
+              noiseModel::Diagonal::Variances(
+                  (Vector(3) << gsl_matrix_get(sm_icp_result_.cov_x_m, 0, 0),
+                                gsl_matrix_get(sm_icp_result_.cov_x_m, 1, 1),
+                                gsl_matrix_get(sm_icp_result_.cov_x_m, 2, 2)));
+
             // Add new factor between current_pose2_ and node i
             graph_.add(BetweenFactor<Pose2>(node_counter_, i, lc_mean,
-                       scan_match_noise_));
+                       scan_match_noise));
           }
         }
       }
@@ -1095,6 +1163,7 @@ void GraphOptimiser::scanMatcherCallback(const geometry_msgs::Pose2D::ConstPtr& 
 
       // Save current uncertainty
       uncertainty_matrices_path_.push_back(isam_.marginalCovariance(node_counter_));
+      // std::cout << isam_.marginalCovariance(node_counter_) << std::endl;
 
       // Create a path msg of the graph node estimates
       nav_msgs::Path new_path;
