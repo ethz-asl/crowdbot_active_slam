@@ -212,7 +212,7 @@ bool FrontierExploration::getFrontierCentroid(unsigned int initial_cell,
     std::vector<int> cell = positionToMapIndex(centroid_x, centroid_y, map_width,
                                                map_height, map_resolution);
     unsigned int id = cell[0] + cell[1] * map_width;
-    std::vector<unsigned int> neighbour_x_cells = neighbourXCells(id, map_width, map_height, 5);
+    std::vector<unsigned int> neighbour_x_cells = neighbourXCells(id, map_width, map_height, 3);
     for (unsigned int i = 0; i < neighbour_x_cells.size(); i++){
       if (int(latest_map_msg_.data[neighbour_x_cells[i]]) > 90){
         return false;
