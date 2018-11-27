@@ -57,8 +57,10 @@ double xCircleMinDist(int ix ,int iy, int n_cells, Eigen::MatrixXi& map){
     findChange(found_change, occupation, map(ix + x, iy - y), dist_sq); // 8. octant
 
     if (found_change){
-      dist_sq = xc * xc + yc * yc;
-      return sqrt(dist_sq);
+      double dist_sq_temp = xc * xc + yc * yc;
+      if (dist_sq == -1 || dist_sq > dist_sq_temp){
+        dist_sq = dist_sq_temp;
+      }
     }
 
     y++;
@@ -78,8 +80,10 @@ double xCircleMinDist(int ix ,int iy, int n_cells, Eigen::MatrixXi& map){
       yc = y;
       xc = x;
     }
+    found_change = false;
   }
-  return dist_sq;
+  if (dist_sq != -1) return sqrt(dist_sq);
+  else return dist_sq;
 }
 
 int main(int argc, char **argv)
@@ -156,7 +160,11 @@ int main(int argc, char **argv)
         }
         else {
           not_found = false;
-          if (n > 1) n -= 1;
+          double temp_dist = xCircleMinDist(i, j, n + 1, occ_mat);
+          if (dist > temp_dist && temp_dist != -1){
+            dist = temp_dist;
+          }
+          if (n > 2) n -= 2;
           else n = 1;
         }
       }
