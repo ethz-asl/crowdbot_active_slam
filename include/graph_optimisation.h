@@ -16,7 +16,7 @@
 #include <ros/package.h>
 #include <geometry_msgs/Pose2D.h>
 #include <geometry_msgs/PoseStamped.h>
-#include <geometry_msgs/PoseWithCovariance.h>
+#include <geometry_msgs/PoseWithCovarianceStamped.h>
 #include <geometry_msgs/Pose.h>
 #include <geometry_msgs/Point.h>
 #include <geometry_msgs/Quaternion.h>
@@ -108,7 +108,7 @@ public:
    *  A callback function on Pose2D scans from the laser scan matcher
    *  which does Graph construction and optimisation.
    */
- void scanMatcherCallback(const geometry_msgs::PoseWithCovariance::ConstPtr& pose_msg);
+ void scanMatcherCallback(const geometry_msgs::PoseWithCovarianceStamped::ConstPtr& pose_msg);
 
   /**
    *  Service callback for saving current uncertainty matrix along path

@@ -42,7 +42,7 @@ void GraphOptimiser::initParams(){
   nh_private_.param<std::string>("scan_callback_topic", scan_callback_topic_, "base_scan");
 
   // Initialise subscriber and publisher
-  pose_sub_ = nh_.subscribe("pose_with_covariance", 1, &GraphOptimiser::scanMatcherCallback, this);
+  pose_sub_ = nh_.subscribe("pose_with_covariance_stamped", 1, &GraphOptimiser::scanMatcherCallback, this);
   scan_sub_ = nh_.subscribe(scan_callback_topic_, 1, &GraphOptimiser::scanCallback, this);
   path_pub_ = nh_.advertise<nav_msgs::Path>("graph_path", 1);
   action_path_pub_ = nh_.advertise<nav_msgs::Path>("action_graph", 1);
@@ -129,7 +129,6 @@ void GraphOptimiser::initParams(){
   sm_icp_params_.use_point_to_line_distance = 1;
   sm_icp_params_.use_ml_weights = 0;
   sm_icp_params_.use_sigma_weights = 0;
-  sm_icp_params_.do_compute_covariance = 0;
   sm_icp_params_.debug_verify_tricks = 0;
   sm_icp_params_.sigma = 0.01;
   sm_icp_params_.do_compute_covariance = 1;
@@ -982,7 +981,7 @@ void GraphOptimiser::scanCallback(const sensor_msgs::LaserScan::ConstPtr& scan_m
 
 }
 
-void GraphOptimiser::scanMatcherCallback(const geometry_msgs::PoseWithCovariance::ConstPtr& pose_msg){
+void GraphOptimiser::scanMatcherCallback(const geometry_msgs::PoseWithCovarianceStamped::ConstPtr& pose_msg){
   // Check if scan callback initialized
   if (!scan_callback_initialized_) return;
 
@@ -1006,15 +1005,15 @@ void GraphOptimiser::scanMatcherCallback(const geometry_msgs::PoseWithCovariance
 
   // Save msg as Pose2
   tf::Quaternion temp_orientation;
-  quaternionMsgToTF((*pose_msg).pose.orientation, temp_orientation);
-  current_pose2_ = Pose2((*pose_msg).pose.position.x, (*pose_msg).pose.position.y,
+  quaternionMsgToTF((*pose_msg).pose.pose.orientation, temp_orientation);
+  current_pose2_ = Pose2((*pose_msg).pose.pose.position.x, (*pose_msg).pose.pose.position.y,
                          tf::getYaw(temp_orientation));
 
   noiseModel::Diagonal::shared_ptr temp_scan_match_noise =
          noiseModel::Diagonal::Variances(
-                               (Vector(3) << (*pose_msg).covariance[0],
-                                             (*pose_msg).covariance[7],
-                                             (*pose_msg).covariance[35]));
+                               (Vector(3) << (*pose_msg).pose.covariance[0],
+                                             (*pose_msg).pose.covariance[7],
+                                             (*pose_msg).pose.covariance[35]));
 
   // Check if it is the first scan
   if (first_scan_pose_){
@@ -1042,6 +1041,11 @@ void GraphOptimiser::scanMatcherCallback(const geometry_msgs::PoseWithCovariance
     // Save scan as LDP
     laserScanToLDP(latest_scan_msg_, current_ldp_);
     keyframe_ldp_vec_.push_back(current_ldp_);
+
+    // Check if same stamp
+    if (latest_scan_msg_.header.stamp != (*pose_msg).header.stamp){
+      ROS_WARN("Different scan and pose stamps!");
+    }
 
     // Init some sm icp params from laser scan msg
     sm_icp_params_.min_reading = latest_scan_msg_.range_min;
