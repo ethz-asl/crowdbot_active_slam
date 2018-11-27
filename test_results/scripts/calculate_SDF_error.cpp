@@ -57,9 +57,5 @@ int main(int argc, char **argv)
   }
 
   std::cout << "sdf_score: " << sdf_score << std::endl;
-  // std::cout << "Number of known cells: " << i << std::endl;
-  // std::cout << "Number of known test cells, while unknown in ref map: " << j << std::endl;
-  // std::cout << "score for known test cells, while unkown in ref map: " << over_ref_score << std::endl;
-  // std::cout << "Number of known ref cells, while unknown in test map: " << k << std::endl;
   return 0;
 }
