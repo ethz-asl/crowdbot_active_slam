@@ -75,6 +75,9 @@ int main(int argc, char **argv)
   double min_error = 1000;
   for (int i = 0; i < width; i++){
     for (int j = 0; j < height; j++){
+      // if (sdf_true_mat(i, j) < 0) sdf_diff(i, j) = 0;
+      // if (sdf_diff(i, j) <= 1) sdf_diff(i, j) = 0;
+      // else sdf_diff(i, j) -= 1;
       if (sdf_diff(i, j) > max_error) max_error = sdf_diff(i, j);
       if (sdf_diff(i, j) < min_error) min_error = sdf_diff(i, j);
     }
