@@ -15,16 +15,6 @@ GraphOptimiser::GraphOptimiser(ros::NodeHandle nh, ros::NodeHandle nh_):
 {
   ROS_INFO("Started GraphOptimiser");
   initParams();
-
-  // Initialise map to odom tf
-  tf::Transform init_tf;
-  init_tf.setOrigin(tf::Vector3(0.0, 0.0, 0.0));
-  tf::Quaternion init_q;
-  init_q.setRPY(0.0, 0.0, 0);
-  init_tf.setRotation(init_q);
-  map_to_odom_tf_ = init_tf;
-  map_br_.sendTransform(tf::StampedTransform(map_to_odom_tf_, ros::Time::now(),
-                        "map", "odom"));
 }
 
 GraphOptimiser::~GraphOptimiser(){}
@@ -258,10 +248,10 @@ void GraphOptimiser::getSubsetOfMap(nav_msgs::Path& action_path,
     tf::poseMsgToTF(action_path.poses[i].pose, robot_tf);
     tf::Transform laser_tf;
     laser_tf = robot_tf * base_to_laser_;
-    double robot_x = laser_tf.getOrigin().getX();
-    double robot_y = laser_tf.getOrigin().getY();
+    double laser_x = laser_tf.getOrigin().getX();
+    double laser_y = laser_tf.getOrigin().getY();
 
-    std::vector<int> laser_idx = positionToMapIndex(robot_x, robot_y,
+    std::vector<int> laser_idx = positionToMapIndex(laser_x, laser_y,
                                       map_width_, map_height_, map_resolution_);
     int x0 = laser_idx[0];
     int y0 = laser_idx[1];
@@ -454,19 +444,19 @@ void GraphOptimiser::drawMap(gtsam::Values pose_estimates,
                                   pose2_estimate.y(),
                                   pose2_estimate.theta()) * base_to_laser_;
 
-    std::vector<int> robot_pose_index;
+    std::vector<int> laser_pose_index;
 
-    double robot_x = pose2_estimate.x();
-    double robot_y = pose2_estimate.y();
-    robot_pose_index = positionToMapIndex(robot_x,
-                                          robot_y,
+    double laser_x = map_to_laser_tf.getOrigin().getX();
+    double laser_y = map_to_laser_tf.getOrigin().getY();
+    laser_pose_index = positionToMapIndex(laser_x,
+                                          laser_y,
                                           map_width_,
                                           map_height_,
                                           map_resolution_);
 
     // Save index in shorter variable for later use
-    int x0 = robot_pose_index[0];
-    int y0 = robot_pose_index[1];
+    int x0 = laser_pose_index[0];
+    int y0 = laser_pose_index[1];
 
     // Loop over each ray of the scan
     for (int j = 0; j < keyframe_ldp_vec[i]->nrays; j++){
@@ -509,13 +499,12 @@ void GraphOptimiser::drawMap(gtsam::Values pose_estimates,
       }
 
       // Check if +/- 0.5*resolution is in a new cell
-      double xdiff = endpoint_x - robot_x;
-      double ydiff = endpoint_y - robot_y;
-      double robot_laser_dist = sqrt(xdiff * xdiff + ydiff * ydiff);
+      double xdiff = endpoint_x - laser_x;
+      double ydiff = endpoint_y - laser_y;
 
       // Calculate delta_x/y with similar triangles
-      double delta_x = 0.5 * map_resolution_ / robot_laser_dist * xdiff;
-      double delta_y = 0.5 * map_resolution_ / robot_laser_dist * ydiff;
+      double delta_x = 0.5 * map_resolution_ / reading * xdiff;
+      double delta_y = 0.5 * map_resolution_ / reading * ydiff;
 
       std::vector<int> end_point_index_p;
       end_point_index_p = positionToMapIndex(endpoint_x + delta_x,
@@ -571,22 +560,22 @@ void GraphOptimiser::updateMap(gtsam::Values pose_estimates,
   Pose2 pose2_estimate = *dynamic_cast<const Pose2*>(&pose_estimates.at(i));
   tf::Transform map_to_laser_tf;
   map_to_laser_tf = xythetaToTF(pose2_estimate.x(),
-                               pose2_estimate.y(),
-                               pose2_estimate.theta()) * base_to_laser_;
+                                pose2_estimate.y(),
+                                pose2_estimate.theta()) * base_to_laser_;
 
-  std::vector<int> robot_pose_index;
+  std::vector<int> laser_pose_index;
 
-  double robot_x = pose2_estimate.x();
-  double robot_y = pose2_estimate.y();
-  robot_pose_index = positionToMapIndex(robot_x,
-                                        robot_y,
+  double laser_x = map_to_laser_tf.getOrigin().getX();
+  double laser_y = map_to_laser_tf.getOrigin().getY();
+  laser_pose_index = positionToMapIndex(laser_x,
+                                        laser_y,
                                         map_width_,
                                         map_height_,
                                         map_resolution_);
 
   // Save index in shorter variable for later use
-  int x0 = robot_pose_index[0];
-  int y0 = robot_pose_index[1];
+  int x0 = laser_pose_index[0];
+  int y0 = laser_pose_index[1];
 
   // Loop over each ray of the scan
   for (int j = 0; j < keyframe_ldp_vec[i]->nrays; j++){
@@ -631,13 +620,12 @@ void GraphOptimiser::updateMap(gtsam::Values pose_estimates,
     occupancy_grid_msg_.data[temp_id] = 100 * (1.0 - 1.0 / (1.0 + exp(log_odds_array_(x1, y1))));
 
     // Check if +/- 0.5*resolution is in a new cell
-    double xdiff = endpoint_x - robot_x;
-    double ydiff = endpoint_y - robot_y;
-    double robot_laser_dist = sqrt(xdiff * xdiff + ydiff * ydiff);
+    double xdiff = endpoint_x - laser_x;
+    double ydiff = endpoint_y - laser_y;
 
     // Calculate delta_x/y with similar triangles
-    double delta_x = 0.5 * map_resolution_ / robot_laser_dist * xdiff;
-    double delta_y = 0.5 * map_resolution_ / robot_laser_dist * ydiff;
+    double delta_x = 0.5 * map_resolution_ / reading * xdiff;
+    double delta_y = 0.5 * map_resolution_ / reading * ydiff;
 
     std::vector<int> end_point_index_p;
     end_point_index_p = positionToMapIndex(endpoint_x + delta_x,
@@ -915,7 +903,6 @@ bool GraphOptimiser::utilityCalcServiceCallback(
 
       // std::cout << "aplha: " << it->second << std::endl;
       // std::cout << "renyi: " << log2(pow(p, it->second) + pow(1 - p, it->second)) << std::endl;
-
       // std::cout << "utility: " << utility << std::endl;
     }
   }
@@ -985,6 +972,12 @@ void GraphOptimiser::scanMatcherCallback(const geometry_msgs::PoseWithCovariance
   // Check if scan callback initialized
   if (!scan_callback_initialized_) return;
 
+  // Check if same stamp
+  if (latest_scan_msg_.header.stamp != (*pose_msg).header.stamp){
+   ROS_WARN("Different scan and pose stamps! Scans are skipped!");
+   return;
+  }
+
   // Get newest transform from odom to base_link for later use
   tf::StampedTransform odom_stamped_transform;
   if (using_gazebo_){
@@ -1006,8 +999,9 @@ void GraphOptimiser::scanMatcherCallback(const geometry_msgs::PoseWithCovariance
   // Save msg as Pose2
   tf::Quaternion temp_orientation;
   quaternionMsgToTF((*pose_msg).pose.pose.orientation, temp_orientation);
-  current_pose2_ = Pose2((*pose_msg).pose.pose.position.x, (*pose_msg).pose.pose.position.y,
-                         tf::getYaw(temp_orientation));
+  current_pose2_odom_ = Pose2((*pose_msg).pose.pose.position.x,
+                              (*pose_msg).pose.pose.position.y,
+                              tf::getYaw(temp_orientation));
 
   noiseModel::Diagonal::shared_ptr temp_scan_match_noise =
          noiseModel::Diagonal::Variances(
@@ -1024,28 +1018,34 @@ void GraphOptimiser::scanMatcherCallback(const geometry_msgs::PoseWithCovariance
       get_ground_truth_client_.call(ground_truth_msg);
       tf::Quaternion ground_truth_orientation;
       quaternionMsgToTF(ground_truth_msg.response.pose.orientation, ground_truth_orientation);
-      init_pose2_ = Pose2(ground_truth_msg.response.pose.position.x,
+      init_pose2_map_ = Pose2(ground_truth_msg.response.pose.position.x,
                           ground_truth_msg.response.pose.position.y,
                           tf::getYaw(ground_truth_orientation));
     }
     else {
-      init_pose2_ = Pose2(0.0, 0.0, 0.0);
+      init_pose2_map_ = Pose2(0.0, 0.0, 0.0);
     }
+
+    // Initialise map to odom tf
+    tf::Transform init_tf;
+    init_tf.setOrigin(tf::Vector3(init_pose2_map_.x(), init_pose2_map_.y(), 0.0));
+    tf::Quaternion init_q;
+    init_q.setRPY(0.0, 0.0, init_pose2_map_.theta());
+    init_tf.setRotation(init_q);
+    map_to_odom_tf_ = init_tf;
+    map_br_.sendTransform(tf::StampedTransform(map_to_odom_tf_, ros::Time::now(),
+                          "map", "odom"));
+
     // Create graph with first node
-    pose_estimates_.insert(node_counter_, init_pose2_);
+    pose_estimates_.insert(node_counter_, init_pose2_map_);
     new_estimates_ = pose_estimates_;
     noiseModel::Diagonal::shared_ptr prior_noise =
       noiseModel::Diagonal::Sigmas((Vector(3) << 0.001, 0.001, 0.0001));
-    graph_.add(PriorFactor<Pose2>(node_counter_, init_pose2_, prior_noise));
+    graph_.add(PriorFactor<Pose2>(node_counter_, init_pose2_map_, prior_noise));
 
     // Save scan as LDP
     laserScanToLDP(latest_scan_msg_, current_ldp_);
     keyframe_ldp_vec_.push_back(current_ldp_);
-
-    // Check if same stamp
-    if (latest_scan_msg_.header.stamp != (*pose_msg).header.stamp){
-      ROS_WARN("Different scan and pose stamps!");
-    }
 
     // Init some sm icp params from laser scan msg
     sm_icp_params_.min_reading = latest_scan_msg_.range_min;
@@ -1060,15 +1060,15 @@ void GraphOptimiser::scanMatcherCallback(const geometry_msgs::PoseWithCovariance
     // Update variables
     node_counter_ += 1;
     first_scan_pose_ = false;
-    last_pose2_ = init_pose2_;
-    prev_pose2_ = current_pose2_;
+    last_pose2_map_ = init_pose2_map_;
+    prev_pose2_odom_ = current_pose2_odom_;
   }
   else {
     // Calculate some variables for decision if to add a new node
-    double x_diff = current_pose2_.x() - prev_pose2_.x();
-    double y_diff = current_pose2_.y() - prev_pose2_.y();
+    double x_diff = current_pose2_odom_.x() - prev_pose2_odom_.x();
+    double y_diff = current_pose2_odom_.y() - prev_pose2_odom_.y();
     double diff_dist_linear_sq = x_diff * x_diff + y_diff * y_diff;
-    double angle_diff = current_pose2_.theta() - prev_pose2_.theta();
+    double angle_diff = current_pose2_odom_.theta() - prev_pose2_odom_.theta();
 
     // Add a new node if robot moved far enough
     if ((diff_dist_linear_sq > dist_linear_sq_) or
@@ -1083,19 +1083,18 @@ void GraphOptimiser::scanMatcherCallback(const geometry_msgs::PoseWithCovariance
       keyframe_ldp_vec_.push_back(current_ldp_);
 
       // Add new node to graph
-      Pose2 next_mean = prev_pose2_.between(current_pose2_);
-      Pose2 prev_pose2_estimate = *dynamic_cast<const Pose2*>(&pose_estimates_.at(node_counter_ - 1));
-      Pose2 current_pose2_estimate = prev_pose2_estimate * next_mean;
-      pose_estimates_.insert(node_counter_, current_pose2_estimate);
-      new_estimates_.insert(node_counter_, current_pose2_estimate);
+      Pose2 next_mean = prev_pose2_odom_.between(current_pose2_odom_);
+      Pose2 current_pose2_map = last_pose2_map_ * next_mean;
+      pose_estimates_.insert(node_counter_, current_pose2_map);
+      new_estimates_.insert(node_counter_, current_pose2_map);
       graph_.add(BetweenFactor<Pose2>(node_counter_ - 1, node_counter_,
                  next_mean, temp_scan_match_noise));
 
       // look for loop closing factors
-      double x_high = current_pose2_estimate.x() + lc_radius_;
-      double x_low = current_pose2_estimate.x() - lc_radius_;
-      double y_high = current_pose2_estimate.y() + lc_radius_;
-      double y_low = current_pose2_estimate.y() - lc_radius_;
+      double x_high = current_pose2_map.x() + lc_radius_;
+      double x_low = current_pose2_map.x() - lc_radius_;
+      double y_high = current_pose2_map.y() + lc_radius_;
+      double y_low = current_pose2_map.y() - lc_radius_;
       double lc_radius_squared = lc_radius_ * lc_radius_;
 
       for (int i = 0; i < node_counter_ - 1; i++){
@@ -1104,8 +1103,8 @@ void GraphOptimiser::scanMatcherCallback(const geometry_msgs::PoseWithCovariance
         // Check if tmp_pose2 is in square region around current pose estimate
         if (tmp_pose2.x() <= x_high && tmp_pose2.x() >= x_low &&
             tmp_pose2.y() <= y_high && tmp_pose2.y() >= y_low){
-          double x_diff = current_pose2_estimate.x() - tmp_pose2.x();
-          double y_diff = current_pose2_estimate.y() - tmp_pose2.y();
+          double x_diff = current_pose2_map.x() - tmp_pose2.x();
+          double y_diff = current_pose2_map.y() - tmp_pose2.y();
 
           // Check if tmp_pose2 is in circle around current pose estimate
           if (x_diff * x_diff + y_diff * y_diff <= lc_radius_squared){
@@ -1114,12 +1113,12 @@ void GraphOptimiser::scanMatcherCallback(const geometry_msgs::PoseWithCovariance
             sm_icp_params_.laser_sens = keyframe_ldp_vec_[i];
 
             // Get Pose tf between current and new Pose as first guess for icp
-            Pose2 diff_pose2 = current_pose2_estimate.between(tmp_pose2);
+            Pose2 diff_pose2 = current_pose2_map.between(tmp_pose2);
             tf::Transform diff_tf;
             diff_tf = xythetaToTF(diff_pose2.x(), diff_pose2.y(), diff_pose2.theta());
 
             tf::Transform first_guess_tf =
-            laser_to_base_ * diff_tf * base_to_laser_;
+              laser_to_base_ * diff_tf * base_to_laser_;
 
             sm_icp_params_.first_guess[0] = first_guess_tf.getOrigin().getX();
             sm_icp_params_.first_guess[1] = first_guess_tf.getOrigin().getY();
@@ -1134,7 +1133,7 @@ void GraphOptimiser::scanMatcherCallback(const geometry_msgs::PoseWithCovariance
                                        sm_icp_result_.x[1],
                                        sm_icp_result_.x[2]);
 
-            // Transform to map frame
+            // Transform to base_link frame
             pose_diff_tf = base_to_laser_ * pose_diff_tf * laser_to_base_;
 
             // Save loop closing tf as Pose2
@@ -1188,16 +1187,16 @@ void GraphOptimiser::scanMatcherCallback(const geometry_msgs::PoseWithCovariance
       path_pub_.publish(graph_path_);
 
       // Update map to odom transform
-      last_pose2_ = *dynamic_cast<const Pose2*>(&pose_estimates_.at(node_counter_));
+      last_pose2_map_ = *dynamic_cast<const Pose2*>(&pose_estimates_.at(node_counter_));
 
       tf::Transform last_pose_tf;
-      last_pose_tf = xythetaToTF(last_pose2_.x(), last_pose2_.y(), last_pose2_.theta());
+      last_pose_tf = xythetaToTF(last_pose2_map_.x(), last_pose2_map_.y(), last_pose2_map_.theta());
 
       map_to_odom_tf_ = last_pose_tf * odom_transform;
 
       // Update variables
       node_counter_ += 1;
-      prev_pose2_ = current_pose2_;
+      prev_pose2_odom_ = current_pose2_odom_;
 
       // Calculate Map
       if (const_map_update_steps_ && (node_counter_ - 1) % 50 == 0){
@@ -1218,8 +1217,8 @@ void GraphOptimiser::scanMatcherCallback(const geometry_msgs::PoseWithCovariance
   }else{
     Pose2 between_pose2;
     Pose2 temp_last_pose2;
-    between_pose2 = prev_pose2_.between(current_pose2_);
-    temp_last_pose2 = last_pose2_ * between_pose2;
+    between_pose2 = prev_pose2_odom_.between(current_pose2_odom_);
+    temp_last_pose2 = last_pose2_map_ * between_pose2;
 
     tf::Transform last_pose_tf;
     last_pose_tf = xythetaToTF(temp_last_pose2.x(),

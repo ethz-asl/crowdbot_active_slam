@@ -173,10 +173,10 @@ private:
   tf::Transform laser_to_base_;
 
   // gtsam objects
-  gtsam::Pose2 prev_pose2_;
-  gtsam::Pose2 current_pose2_;
-  gtsam::Pose2 last_pose2_;
-  gtsam::Pose2 init_pose2_;
+  gtsam::Pose2 prev_pose2_odom_;
+  gtsam::Pose2 current_pose2_odom_;
+  gtsam::Pose2 last_pose2_map_;
+  gtsam::Pose2 init_pose2_map_;
   gtsam::NonlinearFactorGraph graph_;
   gtsam::noiseModel::Diagonal::shared_ptr average_scan_match_noise_;
   gtsam::Values pose_estimates_;
