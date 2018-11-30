@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Adapted from:
+     https://github.com/ethz-asl/deep_interaction_modeling/blob/master/
+     sf_model/gazebo_sim/urdf/pedestrian.xacro -->
+<robot name="pedestrian" xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <xacro:property name="height" value="1.7"/>
+  <xacro:property name="radius" value="0.2"/>
+  <xacro:property name="mass" value="1"/>
+  <xacro:property name="PI" value="3.141592654"/>
+  <xacro:property name="test" value="$(arg t)"/>
+  <link name="base_link">
+    <collision>
+      <origin xyz="0 0 ${height/2}" rpy="0 0 0"/>
+      <geometry>
+        <cylinder length="${height}" radius="${radius}"/>
+      </geometry>
+    </collision>
+
+    <visual>
+      <origin xyz="0 0 ${height/2}" rpy="0 0 0"/>
+      <geometry>
+        <cylinder length="${height}" radius="${radius}"/>
+      </geometry>
+    </visual>
+
+    <!-- Inertia origin must be very low on the ground to insure stable
+         simulation behavior. -->
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="${mass}"/>
+      <inertia ixx="${mass/12.0 * (3*radius*radius + 4.0*height*height)}"
+               ixy="0.0" ixz="0.0"
+               iyy="${mass/12.0 * (3*radius*radius + 4.0*height*height)}"
+               iyz="0.0" izz="${mass/2.0 * radius*radius}"/>
+    </inertial>
+  </link>
+
+
+  <gazebo reference="base_link">
+    <material>Gazebo/Green</material>
+    <turnGravityOff>true</turnGravityOff>
+    <selfCollide>false</selfCollide>
+  </gazebo>
+
+  <!-- Plugin for controlling the XY sliding of the robot -->
+  <gazebo>
+    <plugin name="object_controller" filename="libgazebo_ros_planar_move.so">
+      <commandTopic>cmd_vel</commandTopic>
+      <odometryTopic>odom</odometryTopic>
+      <odometryFrame>world</odometryFrame>
+      <odometryRate>10.0</odometryRate>
+      <robotBaseFrame>$(arg prefix)/base_link</robotBaseFrame>
+    </plugin>
+  </gazebo>
+</robot>

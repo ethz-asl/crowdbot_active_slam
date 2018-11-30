@@ -100,4 +100,5 @@ target_link_libraries(plot_SDF ${catkin_LIBRARIES} ${EIGEN3_LIBRARIES} ${OpenCV_
 install(DIRECTORY
   launch
   matlab
+  urdf
   DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION})
