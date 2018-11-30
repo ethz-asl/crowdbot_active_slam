@@ -91,12 +91,12 @@ public:
   /**
    *  Calculates map with current factor graph and keyframe scans and draws map.
    */
-  void drawMap(gtsam::Values pose_estimates, std::vector<LDP>& keyframe_ldp_vec);
+  void drawMap(gtsam::Values& pose_estimates, std::vector<LDP>& keyframe_ldp_vec);
 
   /**
    *  Updates current map with newest scans.
    */
-  void updateMap(gtsam::Values pose_estimates,
+  void updateMap(gtsam::Values& pose_estimates,
                  std::vector<LDP>& keyframe_ldp_vec);
 
   /**
