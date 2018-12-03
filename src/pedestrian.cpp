@@ -34,15 +34,15 @@ void Pedestrian::PubGoal(grid_map::GridMap* map) {
   grid_map::Position desired_position;
   double obstacle;
   while (into_obj) {
-    desired_position.x() = utils::RandomFloat(map->getPosition().x() * 3 / 4);
-    desired_position.y() = utils::RandomFloat(map->getPosition().y() * 3 / 4);
+    desired_position.x() = utils::RandomFloat(map->getLength().x() / 2.1);
+    desired_position.y() = utils::RandomFloat(map->getLength().y() / 2.1);
     obstacle =
         map->atPosition("Occupied", desired_position + map->getPosition());
     if (obstacle != 1) into_obj = false;
   }
   // if(this->controlled == false){
-  this->desired_pose.x = desired_position.x();
-  this->desired_pose.y = desired_position.y();
+  this->desired_pose.x = desired_position.x() + map->getPosition().x();
+  this->desired_pose.y = desired_position.y() + map->getPosition().y();
   // }
   this->rosPub_goal.publish(this->desired_pose);
 }

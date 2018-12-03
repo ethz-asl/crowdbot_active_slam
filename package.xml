@@ -34,9 +34,11 @@
   <run_depend>geometry_msgs</run_depend>
   <run_depend>nav_msgs</run_depend>
   <run_depend>gazebo_msgs</run_depend>
+  <run_depend>gazebo_ros</run_depend>
   <run_depend>csm</run_depend>
   <run_depend>message_runtime</run_depend>
   <run_depend>plotty</run_depend>
   <run_depend>pcl_ros</run_depend>
   <run_depend>glog_catkin</run_depend>
+  <run_depend>grid_map_ros</run_depend>
 </package>

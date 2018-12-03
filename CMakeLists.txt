@@ -24,6 +24,7 @@ find_package(glog_catkin REQUIRED)
 pkg_check_modules(csm REQUIRED csm)
 pkg_check_modules(SBPL REQUIRED sbpl)
 find_package(OpenCV REQUIRED)
+find_package(grid_map_ros REQUIRED)
 
 add_compile_options(-std=c++11)
 
@@ -52,27 +53,34 @@ generate_messages(
 
 catkin_package(
 INCLUDE_DIRS include
-CATKIN_DEPENDS roscpp roslib tf std_msgs sensor_msgs geometry_msgs gazebo_msgs pcl_ros
-DEPENDS EIGEN3 plotty OpenMP)
+CATKIN_DEPENDS roscpp roslib tf std_msgs sensor_msgs geometry_msgs gazebo_ros pcl_ros
+DEPENDS EIGEN3 plotty OpenMP grid_map_ros)
 
 include_directories(include ${catkin_INCLUDE_DIRS} ${csm_INCLUDE_DIRS}
                             ${EIGEN3_INCLUDE_DIRS} ${SBPL_INCLUDE_DIRS}
                             ${plotty_INCLUDE_DIRS} ${libpointmatcher_INCLUDE_DIRS}
                             ${GTSAM_INCLUDE_DIRS}  ${OpenCV_INCLUDE_DIRS}
-                            ${pcl_ros_INCLUDE_DIRS} ${glog_catkin_INCLUDE_DIRS})
+                            ${pcl_ros_INCLUDE_DIRS} ${glog_catkin_INCLUDE_DIRS}
+                            ${grid_map_ros_INCLUDE_DIRS})
 
 link_directories(${csm_LIBRARY_DIRS} ${SBPL_LIBRARY_DIRS})
+
+add_library(pedestrian src/pedestrian.cpp)
+add_library(utils src/utils.cpp)
 
 add_executable(graph_optimisation src/graph_optimisation.cpp)
 add_executable(frontier_exploration src/frontier_exploration.cpp)
 add_executable(decision_maker src/decision_maker.cpp)
 add_executable(combined_laser_scans src/combined_laser_scans.cpp)
+add_executable(pedestrian_simulator src/pedestrian_simulator.cpp)
 
 target_link_libraries(graph_optimisation gtsam
                       ${catkin_LIBRARIES} ${csm_LIBRARIES} ${EIGEN3_LIBRARIES} ${GTSAM_LIBRARIES} ${libpointmatcher_LIBRARIES})
 target_link_libraries(frontier_exploration ${catkin_LIBRARIES})
 target_link_libraries(decision_maker ${catkin_LIBRARIES} ${SBPL_LIBRARIES})
 target_link_libraries(combined_laser_scans ${catkin_LIBRARIES} ${pcl_ros_LIBRARIES} ${glog_catkin_LIBRARIES})
+target_link_libraries(pedestrian_simulator ${catkin_LIBRARIES}
+                      ${grid_map_ros_LIBRARIES} pedestrian utils)
 
 # add dependencies to make sure that srv files are generated before used
 add_dependencies(graph_optimisation crowdbot_active_slam_generate_messages_cpp)

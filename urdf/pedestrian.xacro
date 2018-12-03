@@ -8,7 +8,6 @@
   <xacro:property name="radius" value="0.2"/>
   <xacro:property name="mass" value="1"/>
   <xacro:property name="PI" value="3.141592654"/>
-  <xacro:property name="test" value="$(arg t)"/>
   <link name="base_link">
     <collision>
       <origin xyz="0 0 ${height/2}" rpy="0 0 0"/>

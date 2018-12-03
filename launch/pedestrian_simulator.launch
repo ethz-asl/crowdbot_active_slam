@@ -1,0 +1,5 @@
+<launch>
+  <node name="pedestrian_simulator" pkg="crowdbot_active_slam"
+    type="pedestrian_simulator" output="screen">
+  </node>
+</launch>

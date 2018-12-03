@@ -21,7 +21,7 @@
 #include <grid_map_ros/grid_map_ros.hpp>
 #include <iostream>
 #include <string>
-#include <utils.hpp>
+#include <utils.h>
 
 using namespace std;
 

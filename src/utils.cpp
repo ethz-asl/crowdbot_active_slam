@@ -30,8 +30,8 @@ void utils::PedestrianStartingPose(double limit_x, double limit_y,
     obstacle = map->atPosition("Occupied", ped_position + map->getPosition());
     if (obstacle != 1 && !(CheckIfObstacle(ped_position, map)) &&
         !(CheckOccupied(x, y, ped_position.x(), ped_position.y()))) {
-      x->at(index) = ped_position.x();
-      y->at(index) = ped_position.y();
+      x->at(index) = ped_position.x() + map->getPosition().x();
+      y->at(index) = ped_position.y() + map->getPosition().y();
       index++;
     }
   }

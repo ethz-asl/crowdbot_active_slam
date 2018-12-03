@@ -35,7 +35,7 @@ double xCircleMinDist(int ix, int iy, int n_cells, Eigen::MatrixXi& map){
   int err = 3 - (n_cells << 1);
   bool found_change = false;
 
-  double xc, yc;
+  int xc, yc;
   if (occupation != 0){
     xc = x - 1;
     yc = y;
