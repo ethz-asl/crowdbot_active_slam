@@ -6,6 +6,7 @@
 
 #include <gazebo_msgs/DeleteModel.h>
 #include <gazebo_msgs/SpawnModel.h>
+#include <gazebo_msgs/GetModelState.h>
 #include <geometry_msgs/Twist.h>
 #include <geometry_msgs/Vector3.h>
 #include <math.h>  // for cosine
@@ -62,7 +63,7 @@ void findChange(bool& change, int occupation, int current_occupation){
 }
 
 double xCircleMinDist(int ix, int iy, int n_cells, Eigen::MatrixXi& map,
-                      int& xc, int& yc){
+                      int& x_closest, int& y_closest){
   // https://www.geeksforgeeks.org/bresenhams-circle-drawing-algorithm/
   float dist_sq = -1;
   int occupation = map(ix, iy);
@@ -71,6 +72,7 @@ double xCircleMinDist(int ix, int iy, int n_cells, Eigen::MatrixXi& map,
   int err = 3 - (n_cells << 1);
   bool found_change = false;
 
+  int xc, yc;
   if (occupation != 0){
     xc = x - 1;
     yc = y;
@@ -82,18 +84,82 @@ double xCircleMinDist(int ix, int iy, int n_cells, Eigen::MatrixXi& map,
 
   while (x >= y){
     findChange(found_change, occupation, map(ix + x, iy + y)); // 1. octant
-    findChange(found_change, occupation, map(ix + y, iy + x)); // 2. octant
-    findChange(found_change, occupation, map(ix - y, iy + x)); // 3. octant
-    findChange(found_change, occupation, map(ix - x, iy + y)); // 4. octant
-    findChange(found_change, occupation, map(ix - x, iy - y)); // 5. octant
-    findChange(found_change, occupation, map(ix - y, iy - x)); // 6. octant
-    findChange(found_change, occupation, map(ix + y, iy - x)); // 7. octant
-    findChange(found_change, occupation, map(ix + x, iy - y)); // 8. octant
-
     if (found_change){
       double dist_sq_temp = xc * xc + yc * yc;
       if (dist_sq == -1 || dist_sq > dist_sq_temp){
         dist_sq = dist_sq_temp;
+        x_closest = ix + x;
+        y_closest = iy + y;
+      }
+    }
+
+    findChange(found_change, occupation, map(ix + y, iy + x)); // 2. octant
+    if (found_change){
+      double dist_sq_temp = xc * xc + yc * yc;
+      if (dist_sq == -1 || dist_sq > dist_sq_temp){
+        dist_sq = dist_sq_temp;
+        x_closest = ix + y;
+        y_closest = iy + x;
+      }
+    }
+
+    findChange(found_change, occupation, map(ix - y, iy + x)); // 3. octant
+    if (found_change){
+      double dist_sq_temp = xc * xc + yc * yc;
+      if (dist_sq == -1 || dist_sq > dist_sq_temp){
+        dist_sq = dist_sq_temp;
+        x_closest = ix - y;
+        y_closest = iy + x;
+      }
+    }
+
+    findChange(found_change, occupation, map(ix - x, iy + y)); // 4. octant
+    if (found_change){
+      double dist_sq_temp = xc * xc + yc * yc;
+      if (dist_sq == -1 || dist_sq > dist_sq_temp){
+        dist_sq = dist_sq_temp;
+        x_closest = ix - x;
+        y_closest = iy + y;
+      }
+    }
+
+    findChange(found_change, occupation, map(ix - x, iy - y)); // 5. octant
+    if (found_change){
+      double dist_sq_temp = xc * xc + yc * yc;
+      if (dist_sq == -1 || dist_sq > dist_sq_temp){
+        dist_sq = dist_sq_temp;
+        x_closest = ix - x;
+        y_closest = iy - y;
+      }
+    }
+
+    findChange(found_change, occupation, map(ix - y, iy - x)); // 6. octant
+    if (found_change){
+      double dist_sq_temp = xc * xc + yc * yc;
+      if (dist_sq == -1 || dist_sq > dist_sq_temp){
+        dist_sq = dist_sq_temp;
+        x_closest = ix - y;
+        y_closest = iy - x;
+      }
+    }
+
+    findChange(found_change, occupation, map(ix + y, iy - x)); // 7. octant
+    if (found_change){
+      double dist_sq_temp = xc * xc + yc * yc;
+      if (dist_sq == -1 || dist_sq > dist_sq_temp){
+        dist_sq = dist_sq_temp;
+        x_closest = ix + y;
+        y_closest = iy - x;
+      }
+    }
+
+    findChange(found_change, occupation, map(ix + x, iy - y)); // 8. octant
+    if (found_change){
+      double dist_sq_temp = xc * xc + yc * yc;
+      if (dist_sq == -1 || dist_sq > dist_sq_temp){
+        dist_sq = dist_sq_temp;
+        x_closest = ix + x;
+        y_closest = iy - y;
       }
     }
 
@@ -140,12 +206,11 @@ geometry_msgs::Vector3 ForceToDestination(Pedestrian* ped, double desired_speed,
   }
   *angular = error;
   // Calculate Force
-  double speed_mod = utils::CalcMod(ped->GetSpeed().x, ped->GetSpeed().y);
   force_dest.x = (e_t.x * desired_speed - ped->GetSpeed().x) / rel_time;
   force_dest.y = (e_t.y * desired_speed - ped->GetSpeed().y) / rel_time;
 
-  // TODO add check for stuck pedestrian
-  if (abs(ped->GetSpeed().x) + abs(ped->GetSpeed().y) <= 0.1){
+  // Check for stuck pedestrian (almost notmoving anymore)
+  if (abs(ped->GetSpeed().x) + abs(ped->GetSpeed().y) <= 0.05){
     ped->PubGoal(map);
   }
 
@@ -160,7 +225,7 @@ geometry_msgs::Vector3 ForceToDestination(Pedestrian* ped, double desired_speed,
 geometry_msgs::Vector3 RepulsiveWallForce(Pedestrian* ped_i,
                                          grid_map::GridMap* map,
                                          Position* map_center, double delta_t) {
-  double A = 4.3, B = 1.07, l = 0.7, g_0;
+  double A = 2.3, B = 1.07, l = 0.7, g_0;
   geometry_msgs::Vector3 force, closest_obj, rel_dist, speed, step, r_s;
   Position ped_position;
 
@@ -169,8 +234,8 @@ geometry_msgs::Vector3 RepulsiveWallForce(Pedestrian* ped_i,
   closest_obj.x = map->atPosition("Closest X", ped_position);
   closest_obj.y = map->atPosition("Closest Y", ped_position);
 
-  rel_dist.x = ped_i->GetCurrentPose().x - closest_obj.x;
-  rel_dist.y = ped_i->GetCurrentPose().y - closest_obj.y;
+  rel_dist.x = ped_position.x() - closest_obj.x;
+  rel_dist.y = ped_position.y() - closest_obj.y;
 
   speed = ped_i->GetSpeed();
   step.x = -speed.x * delta_t;
@@ -249,6 +314,61 @@ geometry_msgs::Vector3 RepulsivePedForce(Pedestrian* ped_i, Pedestrian* ped_j,
   return force;
 }
 
+geometry_msgs::Vector3 RepulsivePioneerForce(Pedestrian* ped_i,
+                                  geometry_msgs::Vector3& pioneer_position,
+                                  geometry_msgs::Vector3& pioneer_speed,
+                                  double delta_t) {
+  // Parameters
+  double A = 4.3;
+  double B = 1.07;
+  double l = 0.7;
+
+  double b = 0;
+  double g_0, w;
+  double mod_r_ij, mod_r_s_ij, mod_s_ij;
+  double cos_phi;
+  geometry_msgs::Vector3 r_ij;
+  geometry_msgs::Vector3 r_s_ij, s_ij;
+  geometry_msgs::Vector3 g;
+  geometry_msgs::Vector3 force;
+  geometry_msgs::Vector3 e_t_i;  // The direction along which apply the speed
+
+  r_ij.x = ped_i->GetCurrentPose().x - pioneer_position.x;
+  r_ij.y = ped_i->GetCurrentPose().y - pioneer_position.y;
+
+  s_ij.x = (pioneer_speed.x - ped_i->GetSpeed().x) * delta_t;
+  s_ij.y = (pioneer_speed.y - ped_i->GetSpeed().y) * delta_t;
+
+  r_s_ij.x = r_ij.x - s_ij.x;
+  r_s_ij.y = r_ij.y - s_ij.y;
+
+  mod_r_ij = utils::CalcMod(r_ij.x, r_ij.y);
+  mod_r_s_ij = utils::CalcMod(r_s_ij.x, r_s_ij.y);
+  mod_s_ij = utils::CalcMod(s_ij.x, s_ij.y);
+
+  b = sqrt(pow(mod_r_ij + mod_r_s_ij, 2) - pow(mod_s_ij, 2)) / 2;
+  // If necessary because at the beginning of the sim we get weird values
+  if (mod_r_ij != 0 && mod_r_s_ij != 0 && mod_s_ij != 0 && b != 0) {
+    g_0 = A * exp(-b / B) * (mod_r_ij + mod_r_s_ij) / (2 * b);
+
+    g.x = g_0 * (r_ij.x / mod_r_ij + r_s_ij.x / mod_r_s_ij) / 2;
+    g.y = g_0 * (r_ij.y / mod_r_ij + r_s_ij.y / mod_r_s_ij) / 2;
+
+    e_t_i = utils::CalcDirection(ped_i->GetCurrentPose(), ped_i->GetGoal());
+    // Get the cos with the scalar product between pedestrian orientation and
+    // relative position of other ped
+    cos_phi = (e_t_i.x * r_ij.x / mod_r_ij) + (e_t_i.y * r_ij.y / mod_r_ij);
+    w = l + (1 - l) * (1 + cos_phi) / 2;
+    // Finally get the force
+    force.x = w * g.x;
+    force.y = w * g.y;
+  } else {
+    force.x = 0;
+    force.y = 0;
+  }
+  return force;
+}
+
 int main(int argc, char** argv) {
   int N;
   int robot_not_seen;
@@ -275,11 +395,13 @@ int main(int argc, char** argv) {
       nh.serviceClient<std_srvs::Empty>("/gazebo/pause_physics");
   ros::ServiceClient unpause_simulation =
       nh.serviceClient<std_srvs::Empty>("/gazebo/unpause_physics");
+  ros::ServiceClient pioneer_state =
+      nh.serviceClient<gazebo_msgs::GetModelState>("/gazebo/get_model_state");
   ros::service::waitForService("/gazebo/spawn_urdf_model");
   ros::Publisher map_publisher =
       nh.advertise<grid_map_msgs::GridMap>("grid_map", 1, true);
 
-  nh.param<int>("/n_ped", N, 10);
+  nh.param<int>("n_ped", N, 30);
   nh.param<std::string>("/ped_name", base_name, "pedestrian");
   nh.param<std::string>("/occupancy_map_file", occupancy_grid_map_file,
                         "occupancy_grid_map_lab_2000x2000.txt");
@@ -294,8 +416,8 @@ int main(int argc, char** argv) {
   // Simulation parameters
   nh.param<double>("/goal_tol", tolerance, 0.5);
   nh.param<double>("/desired_speed", desired_speed, 0.8);
-  nh.param<double>("/relaxation_time", rel_time, 1);
-  nh.param<double>("/delta_t", delta_t, 0.2);
+  nh.param<double>("/relaxation_time", rel_time, 0.5);
+  nh.param<double>("/delta_t", delta_t, 0.1);
 
   // Create service message request
   gazebo_msgs::SpawnModel model;
@@ -496,8 +618,27 @@ int main(int argc, char** argv) {
   unpause_simulation.call(physics);
   // Calculate Forces
   while (ros::ok()) {
-    // If testing the net we use the force model for every pedestrian except
-    // the ped 0. For ped 0 we rely on the network to provide the cmd_vel
+    // Get current pioneer position and speed
+    gazebo_msgs::GetModelState pioneer_state_msg;
+    pioneer_state_msg.request.model_name = "pioneer";
+    pioneer_state.call(pioneer_state_msg);
+    // Position
+    geometry_msgs::Vector3 pioneer_position;
+    pioneer_position.x = pioneer_state_msg.response.pose.position.x;
+    pioneer_position.y = pioneer_state_msg.response.pose.position.y;
+    // Speed rotated into world frame
+    tf::Quaternion pioneer_orientation;
+    quaternionMsgToTF(pioneer_state_msg.response.pose.orientation,
+                      pioneer_orientation);
+    double theta = tf::getYaw(pioneer_orientation);
+
+    geometry_msgs::Vector3 pioneer_speed;
+    pioneer_speed.x = cos(theta) * pioneer_state_msg.response.twist.linear.x -
+                      sin(theta) * pioneer_state_msg.response.twist.linear.y;
+    pioneer_speed.y = sin(theta) * pioneer_state_msg.response.twist.linear.x +
+                      cos(theta) * pioneer_state_msg.response.twist.linear.y;
+
+    // starting pedestrian index
     int starting_ped_index = 0;
 
     // Now we apply the force model
@@ -516,12 +657,27 @@ int main(int argc, char** argv) {
       // Calculate pedestrians repulsive forces
       for (int j = robot_not_seen; j < N; j++) {
         if (j != i) {
-          geometry_msgs::Vector3 repulsive_force;
-          repulsive_force = RepulsivePedForce(&pedestrians.at(i),
-                                              &pedestrians.at(j), delta_t);
-          total_force.x += repulsive_force.x;
-          total_force.y += repulsive_force.y;
+          if (abs(pedestrians.at(i).GetCurrentPose().x -
+                  pedestrians.at(j).GetCurrentPose().x) < 5.0 &&
+              abs(pedestrians.at(i).GetCurrentPose().y -
+                  pedestrians.at(j).GetCurrentPose().y) < 5.0){
+            geometry_msgs::Vector3 repulsive_force;
+            repulsive_force = RepulsivePedForce(&pedestrians.at(i),
+                                                &pedestrians.at(j), delta_t);
+            total_force.x += repulsive_force.x;
+            total_force.y += repulsive_force.y;
+          }
         }
+      }
+
+      // Calculate pioneer repulsive force
+      if (abs(pedestrians.at(i).GetCurrentPose().x - pioneer_position.x) < 5.0 &&
+          abs(pedestrians.at(i).GetCurrentPose().y - pioneer_position.y) < 5.0){
+        geometry_msgs::Vector3 pioneer_force;
+        pioneer_force = RepulsivePioneerForce(&pedestrians.at(i), pioneer_position,
+                                              pioneer_speed, delta_t);
+        total_force.x += pioneer_force.x;
+        total_force.y += pioneer_force.y;
       }
 
       velocity.linear.x = pedestrians.at(i).GetSpeed().x + dt * total_force.x;
