@@ -67,12 +67,14 @@ link_directories(${csm_LIBRARY_DIRS} ${SBPL_LIBRARY_DIRS})
 
 add_library(pedestrian src/pedestrian.cpp)
 add_library(utils src/utils.cpp)
+add_library(ObjectDetector src/object_detector.cpp)
 
 add_executable(graph_optimisation src/graph_optimisation.cpp)
 add_executable(frontier_exploration src/frontier_exploration.cpp)
 add_executable(decision_maker src/decision_maker.cpp)
 add_executable(combined_laser_scans src/combined_laser_scans.cpp)
 add_executable(pedestrian_simulator src/pedestrian_simulator.cpp)
+add_executable(static_laser_scan_combiner src/static_laser_scan_combiner.cpp)
 
 target_link_libraries(graph_optimisation gtsam
                       ${catkin_LIBRARIES} ${csm_LIBRARIES} ${EIGEN3_LIBRARIES} ${GTSAM_LIBRARIES} ${libpointmatcher_LIBRARIES})
@@ -81,6 +83,7 @@ target_link_libraries(decision_maker ${catkin_LIBRARIES} ${SBPL_LIBRARIES})
 target_link_libraries(combined_laser_scans ${catkin_LIBRARIES} ${pcl_ros_LIBRARIES} ${glog_catkin_LIBRARIES})
 target_link_libraries(pedestrian_simulator ${catkin_LIBRARIES}
                       ${grid_map_ros_LIBRARIES} pedestrian utils)
+target_link_libraries(static_laser_scan_combiner ${catkin_LIBRARIES} ObjectDetector)
 
 # add dependencies to make sure that srv files are generated before used
 add_dependencies(graph_optimisation crowdbot_active_slam_generate_messages_cpp)
