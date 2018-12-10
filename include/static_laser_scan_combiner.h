@@ -19,14 +19,17 @@ public:
   /**
    *  Class Constructor
    */
-   StaticLaserScanCombiner(ros::NodeHandle nh, ros::NodeHandle nh_);
+  StaticLaserScanCombiner(ros::NodeHandle nh, ros::NodeHandle nh_);
 
    /**
     *  Class Destructor
     */
-   ~StaticLaserScanCombiner();
+  ~StaticLaserScanCombiner();
 
-   void scanCallback(const sensor_msgs::LaserScan::ConstPtr& scan_msg);
+  void initScan(sensor_msgs::LaserScan& laser_msg,
+                 sensor_msgs::LaserScan& init_scan);
+
+  void scanCallback(const sensor_msgs::LaserScan::ConstPtr& scan_msg);
 
 private:
   // Node handler
@@ -42,8 +45,13 @@ private:
   // ROS msgs
   sensor_msgs::LaserScan laser_msg_;
 
-  //
+  // Objects
   ObjectDetector object_detector_;
+
+  // variables
+  bool initialized_first_scan_;
+  std::vector<std::vector<double>> init_scan_sum_;
+  ros::Time begin_time_;
 };
 
 #endif  // STATIC_LASER_SCAN_COMBINER_H
