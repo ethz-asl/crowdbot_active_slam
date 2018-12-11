@@ -11,8 +11,6 @@
 #include <fstream>
 #include <ctime>
 #include <boost/thread/thread.hpp>
-#include <message_filters/subscriber.h>
-#include <message_filters/time_synchronizer.h>
 
 #include <ros/ros.h>
 #include <ros/package.h>
@@ -32,7 +30,10 @@
 #include <crowdbot_active_slam/service_call.h>
 #include <crowdbot_active_slam/utility_calc.h>
 #include <crowdbot_active_slam/get_map.h>
+#include <crowdbot_active_slam/current_pose.h>
 #include <gazebo_msgs/GetModelState.h>
+#include <message_filters/subscriber.h>
+#include <message_filters/time_synchronizer.h>
 
 #include <gtsam/nonlinear/NonlinearFactorGraph.h>
 #include <gtsam/nonlinear/Marginals.h>
@@ -102,7 +103,7 @@ public:
                  std::vector<LDP>& keyframe_ldp_vec);
 
   /**
-   *  A scan matcher callback on Pose2D estimates and used laser scans
+   *  A scan matcher callback on Pose estimates and used laser scans
    *  which does Graph construction and optimisation.
    */
  void scanMatcherCallback(
@@ -137,6 +138,10 @@ public:
     crowdbot_active_slam::get_map::Request &request,
     crowdbot_active_slam::get_map::Response &response);
 
+  bool currentPoseNodeServiceCallback(
+    crowdbot_active_slam::current_pose::Request &request,
+    crowdbot_active_slam::current_pose::Response &response);
+
   void pubMap();
 
 private:
@@ -147,6 +152,7 @@ private:
   // Ros msgs
   nav_msgs::Path graph_path_;
   nav_msgs::OccupancyGrid occupancy_grid_msg_;
+  geometry_msgs::PoseStamped latest_pose_estimate_;
   sensor_msgs::LaserScan latest_scan_msg_;
 
   // Service, Publisher and Subscriber
@@ -164,6 +170,7 @@ private:
   ros::ServiceServer get_map_service_;
   ros::ServiceServer utility_calc_service_;
   ros::ServiceServer uncertainty_service_;
+  ros::ServiceServer current_pose_node_service_;
   ros::ServiceClient get_ground_truth_client_;
 
   // TF

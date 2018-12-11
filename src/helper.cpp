@@ -66,6 +66,15 @@ std::vector<int> positionToMapIndex(double x, double y,
 }
 
 /**
+ *  A helper function which creates map id from position information.
+ */
+int positionToMapId(double x, double y, int width, int height, float resolution){
+  int id = (floor(x / resolution) + width / 2) +
+           (floor(y / resolution) + height / 2) * width;
+  return id;
+}
+
+/**
  *  A helper function which creates Pose msg from x, y, theta information.
  */
 geometry_msgs::Pose xythetaToPose(double x, double y, double theta){

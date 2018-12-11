@@ -58,6 +58,8 @@ void GraphOptimiser::initParams(){
                       &GraphOptimiser::getMapServiceCallback, this);
   utility_calc_service_ = nh_.advertiseService("utility_calc_service",
                       &GraphOptimiser::utilityCalcServiceCallback, this);
+  current_pose_node_service_ = nh_.advertiseService("current_pose_node_service",
+                      &GraphOptimiser::currentPoseNodeServiceCallback, this);
   get_ground_truth_client_ = nh_.serviceClient<gazebo_msgs::GetModelState>
                                                     ("gazebo/get_model_state");
 
@@ -1028,6 +1030,8 @@ void GraphOptimiser::scanMatcherCallback(
     node_counter_ += 1;
     first_scan_pose_ = false;
     last_pose2_map_ = init_pose2_map_;
+    latest_pose_estimate_ = pose2ToPoseStamped(last_pose2_map_);
+    latest_pose_estimate_.header.stamp = latest_scan_msg_.header.stamp;
     prev_pose2_odom_ = current_pose2_odom_;
   }
   else {
@@ -1155,6 +1159,8 @@ void GraphOptimiser::scanMatcherCallback(
 
       // Update map to odom transform
       last_pose2_map_ = *dynamic_cast<const Pose2*>(&pose_estimates_.at(node_counter_));
+      latest_pose_estimate_ = pose2ToPoseStamped(last_pose2_map_);
+      latest_pose_estimate_.header.stamp = latest_scan_msg_.header.stamp;
 
       tf::Transform last_pose_tf;
       last_pose_tf = xythetaToTF(last_pose2_map_.x(), last_pose2_map_.y(), last_pose2_map_.theta());
@@ -1211,6 +1217,13 @@ bool GraphOptimiser::getMapServiceCallback(
     crowdbot_active_slam::get_map::Response &response){
   // Return current occupancy grid map
   response.map_msg = occupancy_grid_msg_;
+  return true;
+}
+
+bool GraphOptimiser::currentPoseNodeServiceCallback(
+    crowdbot_active_slam::current_pose::Request &request,
+    crowdbot_active_slam::current_pose::Response &response){
+  response.current_pose = latest_pose_estimate_;
   return true;
 }
 

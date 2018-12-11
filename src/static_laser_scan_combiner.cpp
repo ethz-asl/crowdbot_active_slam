@@ -5,25 +5,83 @@
  *      Author: Dario Mammolo
  */
 
-#include <ros/ros.h>
 #include <static_laser_scan_combiner.h>
 
 using namespace std;
+
+/**
+ *  A helper function which creates map id from position information.
+ */
+int positionToMapId(double x, double y, int width, int height, float resolution){
+  int id = (floor(x / resolution) + width / 2) +
+           (floor(y / resolution) + height / 2) * width;
+  return id;
+}
 
 StaticLaserScanCombiner::StaticLaserScanCombiner
   (ros::NodeHandle nh, ros::NodeHandle nh_):nh_(nh), nh_private_(nh_)
 {
   ROS_INFO("Started StaticLaserScanCombiner");
   object_detector_ = ObjectDetector(20, 0.01);
+
+  // Subscriber and publisher
+  map_sub_ = nh_.subscribe("/occupancy_map", 1, &StaticLaserScanCombiner::mapCallback, this);
+  scan_sub_ = new message_filters::Subscriber<sensor_msgs::LaserScan>
+              (nh_, "/base_scan", 1);
+  odom_sub_ = new message_filters::Subscriber<nav_msgs::Odometry>
+              (nh_, "/mobile_base_controller/odom", 1);
+  int q = 1; // queue size
+  sync_ = new message_filters::Synchronizer<SyncPolicy>
+          (SyncPolicy(q), *scan_sub_, *odom_sub_);
+  sync_->registerCallback(boost::bind(&StaticLaserScanCombiner::scanOdomCallback,
+                                      this, _1, _2));
+
   static_scan_pub_ = nh_.advertise<sensor_msgs::LaserScan>("static_combined_scan", 1);
-  scan_sub_ = nh_.subscribe("/base_scan", 1, &StaticLaserScanCombiner::scanCallback, this);
+  dynamic_scan_pub_ = nh_.advertise<sensor_msgs::LaserScan>("dynamic_scan", 1);
   marker_front_pub_ = nh_.advertise<visualization_msgs::Marker>("marker_front", 1);
   marker_occluded_pub_ = nh_.advertise<visualization_msgs::Marker>("marker_occluded", 1);
+
+  // test_pub_ = nh_.advertise<nav_msgs::GridCells>("test", 1);
+
+  get_current_pose_client_ = nh_.serviceClient<crowdbot_active_slam::current_pose>
+                             ("/current_pose_node_service");
 
   begin_time_ = ros::Time::now();
   // Wait until time is not 0
   while (begin_time_.toSec() == 0) begin_time_ = ros::Time::now();
   initialized_first_scan_ = false;
+
+  // Initialize base to laser tf
+  tf::StampedTransform base_to_laser_tf_;
+
+  bool got_transform = false;
+  while (!got_transform){
+    if (true){  // TODO: add using gazebo
+      try {
+        got_transform = base_to_laser_listener_.waitForTransform("base_link",
+                                    "laser", ros::Time(0), ros::Duration(1.0));
+        base_to_laser_listener_.lookupTransform("base_link", "laser",
+                                              ros::Time(0), base_to_laser_tf_);
+      }
+      catch (tf::TransformException ex){
+        ROS_WARN("Could not get initial transform from base to laser frame, %s", ex.what());
+      }
+    }
+    else {
+      try {
+        got_transform = base_to_laser_listener_.waitForTransform("base_footprint",
+                          "sick_laser_front", ros::Time(0), ros::Duration(1.0));
+        base_to_laser_listener_.lookupTransform("base_footprint", "sick_laser_front",
+                                               ros::Time(0), base_to_laser_tf_);
+      }
+      catch (tf::TransformException ex){
+        ROS_WARN("Could not get initial transform from base to laser frame, %s", ex.what());
+      }
+    }
+  }
+
+  base_to_laser_ = base_to_laser_tf_;
+  laser_to_base_ = base_to_laser_tf_.inverse();
 }
 
 StaticLaserScanCombiner::~StaticLaserScanCombiner(){}
@@ -75,28 +133,81 @@ void StaticLaserScanCombiner::initScan(sensor_msgs::LaserScan& laser_msg,
       }
     }
 
-    // Generate init scan if enogh scan points available, TODO: var for 50
+    // Publish init scan if enough scan points available, TODO: var for 50
     if (count_unknown < 50){
-      // Publish twice to initialize the map in graph_optimisation
       static_scan_pub_.publish(init_scan);
-      ros::Duration(0.5).sleep();
-      static_scan_pub_.publish(init_scan);
+      last_node_stamp_ = init_scan.header.stamp;
       initialized_first_scan_ = true;
     }
   }
 }
 
-void StaticLaserScanCombiner::scanCallback
-     (const sensor_msgs::LaserScan::ConstPtr& scan_msg){
+void StaticLaserScanCombiner::scanOdomCallback
+     (const sensor_msgs::LaserScan::ConstPtr& scan_msg,
+      const nav_msgs::Odometry::ConstPtr& odom_msg){
+  // Call latest pose estimate
+  if (initialized_first_scan_){
+    crowdbot_active_slam::current_pose current_pose_srv;
+    if (get_current_pose_client_.call(current_pose_srv)){}
+    else ROS_INFO("Current pose service call failed!");
+
+    if (current_pose_srv.response.current_pose.header.stamp ==
+        laser_msg_.header.stamp){
+      tf::poseStampedMsgToTF(current_pose_srv.response.current_pose,
+                             current_pose_tf_);
+      tf::poseMsgToTF(odom_msg_.pose.pose, current_odom_tf_);
+      map_to_odom_tf_ = current_pose_tf_ * current_odom_tf_.inverse();
+      map_to_last_node_tf_ = current_pose_tf_;
+    }
+  }
+
+  // Save laser and odom msg
   laser_msg_ = *scan_msg;
+  odom_msg_ = *odom_msg;
+
+  tf::poseMsgToTF(odom_msg_.pose.pose, current_odom_tf_);
+  map_to_latest_tf_ = map_to_odom_tf_ * current_odom_tf_;
+  map_to_latest_laser_tf_ = map_to_latest_tf_ * base_to_laser_;
+
+  // Save scan size
   size_t laser_scan_size = laser_msg_.ranges.size();
 
   if (init_scan_sum_.empty()) init_scan_sum_.resize(laser_scan_size);
   if (!initialized_first_scan_) {
-    sensor_msgs::LaserScan init_scan = laser_msg_;
-    initScan(laser_msg_, init_scan);
+    init_scan_ = laser_msg_;
+    initScan(laser_msg_, init_scan_);
   }
   else {
+    // Check each scan point if it is a wall from static occupancy map
+    dynamic_scan_ = laser_msg_;
+    double theta = laser_msg_.angle_min;
+
+    ROS_INFO("Started static remove");
+    for (size_t i = 0; i < laser_scan_size; i ++){
+      geometry_msgs::Point temp_point;
+      temp_point.x = laser_msg_.ranges[i] * cos(theta);
+      temp_point.y = laser_msg_.ranges[i] * sin(theta);
+      temp_point.z = 0;
+      tf::Point temp_tf;
+      pointMsgToTF(temp_point, temp_tf);
+      temp_tf = map_to_latest_laser_tf_ * temp_tf;
+      pointTFToMsg(temp_tf, temp_point);
+      int id = positionToMapId(temp_point.x, temp_point.y, 2000,
+                                  2000, 0.05);
+      bool occupied;
+      if (map_msg_.data[id] > 80) occupied = true;
+      else occupied = false;
+
+      if (occupied == true){
+        dynamic_scan_.ranges[i] = 0;
+      }
+      theta += laser_msg_.angle_increment;
+    }
+    ROS_INFO("Finished static remove");
+
+    dynamic_scan_pub_.publish(dynamic_scan_);
+    static_scan_pub_.publish(init_scan_);
+
     list<map<int, double>> normal_clusters;
     list<map<int, double>> occluded_clusters;
     object_detector_.detectObjectsFromScan(laser_msg_, normal_clusters,
@@ -135,7 +246,7 @@ void StaticLaserScanCombiner::scanCallback
       line_list.points.push_back(line_start);
       line_list.points.push_back(line_end);
     }
-    static_scan_pub_.publish(occluded_scan);
+    // static_scan_pub_.publish(occluded_scan);
     marker_front_pub_.publish(line_list);
 
     visualization_msgs::Marker line_list_occ;
@@ -165,6 +276,11 @@ void StaticLaserScanCombiner::scanCallback
     }
     marker_occluded_pub_.publish(line_list_occ);
   }
+}
+
+void StaticLaserScanCombiner::mapCallback
+    (const nav_msgs::OccupancyGrid::ConstPtr& map_msg){
+  map_msg_ = *map_msg;
 }
 
 

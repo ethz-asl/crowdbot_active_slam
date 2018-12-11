@@ -40,6 +40,7 @@ add_service_files(
   FILES
   get_frontier_list.srv
   get_map.srv
+  current_pose.srv
   service_call.srv
   utility_calc.srv
 )
