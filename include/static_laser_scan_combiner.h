@@ -27,7 +27,7 @@ public:
   ~StaticLaserScanCombiner();
 
   void initScan(sensor_msgs::LaserScan& laser_msg,
-                 sensor_msgs::LaserScan& init_scan);
+                sensor_msgs::LaserScan& init_scan);
 
   void scanCallback(const sensor_msgs::LaserScan::ConstPtr& scan_msg);
 

@@ -29,7 +29,7 @@ StaticLaserScanCombiner::StaticLaserScanCombiner
 StaticLaserScanCombiner::~StaticLaserScanCombiner(){}
 
 void StaticLaserScanCombiner::initScan(sensor_msgs::LaserScan& laser_msg,
-                                        sensor_msgs::LaserScan& init_scan){
+                                       sensor_msgs::LaserScan& init_scan){
   // Sum and sort scans
   size_t laser_scan_size = laser_msg_.ranges.size();
   for (size_t i = 0; i < laser_scan_size; i++){
