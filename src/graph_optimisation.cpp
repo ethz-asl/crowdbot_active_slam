@@ -32,8 +32,17 @@ void GraphOptimiser::initParams(){
   nh_private_.param<std::string>("scan_callback_topic", scan_callback_topic_, "base_scan");
 
   // Initialise subscriber and publisher
-  pose_sub_ = nh_.subscribe("pose_with_covariance_stamped", 1, &GraphOptimiser::scanMatcherCallback, this);
-  scan_sub_ = nh_.subscribe(scan_callback_topic_, 1, &GraphOptimiser::scanCallback, this);
+  scan_sub_ = new message_filters::Subscriber
+              <sensor_msgs::LaserScan>(nh_, scan_callback_topic_, 1);
+  pose_sub_ = new message_filters::Subscriber
+              <geometry_msgs::PoseWithCovarianceStamped>
+              (nh_, "pose_with_covariance_stamped", 1);
+  sync_ = new message_filters::TimeSynchronizer
+          <sensor_msgs::LaserScan, geometry_msgs::PoseWithCovarianceStamped>
+          (*scan_sub_, *pose_sub_, 1);
+  sync_->registerCallback(boost::bind(&GraphOptimiser::scanMatcherCallback,
+                                      this, _1, _2));
+
   path_pub_ = nh_.advertise<nav_msgs::Path>("graph_path", 1);
   action_path_pub_ = nh_.advertise<nav_msgs::Path>("action_graph", 1);
   map_pub_ = nh_.advertise<nav_msgs::OccupancyGrid>("occupancy_map", 1);
@@ -915,64 +924,22 @@ bool GraphOptimiser::utilityCalcServiceCallback(
   return true;
 }
 
-void GraphOptimiser::scanCallback(const sensor_msgs::LaserScan::ConstPtr& scan_msg){
+void GraphOptimiser::scanMatcherCallback(
+            const sensor_msgs::LaserScan::ConstPtr& scan_msg,
+            const geometry_msgs::PoseWithCovarianceStamped::ConstPtr& pose_msg){
+  // Laser scan callback
   latest_scan_msg_ = *scan_msg;
   if (!scan_callback_initialized_){
     scan_ranges_size_ = latest_scan_msg_.ranges.size();
     scan_angle_increment_ = latest_scan_msg_.angle_increment;
     scan_range_min_ = latest_scan_msg_.range_min;
     scan_range_max_ = latest_scan_msg_.range_max;
-
-    // laserScanToMatrix(latest_scan_msg_, current_scan_eigen_);
-    // laser_ref_ = PointMatcher<float>::DataPoints(current_scan_eigen_, feature_labels_);
-    //
-    // keyframe_tf_.setIdentity();
-
     scan_callback_initialized_ = true;
   }
-  // laserScanToMatrix(latest_scan_msg_, current_scan_eigen_);
-  // laser_sens_ = PointMatcher<float>::DataPoints(current_scan_eigen_, feature_labels_);
-  //
-  // PointMatcher<float>::TransformationParameters T = icp_(laser_sens_, laser_ref_);
-  // //std::cout << "Final transformation:" << std::endl << T << std::endl;
-  //
-  // tf::Matrix3x3 rot_mat(T(0, 0), T(0, 1), 0, T(1, 0), T(1, 1), 0, 0, 0, 1);
-  // tf::Vector3 origin(T(0, 2), T(1, 2), 0);
-  // tf::Transform temp_estimated_tf(rot_mat, origin);
-  //
-  // double dist = sqrt(pow(temp_estimated_tf.getOrigin().getX(), 2) +
-  //                    pow(temp_estimated_tf.getOrigin().getY(), 2));
-  //
-  // if (abs(tf::getYaw(temp_estimated_tf.getRotation())) > 0.05 || dist > 0.03){
-  //   keyframe_tf_ = keyframe_tf_ * temp_estimated_tf;
-  //   estimated_tf_ = keyframe_tf_;
-  //   laser_ref_ = laser_sens_;
-  // }
-  // else {
-  //   estimated_tf_ = keyframe_tf_ * temp_estimated_tf;
-  // }
-  //
-  // geometry_msgs::Pose2D pose2D_msg;
-  // pose2D_msg.x = estimated_tf_.getOrigin().getX();
-  // pose2D_msg.y = estimated_tf_.getOrigin().getY();
-  // pose2D_msg.theta = tf::getYaw(estimated_tf_.getRotation());
-  //
-  // test_pose2D_pub_.publish(pose2D_msg);
-  //
-  // geometry_msgs::Pose pose_pu = xythetaToPose(pose2D_msg.x, pose2D_msg.y, pose2D_msg.theta);
-  // geometry_msgs::PoseStamped posestamp;
-  // posestamp.header.frame_id = "odom";
-  // posestamp.pose = pose_pu;
-  //
-  // test_pose_pub_.publish(posestamp);
-
-}
-
-void GraphOptimiser::scanMatcherCallback(const geometry_msgs::PoseWithCovarianceStamped::ConstPtr& pose_msg){
-  // Check if scan callback initialized
+  // Check if scan callback initialized (just to be sure)
   if (!scan_callback_initialized_) return;
 
-  // Check if same stamp
+  // Check if same stamp  (just to be sure)
   if (latest_scan_msg_.header.stamp != (*pose_msg).header.stamp){
    ROS_WARN("Different scan and pose stamps! Scans are skipped!");
    return;

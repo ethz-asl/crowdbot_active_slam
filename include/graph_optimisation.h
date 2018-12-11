@@ -11,6 +11,8 @@
 #include <fstream>
 #include <ctime>
 #include <boost/thread/thread.hpp>
+#include <message_filters/subscriber.h>
+#include <message_filters/time_synchronizer.h>
 
 #include <ros/ros.h>
 #include <ros/package.h>
@@ -100,15 +102,12 @@ public:
                  std::vector<LDP>& keyframe_ldp_vec);
 
   /**
-   *  A callback function on laser scans.
-   */
-  void scanCallback(const sensor_msgs::LaserScan::ConstPtr& scan_msg);
-
-  /**
-   *  A callback function on Pose2D scans from the laser scan matcher
+   *  A scan matcher callback on Pose2D estimates and used laser scans
    *  which does Graph construction and optimisation.
    */
- void scanMatcherCallback(const geometry_msgs::PoseWithCovarianceStamped::ConstPtr& pose_msg);
+ void scanMatcherCallback(
+   const sensor_msgs::LaserScan::ConstPtr& scan_msg,
+   const geometry_msgs::PoseWithCovarianceStamped::ConstPtr& pose_msg);
 
   /**
    *  Service callback for saving current uncertainty matrix along path
@@ -151,8 +150,11 @@ private:
   sensor_msgs::LaserScan latest_scan_msg_;
 
   // Service, Publisher and Subscriber
-  ros::Subscriber pose_sub_;
-  ros::Subscriber scan_sub_;
+  message_filters::Subscriber<sensor_msgs::LaserScan> *scan_sub_;
+  message_filters::Subscriber<geometry_msgs::PoseWithCovarianceStamped> *pose_sub_;
+  message_filters::TimeSynchronizer<
+      sensor_msgs::LaserScan, geometry_msgs::PoseWithCovarianceStamped> *sync_;
+
   ros::Publisher path_pub_;
   ros::Publisher action_path_pub_;
   ros::Publisher map_pub_;
