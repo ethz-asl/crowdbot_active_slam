@@ -182,7 +182,6 @@ void StaticLaserScanCombiner::scanOdomCallback
     dynamic_scan_ = laser_msg_;
     double theta = laser_msg_.angle_min;
 
-    ROS_INFO("Started static remove");
     for (size_t i = 0; i < laser_scan_size; i ++){
       geometry_msgs::Point temp_point;
       temp_point.x = laser_msg_.ranges[i] * cos(theta);
@@ -194,16 +193,18 @@ void StaticLaserScanCombiner::scanOdomCallback
       pointTFToMsg(temp_tf, temp_point);
       int id = positionToMapId(temp_point.x, temp_point.y, 2000,
                                   2000, 0.05);
-      bool occupied;
+      bool occupied = false;
       if (map_msg_.data[id] > 80) occupied = true;
-      else occupied = false;
+      if (map_msg_.data[id+1] > 80) occupied = true;
+      if (map_msg_.data[id-1] > 80) occupied = true;
+      if (map_msg_.data[id+2000] > 80) occupied = true;
+      if (map_msg_.data[id-2000] > 80) occupied = true;
 
       if (occupied == true){
         dynamic_scan_.ranges[i] = 0;
       }
       theta += laser_msg_.angle_increment;
     }
-    ROS_INFO("Finished static remove");
 
     dynamic_scan_pub_.publish(dynamic_scan_);
     static_scan_pub_.publish(init_scan_);
