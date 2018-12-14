@@ -53,7 +53,7 @@ private:
 
   // Services
   ros::ServiceClient get_current_pose_client_;
-  
+
   // Publisher, Subscriber
   ros::Subscriber map_sub_;
   message_filters::Subscriber<sensor_msgs::LaserScan> *scan_sub_;
@@ -70,7 +70,7 @@ private:
   sensor_msgs::LaserScan laser_msg_;
   sensor_msgs::LaserScan dynamic_scan_;
   nav_msgs::Odometry odom_msg_;
-  nav_msgs::OccupancyGrid map_msg_;
+  nav_msgs::OccupancyGrid::ConstPtr map_msg_;
 
   // TF
   tf::TransformListener base_to_laser_listener_;

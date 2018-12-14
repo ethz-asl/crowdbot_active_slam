@@ -30,7 +30,7 @@ StaticLaserScanCombiner::StaticLaserScanCombiner
               (nh_, "/base_scan", 1);
   odom_sub_ = new message_filters::Subscriber<nav_msgs::Odometry>
               (nh_, "/mobile_base_controller/odom", 1);
-  int q = 1; // queue size
+  int q = 5; // queue size
   sync_ = new message_filters::Synchronizer<SyncPolicy>
           (SyncPolicy(q), *scan_sub_, *odom_sub_);
   sync_->registerCallback(boost::bind(&StaticLaserScanCombiner::scanOdomCallback,
@@ -194,11 +194,11 @@ void StaticLaserScanCombiner::scanOdomCallback
       int id = positionToMapId(temp_point.x, temp_point.y, 2000,
                                   2000, 0.05);
       bool occupied = false;
-      if (map_msg_.data[id] > 80) occupied = true;
-      if (map_msg_.data[id+1] > 80) occupied = true;
-      if (map_msg_.data[id-1] > 80) occupied = true;
-      if (map_msg_.data[id+2000] > 80) occupied = true;
-      if (map_msg_.data[id-2000] > 80) occupied = true;
+      if (map_msg_->data[id] > 80) occupied = true;
+      if (map_msg_->data[id+1] > 80) occupied = true;
+      if (map_msg_->data[id-1] > 80) occupied = true;
+      if (map_msg_->data[id+2000] > 80) occupied = true;
+      if (map_msg_->data[id-2000] > 80) occupied = true;
 
       if (occupied == true){
         dynamic_scan_.ranges[i] = 0;
@@ -206,13 +206,18 @@ void StaticLaserScanCombiner::scanOdomCallback
       theta += laser_msg_.angle_increment;
     }
 
+    // Detect and Track objects (ABD + KF)
+
     dynamic_scan_pub_.publish(dynamic_scan_);
     static_scan_pub_.publish(init_scan_);
 
     list<map<int, double>> normal_clusters;
     list<map<int, double>> occluded_clusters;
-    object_detector_.detectObjectsFromScan(laser_msg_, normal_clusters,
-                                                       occluded_clusters);
+    object_detector_.detectObjectsFromScan(dynamic_scan_,
+                                           laser_msg_,
+                                           normal_clusters,
+                                           occluded_clusters);
+
 
     visualization_msgs::Marker line_list;
     line_list.header.frame_id = laser_msg_.header.frame_id;
@@ -281,7 +286,7 @@ void StaticLaserScanCombiner::scanOdomCallback
 
 void StaticLaserScanCombiner::mapCallback
     (const nav_msgs::OccupancyGrid::ConstPtr& map_msg){
-  map_msg_ = *map_msg;
+  map_msg_ = map_msg;
 }
 
 
