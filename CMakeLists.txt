@@ -84,7 +84,8 @@ target_link_libraries(decision_maker ${catkin_LIBRARIES} ${SBPL_LIBRARIES})
 target_link_libraries(combined_laser_scans ${catkin_LIBRARIES} ${pcl_ros_LIBRARIES} ${glog_catkin_LIBRARIES})
 target_link_libraries(pedestrian_simulator ${catkin_LIBRARIES}
                       ${grid_map_ros_LIBRARIES} pedestrian utils)
-target_link_libraries(static_laser_scan_combiner ${catkin_LIBRARIES} ObjectDetector)
+target_link_libraries(static_laser_scan_combiner ${catkin_LIBRARIES} ObjectDetector
+                      ${EIGEN3_LIBRARIES})
 
 # add dependencies to make sure that srv files are generated before used
 add_dependencies(graph_optimisation crowdbot_active_slam_generate_messages_cpp)

@@ -18,6 +18,22 @@ int positionToMapId(double x, double y, int width, int height, float resolution)
   return id;
 }
 
+geometry_msgs::Point getMean(map<int, double>& cluster,
+                             sensor_msgs::LaserScan& laser_msg){
+  double x = 0, y = 0;
+  for (auto cluster_it = cluster.begin(); cluster_it != cluster.end(); ++cluster_it){
+    x += cluster_it->second * cos(cluster_it->first * laser_msg.angle_increment
+         + laser_msg.angle_min);
+    y += cluster_it->second * sin(cluster_it->first * laser_msg.angle_increment
+         + laser_msg.angle_min);
+  }
+  geometry_msgs::Point mean;
+  mean.x = x / cluster.size();
+  mean.y = y / cluster.size();
+  mean.z = 0;
+  return mean;
+}
+
 StaticLaserScanCombiner::StaticLaserScanCombiner
   (ros::NodeHandle nh, ros::NodeHandle nh_):nh_(nh), nh_private_(nh_)
 {
@@ -40,6 +56,7 @@ StaticLaserScanCombiner::StaticLaserScanCombiner
   dynamic_scan_pub_ = nh_.advertise<sensor_msgs::LaserScan>("dynamic_scan", 1);
   marker_front_pub_ = nh_.advertise<visualization_msgs::Marker>("marker_front", 1);
   marker_occluded_pub_ = nh_.advertise<visualization_msgs::Marker>("marker_occluded", 1);
+  tracked_objects_pub_ = nh_.advertise<nav_msgs::GridCells>("tracked_objects", 1);
 
   // test_pub_ = nh_.advertise<nav_msgs::GridCells>("test", 1);
 
@@ -82,6 +99,11 @@ StaticLaserScanCombiner::StaticLaserScanCombiner
 
   base_to_laser_ = base_to_laser_tf_;
   laser_to_base_ = base_to_laser_tf_.inverse();
+
+  // KF init variables
+  std_dev_process_ = 0.1;
+  std_dev_range_ = 0.01;
+  std_dev_theta_ = 0.01;
 }
 
 StaticLaserScanCombiner::~StaticLaserScanCombiner(){}
@@ -136,7 +158,6 @@ void StaticLaserScanCombiner::initScan(sensor_msgs::LaserScan& laser_msg,
     // Publish init scan if enough scan points available, TODO: var for 50
     if (count_unknown < 50){
       static_scan_pub_.publish(init_scan);
-      last_node_stamp_ = init_scan.header.stamp;
       initialized_first_scan_ = true;
     }
   }
@@ -175,7 +196,10 @@ void StaticLaserScanCombiner::scanOdomCallback
   if (init_scan_sum_.empty()) init_scan_sum_.resize(laser_scan_size);
   if (!initialized_first_scan_) {
     init_scan_ = laser_msg_;
+    curr_node_stamp_ = laser_msg_.header.stamp;
+    prev_delta_t_ = (curr_node_stamp_ - prev_node_stamp_).toSec();
     initScan(laser_msg_, init_scan_);
+    prev_node_stamp_ = curr_node_stamp_;
   }
   else {
     // Check each scan point if it is a wall from static occupancy map
@@ -211,6 +235,7 @@ void StaticLaserScanCombiner::scanOdomCallback
     dynamic_scan_pub_.publish(dynamic_scan_);
     static_scan_pub_.publish(init_scan_);
 
+    // Detect objects
     list<map<int, double>> normal_clusters;
     list<map<int, double>> occluded_clusters;
     object_detector_.detectObjectsFromScan(dynamic_scan_,
@@ -218,6 +243,144 @@ void StaticLaserScanCombiner::scanOdomCallback
                                            normal_clusters,
                                            occluded_clusters);
 
+    // Track objects
+    normal_means_.clear();
+    occluded_means_.clear();
+    for (auto cluster_it = normal_clusters.begin(); cluster_it != normal_clusters.end(); ++cluster_it){
+      geometry_msgs::Point temp_mean;
+      tf::Point temp_mean_tf;
+      temp_mean = getMean(*(cluster_it), laser_msg_);
+      pointMsgToTF(temp_mean, temp_mean_tf);
+      temp_mean_tf = map_to_latest_laser_tf_ * temp_mean_tf;
+      pointTFToMsg(temp_mean_tf, temp_mean);
+      normal_means_.push_back(temp_mean);
+    }
+    for (auto cluster_it = occluded_clusters.begin(); cluster_it != occluded_clusters.end(); ++cluster_it){
+      geometry_msgs::Point temp_mean;
+      tf::Point temp_mean_tf;
+      temp_mean = getMean(*(cluster_it), laser_msg_);
+      pointMsgToTF(temp_mean, temp_mean_tf);
+      temp_mean_tf = map_to_latest_laser_tf_ * temp_mean_tf;
+      pointTFToMsg(temp_mean_tf, temp_mean);
+      occluded_means_.push_back(temp_mean);
+    }
+
+    // Define Process matrices
+    Eigen::MatrixXd A_prev(4, 4);
+    A_prev << 1, 0, prev_delta_t_, 0,
+              0, 1, 0, prev_delta_t_,
+              0, 0, 1, 0,
+              0, 0, 0, 1;
+
+    Eigen::MatrixXd Q_prev(4, 4);
+    Q_prev << pow(prev_delta_t_, 4) / 4, 0, pow(prev_delta_t_, 3) / 2, 0,
+              0, pow(prev_delta_t_, 4) / 4, 0, pow(prev_delta_t_, 3) / 2,
+              pow(prev_delta_t_, 3) / 2, 0, pow(prev_delta_t_, 2), 0,
+              0, pow(prev_delta_t_, 3) / 2, 0, pow(prev_delta_t_, 2);
+
+    // Measurement matrices
+    // Currently using easy approach and std dev are for x and y
+    Eigen::MatrixXd H_prev(2, 4);
+    H_prev << 1, 0, 0, 0,
+              0, 1, 0, 0;
+
+    Eigen::MatrixXd R_prev(2, 2);
+    R_prev << pow(std_dev_range_, 2), 0,
+              0, pow(std_dev_theta_, 2);
+
+    // Check if cluster already tracked, if not new track
+    std::vector<geometry_msgs::Point> all_means = normal_means_;
+    all_means.insert(all_means.end(), occluded_means_.begin(), occluded_means_.end());
+    if (!tracked_objects_mean_.empty()){
+      for (size_t i = 0; i < tracked_objects_mean_.size(); i++){
+        int id = -1;
+        double distance = 10;
+        for (size_t j = 0; j < all_means.size(); j++){
+          // Check distance (later try mahalanobis)
+          double temp_distance =
+          sqrt(pow(tracked_objects_mean_[i][0] - all_means[j].x, 2) +
+               pow(tracked_objects_mean_[i][1] - all_means[j].y, 2));
+          // Check if current distance smaller
+          if (temp_distance < 0.3 && temp_distance < distance){
+            id = j;
+            distance = temp_distance;
+          }
+        }
+        // Check if found assignement
+        if (id != -1){
+          tracked_objects_counter_[i] = 0;
+          // Update tracked object (Prediction+Update)
+          // Prediction
+          tracked_objects_mean_[i] = A_prev * tracked_objects_mean_[i];
+          tracked_objects_var_[i] = A_prev * tracked_objects_var_[i] * A_prev.transpose()
+                                    + Q_prev;
+
+          // Update
+          Eigen::MatrixXd temp_gain(4, 2);
+          temp_gain = tracked_objects_var_[i] * H_prev.transpose() *
+            (H_prev * tracked_objects_var_[i] * H_prev.transpose() +
+             R_prev).inverse();
+
+          Eigen::Vector2d temp_z_m;
+          temp_z_m << all_means[id].x, all_means[id].y;
+
+          tracked_objects_mean_[i] = tracked_objects_mean_[i] + temp_gain *
+            (temp_z_m - H_prev * tracked_objects_mean_[i]);
+
+          tracked_objects_var_[i] = (Eigen::MatrixXd::Identity(4, 4) -
+            temp_gain * H_prev) * tracked_objects_var_[i];
+
+          // Delete measurement
+          all_means.erase(all_means.begin() + id);
+        }
+        else {
+          if (tracked_objects_counter_[i] < 5){
+            // Update tracked object (Prediction)
+            tracked_objects_mean_[i] = A_prev * tracked_objects_mean_[i];
+            tracked_objects_var_[i] = A_prev * tracked_objects_var_[i] * A_prev.inverse()
+                                   + Q_prev;
+            tracked_objects_counter_[i] += 1;
+          }
+          else {
+            tracked_objects_mean_.erase(tracked_objects_mean_.begin() + i);
+            tracked_objects_var_.erase(tracked_objects_var_.begin() + i);
+            tracked_objects_counter_.erase(tracked_objects_counter_.begin() + i);
+          }
+        }
+      }
+    }
+
+    if (!all_means.empty()){
+      // Generate new tracked objects
+      for (size_t i = 0; i < all_means.size(); i++){
+        Eigen::Vector4d temp_track_mean;
+        temp_track_mean << all_means[i].x, all_means[i].y, 0, 0;
+
+        Eigen::MatrixX4d temp_track_var(4, 4);
+        temp_track_var << 1, 0, 0, 0,
+                          0, 1, 0, 0,
+                          0, 0, 1, 0,
+                          0, 0, 0, 1;
+
+        tracked_objects_mean_.push_back(temp_track_mean);
+        tracked_objects_var_.push_back(temp_track_var);
+        tracked_objects_counter_.push_back(0);
+      }
+    }
+
+    // Publish means of tracked objects
+    nav_msgs::GridCells tracked_objects_msg;
+    tracked_objects_msg.header.frame_id = "map";
+    tracked_objects_msg.cell_width = 0.2;
+    tracked_objects_msg.cell_height = 0.2;
+    for (size_t i = 0; i < tracked_objects_mean_.size(); i++){
+      geometry_msgs::Point temp_point;
+      temp_point.x = tracked_objects_mean_[i][0];
+      temp_point.y = tracked_objects_mean_[i][1];
+      temp_point.z = 0;
+      tracked_objects_msg.cells.push_back(temp_point);
+    }
+    tracked_objects_pub_.publish(tracked_objects_msg);
 
     visualization_msgs::Marker line_list;
     line_list.header.frame_id = laser_msg_.header.frame_id;
@@ -267,13 +430,17 @@ void StaticLaserScanCombiner::scanOdomCallback
       geometry_msgs::Point line_start,line_end;
       for (auto map_it = (*it).begin(); map_it != (*it).end(); ++map_it){
         if (map_it == (*it).begin()){
-          line_start.x = map_it->second * cos(map_it->first * laser_msg_.angle_increment+M_PI);
-          line_start.y = map_it->second * sin(map_it->first * laser_msg_.angle_increment+M_PI);
+          line_start.x = map_it->second * cos(map_it->first * laser_msg_.angle_increment
+                                              + laser_msg_.angle_min);
+          line_start.y = map_it->second * sin(map_it->first * laser_msg_.angle_increment
+                                              + laser_msg_.angle_min);
           line_start.z = 0;
         }
         else if (map_it == --(*it).end()){
-          line_end.x = map_it->second * cos(map_it->first * laser_msg_.angle_increment+M_PI);
-          line_end.y = map_it->second * sin(map_it->first * laser_msg_.angle_increment+M_PI);
+          line_end.x = map_it->second * cos(map_it->first * laser_msg_.angle_increment
+                                            + laser_msg_.angle_min);
+          line_end.y = map_it->second * sin(map_it->first * laser_msg_.angle_increment
+                                            + laser_msg_.angle_min);
           line_end.z = 0;
         }
       }
@@ -281,6 +448,11 @@ void StaticLaserScanCombiner::scanOdomCallback
       line_list_occ.points.push_back(line_end);
     }
     marker_occluded_pub_.publish(line_list_occ);
+
+    // Update delta_t
+    curr_node_stamp_ = laser_msg_.header.stamp;
+    prev_delta_t_ = (curr_node_stamp_ - prev_node_stamp_).toSec();
+    prev_node_stamp_ = curr_node_stamp_;
   }
 }
 

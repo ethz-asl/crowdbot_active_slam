@@ -10,6 +10,7 @@
 
 #include <ros/ros.h>
 #include <object_detector.h>
+#include <geometry_msgs/Point.h>
 #include <sensor_msgs/LaserScan.h>
 #include <nav_msgs/Odometry.h>
 #include <nav_msgs/OccupancyGrid.h>
@@ -22,9 +23,11 @@
 #include <tf/tf.h>
 #include <tf/transform_listener.h>
 #include <tf/transform_datatypes.h>
+#include <Eigen/Dense>
 
 typedef message_filters::sync_policies::ApproximateTime
         <sensor_msgs::LaserScan, nav_msgs::Odometry> SyncPolicy;
+
 
 class StaticLaserScanCombiner{
 public:
@@ -64,6 +67,7 @@ private:
   ros::Publisher dynamic_scan_pub_;
   ros::Publisher marker_front_pub_;
   ros::Publisher marker_occluded_pub_;
+  ros::Publisher tracked_objects_pub_;
 
   // ROS msgs
   sensor_msgs::LaserScan init_scan_;
@@ -90,7 +94,17 @@ private:
   bool initialized_first_scan_;
   std::vector<std::vector<double>> init_scan_sum_;
   ros::Time begin_time_;
-  ros::Time last_node_stamp_;
+  ros::Time prev_node_stamp_;
+  ros::Time curr_node_stamp_;
+  double prev_delta_t_;
+  double std_dev_process_;
+  double std_dev_range_;
+  double std_dev_theta_;
+  std::vector<geometry_msgs::Point> occluded_means_;
+  std::vector<geometry_msgs::Point> normal_means_;
+  std::vector<Eigen::Vector4d> tracked_objects_mean_;
+  std::vector<Eigen::MatrixXd> tracked_objects_var_;
+  std::vector<int> tracked_objects_counter_;
 };
 
 #endif  // STATIC_LASER_SCAN_COMBINER_H
