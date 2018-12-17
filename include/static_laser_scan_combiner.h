@@ -10,6 +10,8 @@
 
 #include <ros/ros.h>
 #include <object_detector.h>
+#include <tracked_object.h>
+#include <kalman_filter.h>
 #include <geometry_msgs/Point.h>
 #include <sensor_msgs/LaserScan.h>
 #include <nav_msgs/Odometry.h>
@@ -36,9 +38,9 @@ public:
    */
   StaticLaserScanCombiner(ros::NodeHandle nh, ros::NodeHandle nh_);
 
-   /**
-    *  Class Destructor
-    */
+  /**
+   *  Class Destructor
+   */
   ~StaticLaserScanCombiner();
 
   void initScan(sensor_msgs::LaserScan& laser_msg,
@@ -102,9 +104,8 @@ private:
   double std_dev_theta_;
   std::vector<geometry_msgs::Point> occluded_means_;
   std::vector<geometry_msgs::Point> normal_means_;
-  std::vector<Eigen::Vector4d> tracked_objects_mean_;
-  std::vector<Eigen::MatrixXd> tracked_objects_var_;
-  std::vector<int> tracked_objects_counter_;
+  std::vector<TrackedObject> tracked_objects_;
+  KalmanFilter kalman_filter_;
 };
 
 #endif  // STATIC_LASER_SCAN_COMBINER_H

@@ -101,9 +101,10 @@ StaticLaserScanCombiner::StaticLaserScanCombiner
   laser_to_base_ = base_to_laser_tf_.inverse();
 
   // KF init variables
-  std_dev_process_ = 0.1;
+  std_dev_process_ = 0.1; // for what?
   std_dev_range_ = 0.01;
   std_dev_theta_ = 0.01;
+  kalman_filter_ = KalmanFilter(std_dev_range_, std_dev_theta_);
 }
 
 StaticLaserScanCombiner::~StaticLaserScanCombiner(){}
@@ -265,41 +266,21 @@ void StaticLaserScanCombiner::scanOdomCallback
       occluded_means_.push_back(temp_mean);
     }
 
-    // Define Process matrices
-    Eigen::MatrixXd A_prev(4, 4);
-    A_prev << 1, 0, prev_delta_t_, 0,
-              0, 1, 0, prev_delta_t_,
-              0, 0, 1, 0,
-              0, 0, 0, 1;
-
-    Eigen::MatrixXd Q_prev(4, 4);
-    Q_prev << pow(prev_delta_t_, 4) / 4, 0, pow(prev_delta_t_, 3) / 2, 0,
-              0, pow(prev_delta_t_, 4) / 4, 0, pow(prev_delta_t_, 3) / 2,
-              pow(prev_delta_t_, 3) / 2, 0, pow(prev_delta_t_, 2), 0,
-              0, pow(prev_delta_t_, 3) / 2, 0, pow(prev_delta_t_, 2);
-
-    // Measurement matrices
-    // Currently using easy approach and std dev are for x and y
-    Eigen::MatrixXd H_prev(2, 4);
-    H_prev << 1, 0, 0, 0,
-              0, 1, 0, 0;
-
-    Eigen::MatrixXd R_prev(2, 2);
-    R_prev << pow(std_dev_range_, 2), 0,
-              0, pow(std_dev_theta_, 2);
+    // Kalman Filter update with new delta_t
+    kalman_filter_.updateProcessMatrices(prev_delta_t_);
 
     // Check if cluster already tracked, if not new track
     std::vector<geometry_msgs::Point> all_means = normal_means_;
     all_means.insert(all_means.end(), occluded_means_.begin(), occluded_means_.end());
-    if (!tracked_objects_mean_.empty()){
-      for (size_t i = 0; i < tracked_objects_mean_.size(); i++){
+    if (!tracked_objects_.empty()){
+      for (size_t i = 0; i < tracked_objects_.size(); i++){
         int id = -1;
         double distance = 10;
         for (size_t j = 0; j < all_means.size(); j++){
           // Check distance (later try mahalanobis)
           double temp_distance =
-          sqrt(pow(tracked_objects_mean_[i][0] - all_means[j].x, 2) +
-               pow(tracked_objects_mean_[i][1] - all_means[j].y, 2));
+          sqrt(pow(tracked_objects_[i].state_mean[0] - all_means[j].x, 2) +
+               pow(tracked_objects_[i].state_mean[1] - all_means[j].y, 2));
           // Check if current distance smaller
           if (temp_distance < 0.3 && temp_distance < distance){
             id = j;
@@ -308,43 +289,40 @@ void StaticLaserScanCombiner::scanOdomCallback
         }
         // Check if found assignement
         if (id != -1){
-          tracked_objects_counter_[i] = 0;
+          tracked_objects_[i].counter_not_seen = 0;
           // Update tracked object (Prediction+Update)
           // Prediction
-          tracked_objects_mean_[i] = A_prev * tracked_objects_mean_[i];
-          tracked_objects_var_[i] = A_prev * tracked_objects_var_[i] * A_prev.transpose()
-                                    + Q_prev;
+          tracked_objects_[i].state_mean =
+              kalman_filter_.prediction(tracked_objects_[i].state_mean);
+          tracked_objects_[i].state_var =
+              kalman_filter_.prediction(tracked_objects_[i].state_var);
 
           // Update
-          Eigen::MatrixXd temp_gain(4, 2);
-          temp_gain = tracked_objects_var_[i] * H_prev.transpose() *
-            (H_prev * tracked_objects_var_[i] * H_prev.transpose() +
-             R_prev).inverse();
+          kalman_filter_.updateKalmanGain(tracked_objects_[i].state_var);
 
           Eigen::Vector2d temp_z_m;
           temp_z_m << all_means[id].x, all_means[id].y;
 
-          tracked_objects_mean_[i] = tracked_objects_mean_[i] + temp_gain *
-            (temp_z_m - H_prev * tracked_objects_mean_[i]);
+          tracked_objects_[i].state_mean =
+              kalman_filter_.update(tracked_objects_[i].state_mean, temp_z_m);
 
-          tracked_objects_var_[i] = (Eigen::MatrixXd::Identity(4, 4) -
-            temp_gain * H_prev) * tracked_objects_var_[i];
+          tracked_objects_[i].state_var =
+              kalman_filter_.update(tracked_objects_[i].state_var, temp_z_m);
 
           // Delete measurement
           all_means.erase(all_means.begin() + id);
         }
         else {
-          if (tracked_objects_counter_[i] < 5){
+          if (tracked_objects_[i].counter_not_seen < 50){
             // Update tracked object (Prediction)
-            tracked_objects_mean_[i] = A_prev * tracked_objects_mean_[i];
-            tracked_objects_var_[i] = A_prev * tracked_objects_var_[i] * A_prev.inverse()
-                                   + Q_prev;
-            tracked_objects_counter_[i] += 1;
+            tracked_objects_[i].state_mean =
+                kalman_filter_.prediction(tracked_objects_[i].state_mean);
+            tracked_objects_[i].state_var =
+              kalman_filter_.prediction(tracked_objects_[i].state_var);
+            tracked_objects_[i].counter_not_seen += 1;
           }
           else {
-            tracked_objects_mean_.erase(tracked_objects_mean_.begin() + i);
-            tracked_objects_var_.erase(tracked_objects_var_.begin() + i);
-            tracked_objects_counter_.erase(tracked_objects_counter_.begin() + i);
+            tracked_objects_.erase(tracked_objects_.begin() + i);
           }
         }
       }
@@ -353,18 +331,8 @@ void StaticLaserScanCombiner::scanOdomCallback
     if (!all_means.empty()){
       // Generate new tracked objects
       for (size_t i = 0; i < all_means.size(); i++){
-        Eigen::Vector4d temp_track_mean;
-        temp_track_mean << all_means[i].x, all_means[i].y, 0, 0;
-
-        Eigen::MatrixX4d temp_track_var(4, 4);
-        temp_track_var << 1, 0, 0, 0,
-                          0, 1, 0, 0,
-                          0, 0, 1, 0,
-                          0, 0, 0, 1;
-
-        tracked_objects_mean_.push_back(temp_track_mean);
-        tracked_objects_var_.push_back(temp_track_var);
-        tracked_objects_counter_.push_back(0);
+        TrackedObject temp_tracked_object(all_means[i].x, all_means[i].y);
+        tracked_objects_.push_back(temp_tracked_object);
       }
     }
 
@@ -373,10 +341,10 @@ void StaticLaserScanCombiner::scanOdomCallback
     tracked_objects_msg.header.frame_id = "map";
     tracked_objects_msg.cell_width = 0.2;
     tracked_objects_msg.cell_height = 0.2;
-    for (size_t i = 0; i < tracked_objects_mean_.size(); i++){
+    for (size_t i = 0; i < tracked_objects_.size(); i++){
       geometry_msgs::Point temp_point;
-      temp_point.x = tracked_objects_mean_[i][0];
-      temp_point.y = tracked_objects_mean_[i][1];
+      temp_point.x = tracked_objects_[i].state_mean[0];
+      temp_point.y = tracked_objects_[i].state_mean[1];
       temp_point.z = 0;
       tracked_objects_msg.cells.push_back(temp_point);
     }

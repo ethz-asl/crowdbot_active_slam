@@ -69,6 +69,8 @@ link_directories(${csm_LIBRARY_DIRS} ${SBPL_LIBRARY_DIRS})
 add_library(pedestrian src/pedestrian.cpp)
 add_library(utils src/utils.cpp)
 add_library(ObjectDetector src/object_detector.cpp)
+add_library(TrackedObject src/tracked_object.cpp)
+add_library(KalmanFilter src/kalman_filter.cpp)
 
 add_executable(graph_optimisation src/graph_optimisation.cpp)
 add_executable(frontier_exploration src/frontier_exploration.cpp)
@@ -85,7 +87,7 @@ target_link_libraries(combined_laser_scans ${catkin_LIBRARIES} ${pcl_ros_LIBRARI
 target_link_libraries(pedestrian_simulator ${catkin_LIBRARIES}
                       ${grid_map_ros_LIBRARIES} pedestrian utils)
 target_link_libraries(static_laser_scan_combiner ${catkin_LIBRARIES} ObjectDetector
-                      ${EIGEN3_LIBRARIES})
+                      TrackedObject KalmanFilter ${EIGEN3_LIBRARIES})
 
 # add dependencies to make sure that srv files are generated before used
 add_dependencies(graph_optimisation crowdbot_active_slam_generate_messages_cpp)
