@@ -274,6 +274,12 @@ void StaticLaserScanCombiner::scanOdomCallback
     all_means.insert(all_means.end(), occluded_means_.begin(), occluded_means_.end());
     if (!tracked_objects_.empty()){
       for (size_t i = 0; i < tracked_objects_.size(); i++){
+        // Prediction
+        tracked_objects_[i].state_mean =
+          kalman_filter_.prediction(tracked_objects_[i].state_mean);
+        tracked_objects_[i].state_var =
+          kalman_filter_.prediction(tracked_objects_[i].state_var);
+
         int id = -1;
         double distance = 10;
         for (size_t j = 0; j < all_means.size(); j++){
@@ -290,16 +296,10 @@ void StaticLaserScanCombiner::scanOdomCallback
         // Check if found assignement
         if (id != -1){
           tracked_objects_[i].counter_not_seen = 0;
-          // Update tracked object (Prediction+Update)
-          // Prediction
-          tracked_objects_[i].state_mean =
-              kalman_filter_.prediction(tracked_objects_[i].state_mean);
-          tracked_objects_[i].state_var =
-              kalman_filter_.prediction(tracked_objects_[i].state_var);
-
-          // Update
+          // Update tracked object
           kalman_filter_.updateKalmanGain(tracked_objects_[i].state_var);
 
+          // Get measurement
           Eigen::Vector2d temp_z_m;
           temp_z_m << all_means[id].x, all_means[id].y;
 
@@ -314,15 +314,11 @@ void StaticLaserScanCombiner::scanOdomCallback
         }
         else {
           if (tracked_objects_[i].counter_not_seen < 50){
-            // Update tracked object (Prediction)
-            tracked_objects_[i].state_mean =
-                kalman_filter_.prediction(tracked_objects_[i].state_mean);
-            tracked_objects_[i].state_var =
-              kalman_filter_.prediction(tracked_objects_[i].state_var);
             tracked_objects_[i].counter_not_seen += 1;
           }
           else {
             tracked_objects_.erase(tracked_objects_.begin() + i);
+            i -= 1;
           }
         }
       }
