@@ -26,3 +26,14 @@ TrackedObject::TrackedObject(double x, double y){
 }
 
 TrackedObject::~TrackedObject(){}
+
+void TrackedObject::saveCluster(std::vector<geometry_msgs::Point> cluster){
+  if (prev_cluster_.empty()){
+    prev_cluster_ = cluster;
+    current_cluster_ = cluster;
+  }
+  else {
+    prev_cluster_ = current_cluster_;
+    current_cluster_ = cluster;  
+  }
+}

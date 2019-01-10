@@ -18,14 +18,26 @@ int positionToMapId(double x, double y, int width, int height, float resolution)
   return id;
 }
 
-geometry_msgs::Point getMean(map<int, double>& cluster,
-                             sensor_msgs::LaserScan& laser_msg){
+vector<geometry_msgs::Point> getClusterInLaserFrame(map<int, double>& cluster,
+                                            sensor_msgs::LaserScan& laser_msg){
+  vector<geometry_msgs::Point> cluster_vector;
+  for (auto cluster_it = cluster.begin(); cluster_it != cluster.end(); ++cluster_it){
+    geometry_msgs::Point temp_point;
+    temp_point.x = cluster_it->second * cos(cluster_it->first *
+                   laser_msg.angle_increment + laser_msg.angle_min);
+    temp_point.y = cluster_it->second * sin(cluster_it->first *
+                   laser_msg.angle_increment + laser_msg.angle_min);
+    temp_point.z = 0;
+    cluster_vector.push_back(temp_point);
+  }
+  return cluster_vector;
+}
+
+geometry_msgs::Point getMean(vector<geometry_msgs::Point> cluster){
   double x = 0, y = 0;
   for (auto cluster_it = cluster.begin(); cluster_it != cluster.end(); ++cluster_it){
-    x += cluster_it->second * cos(cluster_it->first * laser_msg.angle_increment
-         + laser_msg.angle_min);
-    y += cluster_it->second * sin(cluster_it->first * laser_msg.angle_increment
-         + laser_msg.angle_min);
+    x += cluster_it->x;
+    y += cluster_it->y;
   }
   geometry_msgs::Point mean;
   mean.x = x / cluster.size();
@@ -237,29 +249,36 @@ void StaticLaserScanCombiner::scanOdomCallback
     static_scan_pub_.publish(init_scan_);
 
     // Detect objects
-    list<map<int, double>> normal_clusters;
+    // TODO: define a cluster class
+    list<map<int, double>> free_clusters;
     list<map<int, double>> occluded_clusters;
     object_detector_.detectObjectsFromScan(dynamic_scan_,
                                            laser_msg_,
-                                           normal_clusters,
+                                           free_clusters,
                                            occluded_clusters);
 
     // Track objects
-    normal_means_.clear();
+    free_means_.clear();
     occluded_means_.clear();
-    for (auto cluster_it = normal_clusters.begin(); cluster_it != normal_clusters.end(); ++cluster_it){
+    vector<vector<geometry_msgs::Point>> free_cluster_vectors;
+    vector<vector<geometry_msgs::Point>> occluded_cluster_vectors;
+    for (auto cluster_it = free_clusters.begin(); cluster_it != free_clusters.end(); ++cluster_it){
       geometry_msgs::Point temp_mean;
       tf::Point temp_mean_tf;
-      temp_mean = getMean(*(cluster_it), laser_msg_);
+      free_cluster_vectors.push_back(getClusterInLaserFrame(*(cluster_it), laser_msg_));
+      temp_mean = getMean(free_cluster_vectors.back());
+      // Transform mean to Map frame
       pointMsgToTF(temp_mean, temp_mean_tf);
       temp_mean_tf = map_to_latest_laser_tf_ * temp_mean_tf;
       pointTFToMsg(temp_mean_tf, temp_mean);
-      normal_means_.push_back(temp_mean);
+      free_means_.push_back(temp_mean);
     }
     for (auto cluster_it = occluded_clusters.begin(); cluster_it != occluded_clusters.end(); ++cluster_it){
       geometry_msgs::Point temp_mean;
       tf::Point temp_mean_tf;
-      temp_mean = getMean(*(cluster_it), laser_msg_);
+      occluded_cluster_vectors.push_back(getClusterInLaserFrame(*(cluster_it), laser_msg_));
+      temp_mean = getMean(occluded_cluster_vectors.back());
+      // Transform mean to Map frame
       pointMsgToTF(temp_mean, temp_mean_tf);
       temp_mean_tf = map_to_latest_laser_tf_ * temp_mean_tf;
       pointTFToMsg(temp_mean_tf, temp_mean);
@@ -270,8 +289,6 @@ void StaticLaserScanCombiner::scanOdomCallback
     kalman_filter_.updateProcessMatrices(prev_delta_t_);
 
     // Check if cluster already tracked, if not new track
-    std::vector<geometry_msgs::Point> all_means = normal_means_;
-    all_means.insert(all_means.end(), occluded_means_.begin(), occluded_means_.end());
     if (!tracked_objects_.empty()){
       for (size_t i = 0; i < tracked_objects_.size(); i++){
         // Prediction
@@ -282,6 +299,8 @@ void StaticLaserScanCombiner::scanOdomCallback
 
         int id = -1;
         double distance = 10;
+        std::vector<geometry_msgs::Point> all_means = free_means_;
+        all_means.insert(all_means.end(), occluded_means_.begin(), occluded_means_.end());
         for (size_t j = 0; j < all_means.size(); j++){
           // Check distance (later try mahalanobis)
           double temp_distance =
@@ -310,7 +329,18 @@ void StaticLaserScanCombiner::scanOdomCallback
               kalman_filter_.update(tracked_objects_[i].state_var, temp_z_m);
 
           // Delete measurement
-          all_means.erase(all_means.begin() + id);
+          if (id >= free_means_.size()){
+            tracked_objects_[i].saveCluster(occluded_cluster_vectors[id - free_means_.size()]);
+            occluded_cluster_vectors.erase(occluded_cluster_vectors.begin() + id - free_means_.size());
+            occluded_means_.erase(occluded_means_.begin() + id - free_means_.size());
+            tracked_objects_[i].current_occlusion = "occluded";
+          }
+          else {
+            tracked_objects_[i].saveCluster(free_cluster_vectors[id]);
+            free_cluster_vectors.erase(free_cluster_vectors.begin() + id);
+            free_means_.erase(free_means_.begin() + id);
+            tracked_objects_[i].current_occlusion = "free";
+          }
         }
         else {
           if (tracked_objects_[i].counter_not_seen < 50){
@@ -324,10 +354,23 @@ void StaticLaserScanCombiner::scanOdomCallback
       }
     }
 
+    std::vector<geometry_msgs::Point> all_means = free_means_;
+    all_means.insert(all_means.end(), occluded_means_.begin(), occluded_means_.end());
     if (!all_means.empty()){
       // Generate new tracked objects
       for (size_t i = 0; i < all_means.size(); i++){
         TrackedObject temp_tracked_object(all_means[i].x, all_means[i].y);
+
+        // Save occlusion and cluster
+        if (i >= free_means_.size()){
+          temp_tracked_object.current_occlusion = "occluded";
+          temp_tracked_object.saveCluster(occluded_cluster_vectors[i - free_means_.size()]);
+        }
+        else {
+          temp_tracked_object.current_occlusion = "free";
+          temp_tracked_object.saveCluster(free_cluster_vectors[i]);
+        }
+
         tracked_objects_.push_back(temp_tracked_object);
       }
     }
@@ -355,7 +398,7 @@ void StaticLaserScanCombiner::scanOdomCallback
     line_list.color.a = 1.0;
     sensor_msgs::LaserScan occluded_scan = laser_msg_;
 
-    for (auto it = normal_clusters.begin(); it != normal_clusters.end(); ++it){
+    for (auto it = free_clusters.begin(); it != free_clusters.end(); ++it){
       geometry_msgs::Point line_start,line_end;
       for (auto map_it = (*it).begin(); map_it != (*it).end(); ++map_it){
         if (map_it->first < 720){

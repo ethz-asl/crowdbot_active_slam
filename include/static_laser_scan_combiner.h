@@ -103,7 +103,7 @@ private:
   double std_dev_range_;
   double std_dev_theta_;
   std::vector<geometry_msgs::Point> occluded_means_;
-  std::vector<geometry_msgs::Point> normal_means_;
+  std::vector<geometry_msgs::Point> free_means_;
   std::vector<TrackedObject> tracked_objects_;
   KalmanFilter kalman_filter_;
 };

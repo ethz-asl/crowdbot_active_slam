@@ -26,20 +26,22 @@ public:
    */
   ~TrackedObject();
 
+  void saveCluster(std::vector<geometry_msgs::Point> cluster);
+
   // bool check_if_dynamic();
 
   // Variables
   int counter_not_seen;
   Eigen::Vector4d state_mean;
   Eigen::Matrix4d state_var;
-
-
+  std::string current_occlusion;
+  std::string dynamic_or_static;
 
 private:
   // State
   double x_, y_, x_vel_, y_vel_;
-  std::string current_occlusion_;
-  std::string dynamic_or_static_;
+  std::vector<geometry_msgs::Point> prev_cluster_;
+  std::vector<geometry_msgs::Point> current_cluster_;
 
 };
 
