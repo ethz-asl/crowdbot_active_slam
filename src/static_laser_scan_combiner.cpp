@@ -53,7 +53,7 @@ StaticLaserScanCombiner::StaticLaserScanCombiner
   object_detector_ = ObjectDetector(20, 0.01);
 
   // Subscriber and publisher
-  map_sub_ = nh_.subscribe("/occupancy_map", 1, &StaticLaserScanCombiner::mapCallback, this);
+  map_sub_ = nh_.subscribe("/occupancy_map_ptr", 1, &StaticLaserScanCombiner::mapCallback, this);
   scan_sub_ = new message_filters::Subscriber<sensor_msgs::LaserScan>
               (nh_, "/base_scan", 1);
   odom_sub_ = new message_filters::Subscriber<nav_msgs::Odometry>
@@ -169,9 +169,10 @@ void StaticLaserScanCombiner::initScan(sensor_msgs::LaserScan& laser_msg,
     }
 
     // Publish init scan if enough scan points available, TODO: var for 50
-    if (count_unknown < 50){
+    if (count_unknown < 100){
       static_scan_pub_.publish(init_scan);
       initialized_first_scan_ = true;
+      ROS_INFO("Scan initialised!");
     }
   }
 }

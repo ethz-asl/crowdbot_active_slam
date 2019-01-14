@@ -46,6 +46,7 @@ void GraphOptimiser::initParams(){
   path_pub_ = nh_.advertise<nav_msgs::Path>("graph_path", 1);
   action_path_pub_ = nh_.advertise<nav_msgs::Path>("action_graph", 1);
   map_pub_ = nh_.advertise<nav_msgs::OccupancyGrid>("occupancy_map", 1);
+  map_ptr_pub_ = nh_.advertise<nav_msgs::OccupancyGrid>("occupancy_map_ptr", 1);
   test_pose2D_pub_ = nh_.advertise<geometry_msgs::Pose2D>("test_pose2D", 1);
   test_pose_pub_ = nh_.advertise<geometry_msgs::PoseStamped>("test_pose", 1);
 
@@ -195,6 +196,9 @@ void GraphOptimiser::initParams(){
   std::ifstream config_file(config_path.c_str());
 
   icp_.loadFromYaml(config_file);
+
+  // Publish map in other thread at low rate (only for rviz)
+  boost::thread map_pub_thread(&GraphOptimiser::pubMap, this);
 }
 
 void GraphOptimiser::laserScanToMatrix(sensor_msgs::LaserScan& scan_msg, Eigen::MatrixXf& matrix){
@@ -1178,6 +1182,9 @@ void GraphOptimiser::scanMatcherCallback(
       }
       else {
         updateMap(pose_estimates_, keyframe_ldp_vec_);
+        occupancy_grid_msg_ptr_ =
+              boost::make_shared<nav_msgs::OccupancyGrid>(occupancy_grid_msg_);
+        map_ptr_pub_.publish(occupancy_grid_msg_ptr_);
       }
     }
   }
@@ -1209,6 +1216,9 @@ void GraphOptimiser::scanMatcherCallback(
     // Draw the map
     drawMap(pose_estimates_, keyframe_ldp_vec_);
     first_map_calculated_ = true;
+    occupancy_grid_msg_ptr_ =
+              boost::make_shared<nav_msgs::OccupancyGrid>(occupancy_grid_msg_);
+    map_ptr_pub_.publish(occupancy_grid_msg_ptr_);
   }
 }
 
@@ -1241,9 +1251,6 @@ int main(int argc, char **argv){
   ros::NodeHandle nh;
   ros::NodeHandle nh_("~");
   GraphOptimiser optimiser(nh, nh_);
-
-  // Publish map in other thread
-  boost::thread map_pub_thread(&GraphOptimiser::pubMap, &optimiser);
 
   ros::spin();
 

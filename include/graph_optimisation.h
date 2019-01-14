@@ -152,6 +152,7 @@ private:
   // Ros msgs
   nav_msgs::Path graph_path_;
   nav_msgs::OccupancyGrid occupancy_grid_msg_;
+  nav_msgs::OccupancyGridPtr occupancy_grid_msg_ptr_;
   geometry_msgs::PoseStamped latest_pose_estimate_;
   sensor_msgs::LaserScan latest_scan_msg_;
 
@@ -164,6 +165,7 @@ private:
   ros::Publisher path_pub_;
   ros::Publisher action_path_pub_;
   ros::Publisher map_pub_;
+  ros::Publisher map_ptr_pub_;
   ros::Publisher test_pose2D_pub_;
   ros::Publisher test_pose_pub_;
   ros::ServiceServer map_recalc_service_;
