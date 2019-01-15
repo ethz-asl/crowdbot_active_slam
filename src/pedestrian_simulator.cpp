@@ -224,13 +224,12 @@ geometry_msgs::Vector3 ForceToDestination(Pedestrian* ped, double desired_speed,
 
 geometry_msgs::Vector3 RepulsiveWallForce(Pedestrian* ped_i,
                                          grid_map::GridMap* map,
-                                         Position* map_center, double delta_t) {
+                                         double delta_t) {
   double A = 2.3, B = 1.07, l = 0.7, g_0;
   geometry_msgs::Vector3 force, closest_obj, rel_dist, speed, step, r_s;
   Position ped_position;
-
-  ped_position.x() = ped_i->GetCurrentPose().x + map_center->x();
-  ped_position.y() = ped_i->GetCurrentPose().y + map_center->y();
+  ped_position.x() = ped_i->GetCurrentPose().x;
+  ped_position.y() = ped_i->GetCurrentPose().y;
   closest_obj.x = map->atPosition("Closest X", ped_position);
   closest_obj.y = map->atPosition("Closest Y", ped_position);
 
@@ -381,7 +380,6 @@ int main(int argc, char** argv) {
   std::string base_name;
   std::string occupancy_grid_map_file;
   std::string sdf_map_file;
-  Position map_center;
 
   srand(time(NULL));
   // Start node and service client
@@ -505,12 +503,11 @@ int main(int argc, char** argv) {
       occ_mat(i - p_start[0], j - p_start[1]) = occ_mat_full(i, j);
     }
   }
-
   for (grid_map::GridMapIterator it(map); !it.isPastEnd(); ++it) {
     int index = it.getLinearIndex();
     int iy_cell = index / width;
     int ix_cell = index - iy_cell * width;
-    map.at("Occupied", *it) = occ_mat(width - ix_cell, height - iy_cell);
+    map.at("Occupied", *it) = occ_mat(width - ix_cell - 1, height - iy_cell - 1);
   }
   ROS_INFO("Occupancy map filled");
 
@@ -523,13 +520,13 @@ int main(int argc, char** argv) {
     int iy_cell = index / width;
     int ix_cell = index - iy_cell * width;
 
-    int i = width - ix_cell + p_start[0];
-    if (i == p_end[0]) n = 1;
+    int i = width - ix_cell - 1 + p_start[0];
+    if (i == p_end[0] - 1) n = 1;
 
     double dist = -1;
     int x_closest, y_closest;
     bool not_found = true;
-    int j = height - iy_cell + p_start[1];
+    int j = height - iy_cell - 1 + p_start[1];
     // Search for shortest distance of (i, j)
     dist = -1;
     not_found = true;
@@ -650,8 +647,7 @@ int main(int argc, char** argv) {
       total_force = ForceToDestination(&pedestrians.at(i), desired_speed,
                                        rel_time, tolerance, N, &angular, &map);
       // Calculate object repulsive force
-      obj_force =
-          RepulsiveWallForce(&pedestrians.at(i), &map, &map_center, delta_t);
+      obj_force = RepulsiveWallForce(&pedestrians.at(i), &map, delta_t);
       total_force.x += obj_force.x;
       total_force.y += obj_force.y;
       // Calculate pedestrians repulsive forces
