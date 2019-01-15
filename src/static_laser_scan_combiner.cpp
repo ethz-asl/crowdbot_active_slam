@@ -18,6 +18,22 @@ int positionToMapId(double x, double y, int width, int height, float resolution)
   return id;
 }
 
+std::vector<unsigned int> getNeighbourXCells(unsigned int id,
+                int map_width, int map_height, unsigned int n_cells){
+  std::vector<unsigned int> neighbour_vec;
+
+  int br_corner = id - n_cells - n_cells * map_width;
+  for (unsigned int i = 0; i <= 2 * n_cells; i++){
+    for (unsigned int j = 0; j <= 2 * n_cells; j++){
+      int new_id = br_corner + j + i * map_width;
+      if (new_id >= 0 && new_id <= map_width * map_height && new_id != int(id)){
+        neighbour_vec.push_back(new_id);
+      }
+    }
+  }
+  return neighbour_vec;
+}
+
 vector<geometry_msgs::Point> getClusterInLaserFrame(map<int, double>& cluster,
                                             sensor_msgs::LaserScan& laser_msg){
   vector<geometry_msgs::Point> cluster_vector;
@@ -53,7 +69,8 @@ StaticLaserScanCombiner::StaticLaserScanCombiner
   object_detector_ = ObjectDetector(20, 0.01);
 
   // Subscriber and publisher
-  map_sub_ = nh_.subscribe("/occupancy_map_ptr", 1, &StaticLaserScanCombiner::mapCallback, this);
+  map_sub_ = nh_.subscribe("/occupancy_map_for_static_scan_comb", 1,
+                           &StaticLaserScanCombiner::mapCallback, this);
   scan_sub_ = new message_filters::Subscriber<sensor_msgs::LaserScan>
               (nh_, "/base_scan", 1);
   odom_sub_ = new message_filters::Subscriber<nav_msgs::Odometry>
@@ -70,8 +87,6 @@ StaticLaserScanCombiner::StaticLaserScanCombiner
   marker_occluded_pub_ = nh_.advertise<visualization_msgs::Marker>("marker_occluded", 1);
   tracked_objects_pub_ = nh_.advertise<nav_msgs::GridCells>("tracked_objects", 1);
 
-  // test_pub_ = nh_.advertise<nav_msgs::GridCells>("test", 1);
-
   get_current_pose_client_ = nh_.serviceClient<crowdbot_active_slam::current_pose>
                              ("/current_pose_node_service");
 
@@ -79,6 +94,7 @@ StaticLaserScanCombiner::StaticLaserScanCombiner
   // Wait until time is not 0
   while (begin_time_.toSec() == 0) begin_time_ = ros::Time::now();
   initialized_first_scan_ = false;
+  map_callback_initialized_ = false;
 
   // Initialize base to laser tf
   tf::StampedTransform base_to_laser_tf_;
@@ -180,6 +196,7 @@ void StaticLaserScanCombiner::initScan(sensor_msgs::LaserScan& laser_msg,
 void StaticLaserScanCombiner::scanOdomCallback
      (const sensor_msgs::LaserScan::ConstPtr& scan_msg,
       const nav_msgs::Odometry::ConstPtr& odom_msg){
+
   // Call latest pose estimate
   if (initialized_first_scan_){
     crowdbot_active_slam::current_pose current_pose_srv;
@@ -216,8 +233,10 @@ void StaticLaserScanCombiner::scanOdomCallback
     prev_node_stamp_ = curr_node_stamp_;
   }
   else {
+    if (map_callback_initialized_ == false) return;
     // Check each scan point if it is a wall from static occupancy map
     dynamic_scan_ = laser_msg_;
+    static_scan_ = laser_msg_;
     double theta = laser_msg_.angle_min;
 
     for (size_t i = 0; i < laser_scan_size; i ++){
@@ -232,11 +251,20 @@ void StaticLaserScanCombiner::scanOdomCallback
       int id = positionToMapId(temp_point.x, temp_point.y, 2000,
                                   2000, 0.05);
       bool occupied = false;
-      if (map_msg_->data[id] > 80) occupied = true;
-      if (map_msg_->data[id+1] > 80) occupied = true;
-      if (map_msg_->data[id-1] > 80) occupied = true;
-      if (map_msg_->data[id+2000] > 80) occupied = true;
-      if (map_msg_->data[id-2000] > 80) occupied = true;
+      // if (map_msg_.data[id] > 80) occupied = true;
+      // if (map_msg_.data[id+1] > 80) occupied = true;
+      // if (map_msg_.data[id-1] > 80) occupied = true;
+      // if (map_msg_.data[id+2000] > 80) occupied = true;
+      // if (map_msg_.data[id-2000] > 80) occupied = true;
+      // if (map_msg_.data[id+1999] > 80) occupied = true;
+      // if (map_msg_.data[id+2001] > 80) occupied = true;
+      // if (map_msg_.data[id-1999] > 80) occupied = true;
+      // if (map_msg_.data[id-2001] > 80) occupied = true;
+      std::vector<unsigned int> neighbours;
+      neighbours = getNeighbourXCells(id, 2000, 2000, 2);
+      for (int iter = 0; iter < neighbours.size(); iter++){
+        if (map_msg_.data[neighbours[iter]] > 80) occupied = true;
+      }
 
       if (occupied == true){
         dynamic_scan_.ranges[i] = 0;
@@ -245,10 +273,6 @@ void StaticLaserScanCombiner::scanOdomCallback
     }
 
     // Detect and Track objects (ABD + KF)
-
-    dynamic_scan_pub_.publish(dynamic_scan_);
-    static_scan_pub_.publish(init_scan_);
-
     // Detect objects
     // TODO: define a cluster class
     list<map<int, double>> free_clusters;
@@ -291,7 +315,7 @@ void StaticLaserScanCombiner::scanOdomCallback
 
     // Check if cluster already tracked, if not new track
     if (!tracked_objects_.empty()){
-      for (size_t i = 0; i < tracked_objects_.size(); i++){
+      for (int i = 0; i < tracked_objects_.size(); i++){
         // Prediction
         tracked_objects_[i].state_mean =
           kalman_filter_.prediction(tracked_objects_[i].state_mean);
@@ -329,22 +353,69 @@ void StaticLaserScanCombiner::scanOdomCallback
           tracked_objects_[i].state_var =
               kalman_filter_.update(tracked_objects_[i].state_var, temp_z_m);
 
+          if (tracked_objects_[i].dynamic_or_static == "static"){
+            int map_id = positionToMapId(temp_z_m[0], temp_z_m[1], 2000,
+                                        2000, 0.05);
+            if (map_msg_.data[map_id] == -1){
+              // If object is in unknown space, assume it is static
+              tracked_objects_[i].dynamic_or_static = "static";
+            }
+            else {
+              // If object is in free space, assume it is dynamic
+              tracked_objects_[i].dynamic_or_static = "dynamic";
+            }
+          }
+
           // Delete measurement
           if (id >= free_means_.size()){
+            tracked_objects_[i].current_occlusion = "occluded";
+
+            auto it_delete = occluded_clusters.begin();
+            std::advance(it_delete, id - free_means_.size());
+            if (tracked_objects_[i].dynamic_or_static == "static"){
+              for (auto cluster_it = (*it_delete).begin();
+                   cluster_it != (*it_delete).end(); ++cluster_it){
+                dynamic_scan_.ranges[cluster_it->first] = 0;
+              }
+            }
+            else {
+              for (auto cluster_it = (*it_delete).begin();
+                   cluster_it != (*it_delete).end(); ++cluster_it){
+                static_scan_.ranges[cluster_it->first] = 0;
+              }
+            }
+            occluded_clusters.erase(it_delete);
+
             tracked_objects_[i].saveCluster(occluded_cluster_vectors[id - free_means_.size()]);
             occluded_cluster_vectors.erase(occluded_cluster_vectors.begin() + id - free_means_.size());
             occluded_means_.erase(occluded_means_.begin() + id - free_means_.size());
-            tracked_objects_[i].current_occlusion = "occluded";
           }
           else {
+            tracked_objects_[i].current_occlusion = "free";
+
+            auto it_delete = free_clusters.begin();
+            std::advance(it_delete, id);
+            if (tracked_objects_[i].dynamic_or_static == "static"){
+              for (auto cluster_it = (*it_delete).begin();
+                   cluster_it != (*it_delete).end(); ++cluster_it){
+                dynamic_scan_.ranges[cluster_it->first] = 0;
+              }
+            }
+            else {
+              for (auto cluster_it = (*it_delete).begin();
+                   cluster_it != (*it_delete).end(); ++cluster_it){
+                static_scan_.ranges[cluster_it->first] = 0;
+              }
+            }
+            free_clusters.erase(it_delete);
+
             tracked_objects_[i].saveCluster(free_cluster_vectors[id]);
             free_cluster_vectors.erase(free_cluster_vectors.begin() + id);
             free_means_.erase(free_means_.begin() + id);
-            tracked_objects_[i].current_occlusion = "free";
           }
         }
         else {
-          if (tracked_objects_[i].counter_not_seen < 50){
+          if (tracked_objects_[i].counter_not_seen < 10){
             tracked_objects_[i].counter_not_seen += 1;
           }
           else {
@@ -361,6 +432,39 @@ void StaticLaserScanCombiner::scanOdomCallback
       // Generate new tracked objects
       for (size_t i = 0; i < all_means.size(); i++){
         TrackedObject temp_tracked_object(all_means[i].x, all_means[i].y);
+
+        // Check if object is dynamic or static
+        int id = positionToMapId(all_means[i].x, all_means[i].y, 2000,
+                                    2000, 0.05);
+
+        auto it_delete = occluded_clusters.begin();
+        if (i >= free_means_.size()){
+          it_delete = occluded_clusters.begin();
+          std::advance(it_delete, i - free_means_.size());
+        }
+        else{
+          it_delete = free_clusters.begin();
+          std::advance(it_delete, i);
+        }
+
+        if (map_msg_.data[id] == -1){
+          // If object is in unknown space, assume it is static
+          temp_tracked_object.dynamic_or_static = "static";
+
+          for (auto cluster_it = (*it_delete).begin();
+               cluster_it != (*it_delete).end(); ++cluster_it){
+            dynamic_scan_.ranges[cluster_it->first] = 0;
+          }
+        }
+        else {
+          // If object is in free space, assume it is dynamic
+          temp_tracked_object.dynamic_or_static = "dynamic";
+
+          for (auto cluster_it = (*it_delete).begin();
+               cluster_it != (*it_delete).end(); ++cluster_it){
+            static_scan_.ranges[cluster_it->first] = 0;
+          }
+        }
 
         // Save occlusion and cluster
         if (i >= free_means_.size()){
@@ -390,83 +494,20 @@ void StaticLaserScanCombiner::scanOdomCallback
     }
     tracked_objects_pub_.publish(tracked_objects_msg);
 
-    visualization_msgs::Marker line_list;
-    line_list.header.frame_id = laser_msg_.header.frame_id;
-    line_list.header.stamp = laser_msg_.header.stamp;
-    line_list.type = visualization_msgs::Marker::LINE_LIST;
-    line_list.scale.x = 0.1;
-    line_list.color.r = 1.0;
-    line_list.color.a = 1.0;
-    sensor_msgs::LaserScan occluded_scan = laser_msg_;
-
-    for (auto it = free_clusters.begin(); it != free_clusters.end(); ++it){
-      geometry_msgs::Point line_start,line_end;
-      for (auto map_it = (*it).begin(); map_it != (*it).end(); ++map_it){
-        if (map_it->first < 720){
-          occluded_scan.ranges[map_it->first] = 0;
-        }
-        else {
-          occluded_scan.ranges[map_it->first - 720] = 0;
-
-        }
-        if (map_it == (*it).begin()){
-          line_start.x = map_it->second * cos(map_it->first * laser_msg_.angle_increment+M_PI);
-          line_start.y = map_it->second * sin(map_it->first * laser_msg_.angle_increment+M_PI);
-          line_start.z = 0;
-        }
-        else if (map_it == --(*it).end()){
-          line_end.x = map_it->second * cos(map_it->first * laser_msg_.angle_increment+M_PI);
-          line_end.y = map_it->second * sin(map_it->first * laser_msg_.angle_increment+M_PI);
-          line_end.z = 0;
-        }
-      }
-      line_list.points.push_back(line_start);
-      line_list.points.push_back(line_end);
-    }
-    // static_scan_pub_.publish(occluded_scan);
-    marker_front_pub_.publish(line_list);
-
-    visualization_msgs::Marker line_list_occ;
-    line_list_occ.header.frame_id = laser_msg_.header.frame_id;
-    line_list_occ.header.stamp = laser_msg_.header.stamp;
-    line_list_occ.type = visualization_msgs::Marker::LINE_LIST;
-    line_list_occ.scale.x = 0.1;
-    line_list_occ.color.b = 1.0;
-    line_list_occ.color.a = 1.0;
-
-    for (auto it = occluded_clusters.begin(); it != occluded_clusters.end(); ++it){
-      geometry_msgs::Point line_start,line_end;
-      for (auto map_it = (*it).begin(); map_it != (*it).end(); ++map_it){
-        if (map_it == (*it).begin()){
-          line_start.x = map_it->second * cos(map_it->first * laser_msg_.angle_increment
-                                              + laser_msg_.angle_min);
-          line_start.y = map_it->second * sin(map_it->first * laser_msg_.angle_increment
-                                              + laser_msg_.angle_min);
-          line_start.z = 0;
-        }
-        else if (map_it == --(*it).end()){
-          line_end.x = map_it->second * cos(map_it->first * laser_msg_.angle_increment
-                                            + laser_msg_.angle_min);
-          line_end.y = map_it->second * sin(map_it->first * laser_msg_.angle_increment
-                                            + laser_msg_.angle_min);
-          line_end.z = 0;
-        }
-      }
-      line_list_occ.points.push_back(line_start);
-      line_list_occ.points.push_back(line_end);
-    }
-    marker_occluded_pub_.publish(line_list_occ);
-
     // Update delta_t
     curr_node_stamp_ = laser_msg_.header.stamp;
     prev_delta_t_ = (curr_node_stamp_ - prev_node_stamp_).toSec();
     prev_node_stamp_ = curr_node_stamp_;
+
+    dynamic_scan_pub_.publish(dynamic_scan_);
+    static_scan_pub_.publish(static_scan_);
   }
 }
 
 void StaticLaserScanCombiner::mapCallback
     (const nav_msgs::OccupancyGrid::ConstPtr& map_msg){
-  map_msg_ = map_msg;
+  map_msg_ = *map_msg;
+  map_callback_initialized_ = true;
 }
 
 

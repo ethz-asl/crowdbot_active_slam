@@ -73,10 +73,11 @@ private:
 
   // ROS msgs
   sensor_msgs::LaserScan init_scan_;
+  sensor_msgs::LaserScan static_scan_;
   sensor_msgs::LaserScan laser_msg_;
   sensor_msgs::LaserScan dynamic_scan_;
   nav_msgs::Odometry odom_msg_;
-  nav_msgs::OccupancyGrid::ConstPtr map_msg_;
+  nav_msgs::OccupancyGrid map_msg_;
 
   // TF
   tf::TransformListener base_to_laser_listener_;
@@ -106,6 +107,7 @@ private:
   std::vector<geometry_msgs::Point> free_means_;
   std::vector<TrackedObject> tracked_objects_;
   KalmanFilter kalman_filter_;
+  bool map_callback_initialized_;
 };
 
 #endif  // STATIC_LASER_SCAN_COMBINER_H

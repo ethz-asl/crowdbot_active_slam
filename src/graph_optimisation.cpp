@@ -46,7 +46,8 @@ void GraphOptimiser::initParams(){
   path_pub_ = nh_.advertise<nav_msgs::Path>("graph_path", 1);
   action_path_pub_ = nh_.advertise<nav_msgs::Path>("action_graph", 1);
   map_pub_ = nh_.advertise<nav_msgs::OccupancyGrid>("occupancy_map", 1);
-  map_ptr_pub_ = nh_.advertise<nav_msgs::OccupancyGrid>("occupancy_map_ptr", 1);
+  map_pub_for_static_scan_comb_ =
+  nh_.advertise<nav_msgs::OccupancyGrid>("occupancy_map_for_static_scan_comb", 1);
   test_pose2D_pub_ = nh_.advertise<geometry_msgs::Pose2D>("test_pose2D", 1);
   test_pose_pub_ = nh_.advertise<geometry_msgs::PoseStamped>("test_pose", 1);
 
@@ -1182,9 +1183,7 @@ void GraphOptimiser::scanMatcherCallback(
       }
       else {
         updateMap(pose_estimates_, keyframe_ldp_vec_);
-        occupancy_grid_msg_ptr_ =
-              boost::make_shared<nav_msgs::OccupancyGrid>(occupancy_grid_msg_);
-        map_ptr_pub_.publish(occupancy_grid_msg_ptr_);
+        map_pub_for_static_scan_comb_.publish(occupancy_grid_msg_);
       }
     }
   }
@@ -1216,9 +1215,7 @@ void GraphOptimiser::scanMatcherCallback(
     // Draw the map
     drawMap(pose_estimates_, keyframe_ldp_vec_);
     first_map_calculated_ = true;
-    occupancy_grid_msg_ptr_ =
-              boost::make_shared<nav_msgs::OccupancyGrid>(occupancy_grid_msg_);
-    map_ptr_pub_.publish(occupancy_grid_msg_ptr_);
+    map_pub_for_static_scan_comb_.publish(occupancy_grid_msg_);
   }
 }
 
