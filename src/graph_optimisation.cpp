@@ -1126,6 +1126,8 @@ void GraphOptimiser::scanMatcherCallback(
             // Add new factor between current_pose2_ and node i
             graph_.add(BetweenFactor<Pose2>(node_counter_, i, lc_mean,
                        scan_match_noise));
+            // We want only one loop closing (oldest) TODO: find better solution
+            break;
           }
         }
       }

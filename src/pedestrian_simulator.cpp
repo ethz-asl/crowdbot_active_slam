@@ -654,9 +654,9 @@ int main(int argc, char** argv) {
       for (int j = robot_not_seen; j < N; j++) {
         if (j != i) {
           if (abs(pedestrians.at(i).GetCurrentPose().x -
-                  pedestrians.at(j).GetCurrentPose().x) < 5.0 &&
+                  pedestrians.at(j).GetCurrentPose().x) < 2.0 &&
               abs(pedestrians.at(i).GetCurrentPose().y -
-                  pedestrians.at(j).GetCurrentPose().y) < 5.0){
+                  pedestrians.at(j).GetCurrentPose().y) < 2.0){
             geometry_msgs::Vector3 repulsive_force;
             repulsive_force = RepulsivePedForce(&pedestrians.at(i),
                                                 &pedestrians.at(j), delta_t);
@@ -667,8 +667,8 @@ int main(int argc, char** argv) {
       }
 
       // Calculate pioneer repulsive force
-      if (abs(pedestrians.at(i).GetCurrentPose().x - pioneer_position.x) < 5.0 &&
-          abs(pedestrians.at(i).GetCurrentPose().y - pioneer_position.y) < 5.0){
+      if (abs(pedestrians.at(i).GetCurrentPose().x - pioneer_position.x) < 4.0 &&
+          abs(pedestrians.at(i).GetCurrentPose().y - pioneer_position.y) < 4.0){
         geometry_msgs::Vector3 pioneer_force;
         pioneer_force = RepulsivePioneerForce(&pedestrians.at(i), pioneer_position,
                                               pioneer_speed, delta_t);
