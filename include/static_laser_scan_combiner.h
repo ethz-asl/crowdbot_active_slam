@@ -67,8 +67,6 @@ private:
 
   ros::Publisher static_scan_pub_;
   ros::Publisher dynamic_scan_pub_;
-  ros::Publisher marker_front_pub_;
-  ros::Publisher marker_occluded_pub_;
   ros::Publisher tracked_objects_pub_;
 
   // ROS msgs

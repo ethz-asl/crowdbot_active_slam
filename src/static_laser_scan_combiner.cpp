@@ -83,8 +83,6 @@ StaticLaserScanCombiner::StaticLaserScanCombiner
 
   static_scan_pub_ = nh_.advertise<sensor_msgs::LaserScan>("static_combined_scan", 1);
   dynamic_scan_pub_ = nh_.advertise<sensor_msgs::LaserScan>("dynamic_scan", 1);
-  marker_front_pub_ = nh_.advertise<visualization_msgs::Marker>("marker_front", 1);
-  marker_occluded_pub_ = nh_.advertise<visualization_msgs::Marker>("marker_occluded", 1);
   tracked_objects_pub_ = nh_.advertise<nav_msgs::GridCells>("tracked_objects", 1);
 
   get_current_pose_client_ = nh_.serviceClient<crowdbot_active_slam::current_pose>
