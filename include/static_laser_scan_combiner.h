@@ -27,6 +27,10 @@
 #include <tf/transform_datatypes.h>
 #include <Eigen/Dense>
 
+#include <csm/csm_all.h>
+#undef min
+#undef max
+
 typedef message_filters::sync_policies::ApproximateTime
         <sensor_msgs::LaserScan, nav_msgs::Odometry> SyncPolicy;
 
@@ -42,6 +46,8 @@ public:
    *  Class Destructor
    */
   ~StaticLaserScanCombiner();
+
+  void laserScanToLDP(sensor_msgs::LaserScan& scan_msg, LDP& ldp);
 
   void initScan(sensor_msgs::LaserScan& laser_msg,
                 sensor_msgs::LaserScan& init_scan);
@@ -74,8 +80,19 @@ private:
   sensor_msgs::LaserScan static_scan_;
   sensor_msgs::LaserScan laser_msg_;
   sensor_msgs::LaserScan dynamic_scan_;
+  sensor_msgs::LaserScan node_scan_;
   nav_msgs::Odometry odom_msg_;
   nav_msgs::OccupancyGrid map_msg_;
+
+  // CSM
+  sm_params sm_icp_params_;
+  sm_result sm_icp_result_;
+  LDP prev_node_ldp_;
+  LDP current_ldp_;
+  unsigned int scan_ranges_size_;
+  double scan_angle_increment_;
+  double scan_range_min_;
+  double scan_range_max_;
 
   // TF
   tf::TransformListener base_to_laser_listener_;

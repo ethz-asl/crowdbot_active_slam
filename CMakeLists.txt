@@ -78,7 +78,7 @@ target_link_libraries(graph_optimisation_lib gtsam ${catkin_LIBRARIES}
                       ${GTSAM_LIBRARIES} ${libpointmatcher_LIBRARIES})
 add_library(static_laser_scan_combiner_lib src/static_laser_scan_combiner.cpp)
 target_link_libraries(static_laser_scan_combiner_lib ${catkin_LIBRARIES} ObjectDetector
-                      TrackedObject KalmanFilter ${EIGEN3_LIBRARIES})
+                      TrackedObject KalmanFilter ${EIGEN3_LIBRARIES} ${csm_LIBRARIES})
 add_library(graph_optimisation_nodelet src/graph_optimisation_nodelet.cpp)
 target_link_libraries(graph_optimisation_nodelet graph_optimisation_lib)
 add_library(static_laser_scan_combiner_nodelet src/static_laser_scan_combiner_nodelet.cpp)

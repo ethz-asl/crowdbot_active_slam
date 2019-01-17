@@ -10,6 +10,19 @@
 using namespace std;
 
 /**
+ *  A helper function which creates tf msg from x, y, theta information.
+ */
+tf::Transform xythetaToTF(double x, double y, double theta){
+  tf::Transform xytheta_tf;
+  xytheta_tf.setOrigin(tf::Vector3(x, y, 0.0));
+  tf::Quaternion q;
+  q.setRPY(0.0, 0.0, theta);
+  xytheta_tf.setRotation(q);
+
+  return xytheta_tf;
+}
+
+/**
  *  A helper function which creates map id from position information.
  */
 int positionToMapId(double x, double y, int width, int height, float resolution){
@@ -60,6 +73,45 @@ geometry_msgs::Point getMean(vector<geometry_msgs::Point> cluster){
   mean.y = y / cluster.size();
   mean.z = 0;
   return mean;
+}
+
+void StaticLaserScanCombiner::laserScanToLDP(sensor_msgs::LaserScan& scan_msg, LDP& ldp){
+  unsigned int n = scan_ranges_size_;
+  ldp = ld_alloc_new(n);
+
+  for (unsigned int i = 0; i < n; i++){
+    double r = scan_msg.ranges[i];
+
+    if (r > scan_range_min_ && r < 100){
+      ldp->valid[i] = 1;
+      ldp->readings[i] = r;
+    }
+    else if (r == 0){
+      ldp->valid[i] = 0;
+      ldp->readings[i] = 0;
+    }
+    else if (r <= scan_range_min_){
+      ldp->valid[i] = 0;
+      ldp->readings[i] = 0;
+    }
+    else{
+      ldp->valid[i] = 0;
+      ldp->readings[i] = -1;
+    }
+    ldp->theta[i] = scan_msg.angle_min + i * scan_angle_increment_;
+    ldp->cluster[i] = -1;
+  }
+
+  ldp->min_theta = ldp->theta[0];
+  ldp->max_theta = ldp->theta[n - 1];
+
+  ldp->odometry[0] = 0.0;
+  ldp->odometry[1] = 0.0;
+  ldp->odometry[2] = 0.0;
+
+  ldp->true_pose[0] = 0.0;
+  ldp->true_pose[1] = 0.0;
+  ldp->true_pose[2] = 0.0;
 }
 
 StaticLaserScanCombiner::StaticLaserScanCombiner
@@ -131,6 +183,45 @@ StaticLaserScanCombiner::StaticLaserScanCombiner
   std_dev_range_ = 0.01;
   std_dev_theta_ = 0.01;
   kalman_filter_ = KalmanFilter(std_dev_range_, std_dev_theta_);
+
+  /*
+  Init some sm_icp parameters (Most values are taken from the
+  ROS laser scan matcher package)
+  */
+  /*
+  Relative position from laser to robot (Here we set this to zero as
+  we consider this separately)
+  */
+  sm_icp_params_.laser[0] = 0.0;
+  sm_icp_params_.laser[1] = 0.0;
+  sm_icp_params_.laser[2] = 0.0;
+
+  sm_icp_params_.max_angular_correction_deg = 50.0;
+  sm_icp_params_.max_linear_correction = 0.5;
+  sm_icp_params_.max_iterations = 10;
+  sm_icp_params_.epsilon_xy = 0.000001;
+  sm_icp_params_.epsilon_theta = 0.000001;
+  sm_icp_params_.max_correspondence_dist = 0.5;
+  sm_icp_params_.use_corr_tricks = 1;
+  sm_icp_params_.restart = 0;
+  sm_icp_params_.restart_threshold_mean_error = 0.01;
+  sm_icp_params_.restart_dt = 1.0;
+  sm_icp_params_.restart_dtheta = 0.1;
+  sm_icp_params_.outliers_maxPerc = 0.97;
+  sm_icp_params_.outliers_adaptive_order = 0.98;
+  sm_icp_params_.outliers_adaptive_mult = 2.0;
+  sm_icp_params_.outliers_remove_doubles = 1;
+  sm_icp_params_.clustering_threshold = 0.25;
+  sm_icp_params_.orientation_neighbourhood = 20;
+  sm_icp_params_.do_alpha_test = 0;
+  sm_icp_params_.do_alpha_test_thresholdDeg = 20.0;
+  sm_icp_params_.do_visibility_test = 0;
+  sm_icp_params_.use_point_to_line_distance = 1;
+  sm_icp_params_.use_ml_weights = 0;
+  sm_icp_params_.use_sigma_weights = 0;
+  sm_icp_params_.debug_verify_tricks = 0;
+  sm_icp_params_.sigma = 0.01;
+  sm_icp_params_.do_compute_covariance = 1;
 }
 
 StaticLaserScanCombiner::~StaticLaserScanCombiner(){}
@@ -205,8 +296,13 @@ void StaticLaserScanCombiner::scanOdomCallback
         laser_msg_.header.stamp){
       tf::poseStampedMsgToTF(current_pose_srv.response.current_pose,
                              current_pose_tf_);
-      tf::poseMsgToTF(odom_msg_.pose.pose, current_odom_tf_);
-      map_to_odom_tf_ = current_pose_tf_ * current_odom_tf_.inverse();
+
+      laserScanToLDP(static_scan_, prev_node_ldp_);
+      prev_node_ldp_->estimate[0] = 0.0;
+      prev_node_ldp_->estimate[1] = 0.0;
+      prev_node_ldp_->estimate[2] = 0.0;
+      // tf::poseMsgToTF(odom_msg_.pose.pose, current_odom_tf_);
+      // map_to_odom_tf_ = current_pose_tf_ * current_odom_tf_.inverse();
       map_to_last_node_tf_ = current_pose_tf_;
     }
   }
@@ -215,23 +311,59 @@ void StaticLaserScanCombiner::scanOdomCallback
   laser_msg_ = *scan_msg;
   odom_msg_ = *odom_msg;
 
-  tf::poseMsgToTF(odom_msg_.pose.pose, current_odom_tf_);
-  map_to_latest_tf_ = map_to_odom_tf_ * current_odom_tf_;
-  map_to_latest_laser_tf_ = map_to_latest_tf_ * base_to_laser_;
+
 
   // Save scan size
   size_t laser_scan_size = laser_msg_.ranges.size();
 
   if (init_scan_sum_.empty()) init_scan_sum_.resize(laser_scan_size);
   if (!initialized_first_scan_) {
+
+    scan_ranges_size_ = laser_msg_.ranges.size();
+    scan_angle_increment_ = laser_msg_.angle_increment;
+    scan_range_min_ = laser_msg_.range_min;
+    scan_range_max_ = laser_msg_.range_max;
+    sm_icp_params_.min_reading = scan_range_min_;
+    sm_icp_params_.max_reading = scan_range_max_;
+
     init_scan_ = laser_msg_;
     curr_node_stamp_ = laser_msg_.header.stamp;
     prev_delta_t_ = (curr_node_stamp_ - prev_node_stamp_).toSec();
     initScan(laser_msg_, init_scan_);
+    static_scan_ = init_scan_;
     prev_node_stamp_ = curr_node_stamp_;
   }
   else {
     if (map_callback_initialized_ == false) return;
+
+    laserScanToLDP(laser_msg_, current_ldp_);
+    current_ldp_->estimate[0] = 0.0;
+    current_ldp_->estimate[1] = 0.0;
+    current_ldp_->estimate[2] = 0.0;
+
+    sm_icp_params_.laser_ref = prev_node_ldp_;
+    sm_icp_params_.laser_sens = current_ldp_;
+
+    sm_icp_params_.first_guess[0] = 0;
+    sm_icp_params_.first_guess[1] = 0;
+    sm_icp_params_.first_guess[2] = 0;
+
+    sm_icp(&sm_icp_params_, &sm_icp_result_);
+
+    tf::Transform pose_diff_tf;
+    pose_diff_tf = xythetaToTF(sm_icp_result_.x[0],
+                               sm_icp_result_.x[1],
+                               sm_icp_result_.x[2]);
+
+    // Transform to base_link frame
+    pose_diff_tf = base_to_laser_ * pose_diff_tf * laser_to_base_;
+
+    // tf::poseMsgToTF(odom_msg_.pose.pose, current_odom_tf_);
+    // map_to_latest_tf_ = map_to_odom_tf_ * current_odom_tf_;
+    map_to_latest_tf_ = current_pose_tf_ * pose_diff_tf;
+    map_to_latest_laser_tf_ = map_to_latest_tf_ * base_to_laser_;
+    nav_msgs::GridCells transformed_scan_msg;
+
     // Check each scan point if it is a wall from static occupancy map
     dynamic_scan_ = laser_msg_;
     static_scan_ = laser_msg_;
@@ -246,6 +378,13 @@ void StaticLaserScanCombiner::scanOdomCallback
       pointMsgToTF(temp_point, temp_tf);
       temp_tf = map_to_latest_laser_tf_ * temp_tf;
       pointTFToMsg(temp_tf, temp_point);
+
+      transformed_scan_msg.header.frame_id = "map";
+      transformed_scan_msg.cell_width = 0.05;
+      transformed_scan_msg.cell_height = 0.05;
+      temp_point.z = 0;
+      transformed_scan_msg.cells.push_back(temp_point);
+
       int id = positionToMapId(temp_point.x, temp_point.y, 2000,
                                   2000, 0.05);
       bool occupied = false;
@@ -354,9 +493,44 @@ void StaticLaserScanCombiner::scanOdomCallback
           if (tracked_objects_[i].dynamic_or_static == "static"){
             int map_id = positionToMapId(temp_z_m[0], temp_z_m[1], 2000,
                                         2000, 0.05);
+
             if (map_msg_.data[map_id] == -1){
-              // If object is in unknown space, assume it is static
-              tracked_objects_[i].dynamic_or_static = "static";
+              // To be sure check if more than 50% free space of scans points
+              int counter;
+              double p_free = 0;
+              if (id >= free_means_.size()){
+                tf::Point temp_tf;
+                auto temp_cluster = occluded_cluster_vectors[id - free_means_.size()];
+                for (int iter = 0; iter < temp_cluster.size(); iter++){
+                  pointMsgToTF(temp_cluster[iter], temp_tf);
+                  temp_tf = map_to_latest_laser_tf_ * temp_tf;
+                  int map_id = positionToMapId(temp_tf.getX(), temp_tf.getY(),
+                                               2000, 2000, 0.05);
+                  if (map_msg_.data[map_id] != -1) counter += 1;
+                }
+                p_free = double(counter) / temp_cluster.size();
+              }
+              else {
+                tf::Point temp_tf;
+                auto temp_cluster = free_cluster_vectors[id];
+                for (int iter = 0; iter < temp_cluster.size(); iter++){
+                  pointMsgToTF(temp_cluster[iter], temp_tf);
+                  temp_tf = map_to_latest_laser_tf_ * temp_tf;
+                  int map_id = positionToMapId(temp_tf.getX(), temp_tf.getY(),
+                                               2000, 2000, 0.05);
+                  if (map_msg_.data[map_id] != -1) counter += 1;
+                }
+                p_free = double(counter) / temp_cluster.size();
+              }
+
+              if (p_free > 0.5){
+                // If object is in free space, assume it is dynamic
+                tracked_objects_[i].dynamic_or_static = "dynamic";
+              }
+              else {
+                // If object is in unknown space, assume it is static
+                tracked_objects_[i].dynamic_or_static = "static";
+              }
             }
             else {
               // If object is in free space, assume it is dynamic
@@ -445,10 +619,11 @@ void StaticLaserScanCombiner::scanOdomCallback
           std::advance(it_delete, i);
         }
 
-        if (map_msg_.data[id] == -1){
-          // If object is in unknown space, assume it is static
+        std::cout << int(map_msg_.data[id]) << std::endl;
+        if (map_msg_.data[id] == -1 || map_msg_.data[id] > 80){
+          // If object is in unknown space or wall, assume it is static
           temp_tracked_object.dynamic_or_static = "static";
-
+          ROS_INFO("new static");
           for (auto cluster_it = (*it_delete).begin();
                cluster_it != (*it_delete).end(); ++cluster_it){
             dynamic_scan_.ranges[cluster_it->first] = 0;
@@ -457,6 +632,7 @@ void StaticLaserScanCombiner::scanOdomCallback
         else {
           // If object is in free space, assume it is dynamic
           temp_tracked_object.dynamic_or_static = "dynamic";
+          ROS_INFO("new dynamic");
 
           for (auto cluster_it = (*it_delete).begin();
                cluster_it != (*it_delete).end(); ++cluster_it){
@@ -484,13 +660,15 @@ void StaticLaserScanCombiner::scanOdomCallback
     tracked_objects_msg.cell_width = 0.2;
     tracked_objects_msg.cell_height = 0.2;
     for (size_t i = 0; i < tracked_objects_.size(); i++){
-      geometry_msgs::Point temp_point;
-      temp_point.x = tracked_objects_[i].state_mean[0];
-      temp_point.y = tracked_objects_[i].state_mean[1];
-      temp_point.z = 0;
-      tracked_objects_msg.cells.push_back(temp_point);
+      if (tracked_objects_[i].dynamic_or_static == "dynamic"){
+        geometry_msgs::Point temp_point;
+        temp_point.x = tracked_objects_[i].state_mean[0];
+        temp_point.y = tracked_objects_[i].state_mean[1];
+        temp_point.z = 0;
+        tracked_objects_msg.cells.push_back(temp_point);
+      }
     }
-    tracked_objects_pub_.publish(tracked_objects_msg);
+    tracked_objects_pub_.publish(transformed_scan_msg);
 
     // Update delta_t
     curr_node_stamp_ = laser_msg_.header.stamp;
