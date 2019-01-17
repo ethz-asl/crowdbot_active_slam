@@ -362,7 +362,7 @@ void StaticLaserScanCombiner::scanOdomCallback
     // map_to_latest_tf_ = map_to_odom_tf_ * current_odom_tf_;
     map_to_latest_tf_ = current_pose_tf_ * pose_diff_tf;
     map_to_latest_laser_tf_ = map_to_latest_tf_ * base_to_laser_;
-    nav_msgs::GridCells transformed_scan_msg;
+    // nav_msgs::GridCells transformed_scan_msg;
 
     // Check each scan point if it is a wall from static occupancy map
     dynamic_scan_ = laser_msg_;
@@ -379,11 +379,11 @@ void StaticLaserScanCombiner::scanOdomCallback
       temp_tf = map_to_latest_laser_tf_ * temp_tf;
       pointTFToMsg(temp_tf, temp_point);
 
-      transformed_scan_msg.header.frame_id = "map";
-      transformed_scan_msg.cell_width = 0.05;
-      transformed_scan_msg.cell_height = 0.05;
-      temp_point.z = 0;
-      transformed_scan_msg.cells.push_back(temp_point);
+      // transformed_scan_msg.header.frame_id = "map";
+      // transformed_scan_msg.cell_width = 0.05;
+      // transformed_scan_msg.cell_height = 0.05;
+      // temp_point.z = 0;
+      // transformed_scan_msg.cells.push_back(temp_point);
 
       int id = positionToMapId(temp_point.x, temp_point.y, 2000,
                                   2000, 0.05);
@@ -496,7 +496,7 @@ void StaticLaserScanCombiner::scanOdomCallback
 
             if (map_msg_.data[map_id] == -1){
               // To be sure check if more than 50% free space of scans points
-              int counter;
+              int counter = 0;
               double p_free = 0;
               if (id >= free_means_.size()){
                 tf::Point temp_tf;
@@ -668,7 +668,7 @@ void StaticLaserScanCombiner::scanOdomCallback
         tracked_objects_msg.cells.push_back(temp_point);
       }
     }
-    tracked_objects_pub_.publish(transformed_scan_msg);
+    tracked_objects_pub_.publish(tracked_objects_msg);
 
     // Update delta_t
     curr_node_stamp_ = laser_msg_.header.stamp;
