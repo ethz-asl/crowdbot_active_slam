@@ -318,7 +318,7 @@ geometry_msgs::Vector3 RepulsivePioneerForce(Pedestrian* ped_i,
                                   geometry_msgs::Vector3& pioneer_speed,
                                   double delta_t) {
   // Parameters
-  double A = 4.3;
+  double A = 6.3;
   double B = 1.07;
   double l = 0.7;
 
