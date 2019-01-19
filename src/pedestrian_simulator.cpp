@@ -225,7 +225,7 @@ geometry_msgs::Vector3 ForceToDestination(Pedestrian* ped, double desired_speed,
 geometry_msgs::Vector3 RepulsiveWallForce(Pedestrian* ped_i,
                                          grid_map::GridMap* map,
                                          double delta_t) {
-  double A = 2.3, B = 1.07, l = 0.7, g_0;
+  double A = 4.3, B = 1.07, l = 0.7, g_0;
   geometry_msgs::Vector3 force, closest_obj, rel_dist, speed, step, r_s;
   Position ped_position;
   ped_position.x() = ped_i->GetCurrentPose().x;
