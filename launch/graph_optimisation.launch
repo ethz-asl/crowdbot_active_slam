@@ -3,8 +3,8 @@
   <arg name="scan_topic" default="base_scan"/>
   <node name="graph_optimisation" pkg="crowdbot_active_slam"
     type="graph_optimisation" output="screen">
-    <param name="node_dist_linear" value="0.2"/>
-    <param name="node_dist_angular" value="0.3"/>
+    <param name="node_dist_linear" value="0.15"/>
+    <param name="node_dist_angular" value="0.2"/>
     <param name="loop_closing_radius" value="0.7"/>
     <param name="const_map_update_steps" value="false"/>
     <param name="map_width" value="2000"/>
