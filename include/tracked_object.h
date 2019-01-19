@@ -36,6 +36,7 @@ public:
   Eigen::Matrix4d state_var;
   std::string current_occlusion;
   std::string dynamic_or_static;
+  int unknown_since;
 
 private:
   // State
