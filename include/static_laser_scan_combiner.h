@@ -73,7 +73,9 @@ private:
 
   ros::Publisher static_scan_pub_;
   ros::Publisher dynamic_scan_pub_;
-  ros::Publisher tracked_objects_pub_;
+  ros::Publisher moving_objects_pub_;
+  ros::Publisher static_objects_pub_;
+  ros::Publisher unknown_objects_pub_;
 
   // ROS msgs
   sensor_msgs::LaserScan init_scan_;
