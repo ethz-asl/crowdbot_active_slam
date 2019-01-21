@@ -5,8 +5,8 @@
  *      Author: Dario Mammolo
  */
 
-#ifndef STATIC_LASER_SCAN_COMBINER_H
-#define STATIC_LASER_SCAN_COMBINER_H
+#ifndef STATIC_SCAN_EXTRACTOR_H
+#define STATIC_SCAN_EXTRACTOR_H
 
 #include <ros/ros.h>
 #include <object_detector.h>
@@ -35,26 +35,42 @@ typedef message_filters::sync_policies::ApproximateTime
         <sensor_msgs::LaserScan, nav_msgs::Odometry> SyncPolicy;
 
 
-class StaticLaserScanCombiner{
+class StaticScanExtractor{
 public:
   /**
    *  Class Constructor
    */
-  StaticLaserScanCombiner(ros::NodeHandle nh, ros::NodeHandle nh_);
+  StaticScanExtractor(ros::NodeHandle nh, ros::NodeHandle nh_);
 
   /**
    *  Class Destructor
    */
-  ~StaticLaserScanCombiner();
+  ~StaticScanExtractor();
 
+  /**
+   *  Transforms laser scans to the LDP data form, which is needed for scan
+   *  matching with csm.
+   */
   void laserScanToLDP(sensor_msgs::LaserScan& scan_msg, LDP& ldp);
 
+  /**
+   *  The initialisation function for generating the first static scan for the
+   *  SLAM framework. It is summing up laser scans over time and choses the
+   *  scans which are most probable to be static.
+   */
   void initScan(sensor_msgs::LaserScan& laser_msg,
                 sensor_msgs::LaserScan& init_scan);
 
+  /**
+   *  The main function which recives the raw laser scan and publishes then the
+   *  extracted static laser scan for the SLAM framework.
+   */
   void scanOdomCallback(const sensor_msgs::LaserScan::ConstPtr& scan_msg,
                         const nav_msgs::Odometry::ConstPtr& odom_msg);
 
+  /**
+   *  A callback for the occupancy grid map from the SLAM framework.
+   */
   void mapCallback(const nav_msgs::OccupancyGrid::ConstPtr& map_msg);
 
 private:
@@ -127,4 +143,4 @@ private:
   bool map_callback_initialized_;
 };
 
-#endif  // STATIC_LASER_SCAN_COMBINER_H
+#endif  // STATIC_SCAN_EXTRACTOR_H

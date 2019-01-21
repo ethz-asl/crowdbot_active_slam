@@ -5,7 +5,7 @@
  *      Author: Dario Mammolo
  */
 
-#include <static_laser_scan_combiner.h>
+#include <static_scan_extractor.h>
 
 using namespace std;
 
@@ -31,6 +31,10 @@ int positionToMapId(double x, double y, int width, int height, float resolution)
   return id;
 }
 
+/**
+ *  A helper function which gets map IDs around it's cell in a square region
+ *  with distance x.
+ */
 std::vector<unsigned int> getNeighbourXCells(unsigned int id,
                 int map_width, int map_height, unsigned int n_cells){
   std::vector<unsigned int> neighbour_vec;
@@ -47,6 +51,10 @@ std::vector<unsigned int> getNeighbourXCells(unsigned int id,
   return neighbour_vec;
 }
 
+/**
+ *  A helper function which transforms a cluster of laser scans to a cluster
+ *  in the laser frame.
+ */
 vector<geometry_msgs::Point> getClusterInLaserFrame(map<int, double>& cluster,
                                             sensor_msgs::LaserScan& laser_msg){
   vector<geometry_msgs::Point> cluster_vector;
@@ -62,6 +70,9 @@ vector<geometry_msgs::Point> getClusterInLaserFrame(map<int, double>& cluster,
   return cluster_vector;
 }
 
+/**
+ *  A helper function which gets the mean from a cluster.
+ */
 geometry_msgs::Point getMean(vector<geometry_msgs::Point> cluster){
   double x = 0, y = 0;
   for (auto cluster_it = cluster.begin(); cluster_it != cluster.end(); ++cluster_it){
@@ -75,7 +86,7 @@ geometry_msgs::Point getMean(vector<geometry_msgs::Point> cluster){
   return mean;
 }
 
-void StaticLaserScanCombiner::laserScanToLDP(sensor_msgs::LaserScan& scan_msg, LDP& ldp){
+void StaticScanExtractor::laserScanToLDP(sensor_msgs::LaserScan& scan_msg, LDP& ldp){
   unsigned int n = scan_ranges_size_;
   ldp = ld_alloc_new(n);
 
@@ -114,15 +125,15 @@ void StaticLaserScanCombiner::laserScanToLDP(sensor_msgs::LaserScan& scan_msg, L
   ldp->true_pose[2] = 0.0;
 }
 
-StaticLaserScanCombiner::StaticLaserScanCombiner
+StaticScanExtractor::StaticScanExtractor
   (ros::NodeHandle nh, ros::NodeHandle nh_):nh_(nh), nh_private_(nh_)
 {
-  ROS_INFO("Started StaticLaserScanCombiner");
+  ROS_INFO("Started StaticScanExtractor");
   object_detector_ = ObjectDetector(10, 0.01);
 
   // Subscriber and publisher
   map_sub_ = nh_.subscribe("/occupancy_map_for_static_scan_comb", 1,
-                           &StaticLaserScanCombiner::mapCallback, this);
+                           &StaticScanExtractor::mapCallback, this);
   scan_sub_ = new message_filters::Subscriber<sensor_msgs::LaserScan>
               (nh_, "/base_scan", 1);
   odom_sub_ = new message_filters::Subscriber<nav_msgs::Odometry>
@@ -130,7 +141,7 @@ StaticLaserScanCombiner::StaticLaserScanCombiner
   int q = 5; // queue size
   sync_ = new message_filters::Synchronizer<SyncPolicy>
           (SyncPolicy(q), *scan_sub_, *odom_sub_);
-  sync_->registerCallback(boost::bind(&StaticLaserScanCombiner::scanOdomCallback,
+  sync_->registerCallback(boost::bind(&StaticScanExtractor::scanOdomCallback,
                                       this, _1, _2));
 
   static_scan_pub_ = nh_.advertise<sensor_msgs::LaserScan>("static_combined_scan", 1);
@@ -226,9 +237,9 @@ StaticLaserScanCombiner::StaticLaserScanCombiner
   sm_icp_params_.do_compute_covariance = 1;
 }
 
-StaticLaserScanCombiner::~StaticLaserScanCombiner(){}
+StaticScanExtractor::~StaticScanExtractor(){}
 
-void StaticLaserScanCombiner::initScan(sensor_msgs::LaserScan& laser_msg,
+void StaticScanExtractor::initScan(sensor_msgs::LaserScan& laser_msg,
                                        sensor_msgs::LaserScan& init_scan){
   // Sum and sort scans
   size_t laser_scan_size = laser_msg_.ranges.size();
@@ -284,7 +295,7 @@ void StaticLaserScanCombiner::initScan(sensor_msgs::LaserScan& laser_msg,
   }
 }
 
-void StaticLaserScanCombiner::scanOdomCallback
+void StaticScanExtractor::scanOdomCallback
      (const sensor_msgs::LaserScan::ConstPtr& scan_msg,
       const nav_msgs::Odometry::ConstPtr& odom_msg){
 
@@ -808,7 +819,7 @@ void StaticLaserScanCombiner::scanOdomCallback
   }
 }
 
-void StaticLaserScanCombiner::mapCallback
+void StaticScanExtractor::mapCallback
     (const nav_msgs::OccupancyGrid::ConstPtr& map_msg){
   map_msg_ = *map_msg;
   map_callback_initialized_ = true;
@@ -816,10 +827,10 @@ void StaticLaserScanCombiner::mapCallback
 
 
 int main(int argc, char **argv){
-  ros::init(argc, argv, "static_laser_scan_combiner");
+  ros::init(argc, argv, "static_scan_extractor");
   ros::NodeHandle nh;
   ros::NodeHandle nh_("~");
-  StaticLaserScanCombiner combiner(nh, nh_);
+  StaticScanExtractor extractor(nh, nh_);
 
   ros::spin();
 
