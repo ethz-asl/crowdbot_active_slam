@@ -65,13 +65,23 @@ public:
    *  The main function which recives the raw laser scan and publishes then the
    *  extracted static laser scan for the SLAM framework.
    */
-  void scanOdomCallback(const sensor_msgs::LaserScan::ConstPtr& scan_msg,
-                        const nav_msgs::Odometry::ConstPtr& odom_msg);
+  void scanCallback(const sensor_msgs::LaserScan::ConstPtr& scan_msg);
 
   /**
    *  A callback for the occupancy grid map from the SLAM framework.
    */
   void mapCallback(const nav_msgs::OccupancyGrid::ConstPtr& map_msg);
+
+  /**
+   *  A helper function which transforms a cluster of laser scans to a cluster
+   *  in the laser frame.
+   */
+   vector<geometry_msgs::Point> getClusterInLaserFrame(map<int, double>& cluster);
+
+   void getFreeCellFraction(int id, double& p_free);
+
+   void getFreeCellFractionPatch(int map_id, double& p_free, int n_cells);
+
 
 private:
   // Node handler
@@ -83,9 +93,7 @@ private:
 
   // Publisher, Subscriber
   ros::Subscriber map_sub_;
-  message_filters::Subscriber<sensor_msgs::LaserScan> *scan_sub_;
-  message_filters::Subscriber<nav_msgs::Odometry> *odom_sub_;
-  message_filters::Synchronizer<SyncPolicy> *sync_;
+  ros::Subscriber scan_sub_;
 
   ros::Publisher static_scan_pub_;
   ros::Publisher dynamic_scan_pub_;
@@ -96,7 +104,6 @@ private:
   // ROS msgs
   sensor_msgs::LaserScan init_scan_;
   sensor_msgs::LaserScan static_scan_;
-  sensor_msgs::LaserScan laser_msg_;
   sensor_msgs::LaserScan dynamic_scan_;
   sensor_msgs::LaserScan node_scan_;
   nav_msgs::Odometry odom_msg_;
@@ -111,23 +118,30 @@ private:
   double scan_angle_increment_;
   double scan_range_min_;
   double scan_range_max_;
+  double scan_angle_min_;
 
   // TF
   tf::TransformListener base_to_laser_listener_;
   tf::Transform base_to_laser_;
   tf::Transform laser_to_base_;
   tf::Stamped<tf::Transform> current_pose_tf_;
-  tf::Transform current_odom_tf_;
-  tf::Transform map_to_odom_tf_;
-  tf::Transform map_to_last_node_tf_;
   tf::Transform map_to_latest_tf_;
   tf::Transform map_to_latest_laser_tf_;
 
-  // Objects
+  // Object detector
+  double abd_lambda_;
+  int abd_sigma_;
   ObjectDetector object_detector_;
 
+  // Parameters
+  bool using_gazebo_;
+  int map_width_;
+  int map_height_;
+  double map_resolution_;
+
   // variables
-  bool initialized_first_scan_;
+  bool map_callback_initialised_;
+  bool initialised_first_scan_;
   std::vector<std::vector<double>> init_scan_sum_;
   ros::Time begin_time_;
   ros::Time prev_node_stamp_;
@@ -138,9 +152,23 @@ private:
   double std_dev_theta_;
   std::vector<geometry_msgs::Point> occluded_means_;
   std::vector<geometry_msgs::Point> free_means_;
+  std::vector<std::vector<geometry_msgs::Point>> free_cluster_vectors_;
+  std::vector<std::vector<geometry_msgs::Point>> occluded_cluster_vectors_;
   std::vector<TrackedObject> tracked_objects_;
   KalmanFilter kalman_filter_;
-  bool map_callback_initialized_;
+  std::string scan_callback_topic_;
+  int init_scan_unknown_pt_;
+  int init_min_time_;
+  int wall_threshold_;
+  double association_radius_;
+  double association_radius_sq_;
+  int unknown_since_threshold_;
+  double static_size_threshold_;
+  double static_size_threshold_sq_;
+  double dynamic_vel_threshold_;
+  double dynamic_vel_threshold_sq_;
+  int not_seen_threshold_;
+  int patch_size_;
 };
 
 #endif  // STATIC_SCAN_EXTRACTOR_H

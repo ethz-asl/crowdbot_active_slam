@@ -40,7 +40,7 @@
     <param name="scan_callback_topic" value="$(arg scan_topic)"/>
   </node>
 
-  <node pkg="nodelet" type="nodelet" name="static_laser_scan_combiner"
-        args="load StaticLaserScanCombinerNodelet slam_nodelet" output="screen">
+  <node pkg="nodelet" type="nodelet" name="static_scan_extractor"
+        args="load StaticScanExtractorNodelet slam_nodelet" output="screen">
   </node>
 </launch>

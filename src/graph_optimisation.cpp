@@ -47,7 +47,7 @@ void GraphOptimiser::initParams(){
   action_path_pub_ = nh_.advertise<nav_msgs::Path>("action_graph", 1);
   map_pub_ = nh_.advertise<nav_msgs::OccupancyGrid>("occupancy_map", 1);
   map_pub_for_static_scan_comb_ =
-  nh_.advertise<nav_msgs::OccupancyGrid>("occupancy_map_for_static_scan_comb", 1);
+  nh_.advertise<nav_msgs::OccupancyGrid>("map_for_static_scan_extractor", 1);
   test_pose2D_pub_ = nh_.advertise<geometry_msgs::Pose2D>("test_pose2D", 1);
   test_pose_pub_ = nh_.advertise<geometry_msgs::PoseStamped>("test_pose", 1);
 

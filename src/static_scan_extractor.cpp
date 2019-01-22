@@ -55,15 +55,15 @@ std::vector<unsigned int> getNeighbourXCells(unsigned int id,
  *  A helper function which transforms a cluster of laser scans to a cluster
  *  in the laser frame.
  */
-vector<geometry_msgs::Point> getClusterInLaserFrame(map<int, double>& cluster,
-                                            sensor_msgs::LaserScan& laser_msg){
+vector<geometry_msgs::Point> StaticScanExtractor::getClusterInLaserFrame
+                             (map<int, double>& cluster){
   vector<geometry_msgs::Point> cluster_vector;
   for (auto cluster_it = cluster.begin(); cluster_it != cluster.end(); ++cluster_it){
     geometry_msgs::Point temp_point;
     temp_point.x = cluster_it->second * cos(cluster_it->first *
-                   laser_msg.angle_increment + laser_msg.angle_min);
+                   scan_angle_increment_ + scan_angle_min_);
     temp_point.y = cluster_it->second * sin(cluster_it->first *
-                   laser_msg.angle_increment + laser_msg.angle_min);
+                   scan_angle_increment_ + scan_angle_min_);
     temp_point.z = 0;
     cluster_vector.push_back(temp_point);
   }
@@ -85,6 +85,39 @@ geometry_msgs::Point getMean(vector<geometry_msgs::Point> cluster){
   mean.z = 0;
   return mean;
 }
+
+void StaticScanExtractor::getFreeCellFraction(int id, double& p_free){
+  int counter = 0;
+  tf::Point temp_tf;
+  vector<geometry_msgs::Point> temp_cluster;
+  if (id >= free_means_.size()){
+    temp_cluster = occluded_cluster_vectors_[id - free_means_.size()];
+  }
+  else {
+    temp_cluster = free_cluster_vectors_[id];
+  }
+  for (int iter = 0; iter < temp_cluster.size(); iter++){
+    pointMsgToTF(temp_cluster[iter], temp_tf);
+    temp_tf = map_to_latest_laser_tf_ * temp_tf;
+    int temp_map_id = positionToMapId(temp_tf.getX(), temp_tf.getY(),
+                                    map_width_, map_height_, map_resolution_);
+    if (map_msg_.data[temp_map_id] != -1 &&
+        map_msg_.data[temp_map_id] < 30) counter += 1;
+  }
+  p_free = double(counter) / temp_cluster.size();
+}
+
+void StaticScanExtractor::getFreeCellFractionPatch(int map_id, double& p_free, int n_cells){
+  int free_counter = 0;
+  std::vector<unsigned int> temp_neighbours;
+  temp_neighbours = getNeighbourXCells(map_id, map_width_, map_height_, n_cells);
+  for (int iter = 0; iter < temp_neighbours.size(); iter++){
+    if (map_msg_.data[temp_neighbours[iter]] != -1 &&
+        map_msg_.data[temp_neighbours[iter]] < 30) free_counter += 1;
+  }
+  p_free = double(free_counter) / temp_neighbours.size();
+}
+
 
 void StaticScanExtractor::laserScanToLDP(sensor_msgs::LaserScan& scan_msg, LDP& ldp){
   unsigned int n = scan_ranges_size_;
@@ -129,47 +162,55 @@ StaticScanExtractor::StaticScanExtractor
   (ros::NodeHandle nh, ros::NodeHandle nh_):nh_(nh), nh_private_(nh_)
 {
   ROS_INFO("Started StaticScanExtractor");
-  object_detector_ = ObjectDetector(10, 0.01);
 
-  // Subscriber and publisher
-  map_sub_ = nh_.subscribe("/occupancy_map_for_static_scan_comb", 1,
+  // Object detector
+  nh_private_.param<double>("ABD_lambda", abd_lambda_, 10);
+  nh_private_.param<int>("ABD_sigma", abd_sigma_, 0.01);
+  object_detector_ = ObjectDetector(abd_lambda_, abd_sigma_);
+
+  // Subscriber
+  map_sub_ = nh_.subscribe("/map_for_static_scan_extractor", 1,
                            &StaticScanExtractor::mapCallback, this);
-  scan_sub_ = new message_filters::Subscriber<sensor_msgs::LaserScan>
-              (nh_, "/base_scan", 1);
-  odom_sub_ = new message_filters::Subscriber<nav_msgs::Odometry>
-              (nh_, "/mobile_base_controller/odom", 1);
-  int q = 5; // queue size
-  sync_ = new message_filters::Synchronizer<SyncPolicy>
-          (SyncPolicy(q), *scan_sub_, *odom_sub_);
-  sync_->registerCallback(boost::bind(&StaticScanExtractor::scanOdomCallback,
-                                      this, _1, _2));
 
-  static_scan_pub_ = nh_.advertise<sensor_msgs::LaserScan>("static_combined_scan", 1);
+  nh_private_.param<std::string>("scan_callback_topic", scan_callback_topic_,
+                                 "/base_scan");
+  scan_sub_ = nh_.subscribe(scan_callback_topic_, 1,
+                            &StaticScanExtractor::scanCallback, this);
+
+  // Publisher
+  static_scan_pub_ = nh_.advertise<sensor_msgs::LaserScan>("static_scan", 1);
   dynamic_scan_pub_ = nh_.advertise<sensor_msgs::LaserScan>("dynamic_scan", 1);
   moving_objects_pub_ = nh_.advertise<nav_msgs::GridCells>("moving_objects", 1);
   static_objects_pub_ = nh_.advertise<nav_msgs::GridCells>("static_objects", 1);
   unknown_objects_pub_ = nh_.advertise<nav_msgs::GridCells>("unknown_objects", 1);
 
+  // Service
   get_current_pose_client_ = nh_.serviceClient<crowdbot_active_slam::current_pose>
                              ("/current_pose_node_service");
+
+  // Get params from other nodes
+  nh_.getParam("/graph_optimisation/using_gazebo", using_gazebo_);
+  nh_.getParam("/graph_optimisation/map_width", map_width_);
+  nh_.getParam("/graph_optimisation/map_height", map_height_);
+  nh_.getParam("/graph_optimisation/map_resolution", map_resolution_);
 
   begin_time_ = ros::Time::now();
   // Wait until time is not 0
   while (begin_time_.toSec() == 0) begin_time_ = ros::Time::now();
-  initialized_first_scan_ = false;
-  map_callback_initialized_ = false;
+  initialised_first_scan_ = false;
+  map_callback_initialised_ = false;
 
   // Initialize base to laser tf
-  tf::StampedTransform base_to_laser_tf_;
+  tf::StampedTransform base_to_laser_tf;
 
   bool got_transform = false;
   while (!got_transform){
-    if (true){  // TODO: add using gazebo
+    if (using_gazebo_){
       try {
         got_transform = base_to_laser_listener_.waitForTransform("base_link",
                                     "laser", ros::Time(0), ros::Duration(1.0));
         base_to_laser_listener_.lookupTransform("base_link", "laser",
-                                              ros::Time(0), base_to_laser_tf_);
+                                              ros::Time(0), base_to_laser_tf);
       }
       catch (tf::TransformException ex){
         ROS_WARN("Could not get initial transform from base to laser frame, %s", ex.what());
@@ -180,7 +221,7 @@ StaticScanExtractor::StaticScanExtractor
         got_transform = base_to_laser_listener_.waitForTransform("base_footprint",
                           "sick_laser_front", ros::Time(0), ros::Duration(1.0));
         base_to_laser_listener_.lookupTransform("base_footprint", "sick_laser_front",
-                                               ros::Time(0), base_to_laser_tf_);
+                                               ros::Time(0), base_to_laser_tf);
       }
       catch (tf::TransformException ex){
         ROS_WARN("Could not get initial transform from base to laser frame, %s", ex.what());
@@ -188,13 +229,14 @@ StaticScanExtractor::StaticScanExtractor
     }
   }
 
-  base_to_laser_ = base_to_laser_tf_;
-  laser_to_base_ = base_to_laser_tf_.inverse();
+  base_to_laser_ = base_to_laser_tf;
+  laser_to_base_ = base_to_laser_tf.inverse();
 
   // KF init variables
-  std_dev_process_ = 0.1; // for what?
-  std_dev_range_ = 0.01;
-  std_dev_theta_ = 0.01;
+  nh_private_.param<double>("kf_std_dev_process", std_dev_process_, 0.1); // for what?
+  nh_private_.param<double>("kf_std_dev_range", std_dev_range_, 0.01);
+  nh_private_.param<double>("kf_std_dev_theta", std_dev_theta_, 0.01);
+
   kalman_filter_ = KalmanFilter(std_dev_range_, std_dev_theta_);
 
   /*
@@ -235,27 +277,40 @@ StaticScanExtractor::StaticScanExtractor
   sm_icp_params_.debug_verify_tricks = 0;
   sm_icp_params_.sigma = 0.01;
   sm_icp_params_.do_compute_covariance = 1;
+
+  // Other params
+  nh_private_.param<int>("init_scan_unknown_pt", init_scan_unknown_pt_, 100);
+  nh_private_.param<int>("init_min_time", init_min_time_, 4);
+  nh_private_.param<int>("wall_threshold", wall_threshold_, 80);
+  nh_private_.param<double>("association_radius", association_radius_, 0.5);
+  association_radius_sq_ = association_radius_ * association_radius_;
+  nh_private_.param<int>("unknown_since_threshold", unknown_since_threshold_, 30);
+  nh_private_.param<double>("static_size_threshold", static_size_threshold_, 0.7);
+  static_size_threshold_sq_ = static_size_threshold_ * static_size_threshold_;
+  nh_private_.param<double>("dynamic_vel_threshold", dynamic_vel_threshold_, 0.13);
+  dynamic_vel_threshold_sq_ = dynamic_vel_threshold_ * dynamic_vel_threshold_;
+  nh_private_.param<int>("not_seen_threshold", not_seen_threshold_, 10);
+  nh_private_.param<int>("patch_size", patch_size_, 2);
 }
 
 StaticScanExtractor::~StaticScanExtractor(){}
 
 void StaticScanExtractor::initScan(sensor_msgs::LaserScan& laser_msg,
-                                       sensor_msgs::LaserScan& init_scan){
+                                   sensor_msgs::LaserScan& init_scan){
   // Sum and sort scans
-  size_t laser_scan_size = laser_msg_.ranges.size();
-  for (size_t i = 0; i < laser_scan_size; i++){
+  for (size_t i = 0; i < scan_ranges_size_; i++){
     init_scan_sum_[i].push_back(laser_msg.ranges[i]);
     sort(init_scan_sum_[i].begin(), init_scan_sum_[i].end());
   }
 
-  // If passed time is higher than TODO: define var
-  ros::Time end = ros::Time::now();
-  double diff = (end - begin_time_).toSec();
-  if (diff > 4){
+  // If passed time is higher than init_min_time_
+  ros::Time end_time = ros::Time::now();
+  double diff_time = (end_time - begin_time_).toSec();
+  if (diff_time > init_min_time_){
     int count_unknown = 0;
     double temp_median;
     size_t scan_sum_size = init_scan_sum_[0].size();
-    for (size_t j = 0; j < laser_scan_size; j++){
+    for (size_t j = 0; j < scan_ranges_size_; j++){
       // Calculate Medians
       if (scan_sum_size % 2 == 0){
         temp_median = (init_scan_sum_[j][(scan_sum_size / 2) - 1] +
@@ -286,162 +341,140 @@ void StaticScanExtractor::initScan(sensor_msgs::LaserScan& laser_msg,
       }
     }
 
-    // Publish init scan if enough scan points available, TODO: var for 50
-    if (count_unknown < 100){
+    // Publish init scan if enough scan points available
+    if (count_unknown < init_scan_unknown_pt_){
       static_scan_pub_.publish(init_scan);
-      initialized_first_scan_ = true;
+      initialised_first_scan_ = true;
       ROS_INFO("Scan initialised!");
     }
   }
 }
 
-void StaticScanExtractor::scanOdomCallback
-     (const sensor_msgs::LaserScan::ConstPtr& scan_msg,
-      const nav_msgs::Odometry::ConstPtr& odom_msg){
-
+void StaticScanExtractor::scanCallback
+     (const sensor_msgs::LaserScan::ConstPtr& scan_msg){
   // Call latest pose estimate
-  if (initialized_first_scan_){
+  if (initialised_first_scan_){
     crowdbot_active_slam::current_pose current_pose_srv;
     if (get_current_pose_client_.call(current_pose_srv)){}
     else ROS_INFO("Current pose service call failed!");
 
+    // Check that they have the same stamp
     if (current_pose_srv.response.current_pose.header.stamp ==
-        laser_msg_.header.stamp){
+        static_scan_.header.stamp){
       tf::poseStampedMsgToTF(current_pose_srv.response.current_pose,
                              current_pose_tf_);
 
+      // Save previous static_scan as LDP
       laserScanToLDP(static_scan_, prev_node_ldp_);
       prev_node_ldp_->estimate[0] = 0.0;
       prev_node_ldp_->estimate[1] = 0.0;
       prev_node_ldp_->estimate[2] = 0.0;
-      // tf::poseMsgToTF(odom_msg_.pose.pose, current_odom_tf_);
-      // map_to_odom_tf_ = current_pose_tf_ * current_odom_tf_.inverse();
-      map_to_last_node_tf_ = current_pose_tf_;
     }
   }
 
-  // Save laser and odom msg
-  laser_msg_ = *scan_msg;
-  odom_msg_ = *odom_msg;
+  // Save laser msg
+  static_scan_ = *scan_msg;
+  dynamic_scan_ = *scan_msg;
 
+  if (!initialised_first_scan_){
+    // Init scan params
+    scan_ranges_size_ = static_scan_.ranges.size();
+    scan_angle_increment_ = static_scan_.angle_increment;
+    scan_range_min_ = static_scan_.range_min;
+    scan_range_max_ = static_scan_.range_max;
+    scan_angle_min_ = static_scan_.angle_min;
 
-
-  // Save scan size
-  size_t laser_scan_size = laser_msg_.ranges.size();
-
-  if (init_scan_sum_.empty()) init_scan_sum_.resize(laser_scan_size);
-  if (!initialized_first_scan_) {
-
-    scan_ranges_size_ = laser_msg_.ranges.size();
-    scan_angle_increment_ = laser_msg_.angle_increment;
-    scan_range_min_ = laser_msg_.range_min;
-    scan_range_max_ = laser_msg_.range_max;
+    // Init sm icp params
     sm_icp_params_.min_reading = scan_range_min_;
     sm_icp_params_.max_reading = scan_range_max_;
 
-    init_scan_ = laser_msg_;
-    curr_node_stamp_ = laser_msg_.header.stamp;
-    prev_delta_t_ = (curr_node_stamp_ - prev_node_stamp_).toSec();
-    initScan(laser_msg_, init_scan_);
+    // Check if init_scan_sum_ not initialised yet
+    if (init_scan_sum_.empty()) init_scan_sum_.resize(scan_ranges_size_);
+
+    // Init previous node stamp variable for later kf matrices update
+    prev_node_stamp_ = static_scan_.header.stamp;
+
+    // Init init_scan
+    init_scan_ = static_scan_;
+    initScan(static_scan_, init_scan_);
     static_scan_ = init_scan_;
-    prev_node_stamp_ = curr_node_stamp_;
   }
   else {
-    if (map_callback_initialized_ == false) return;
+    // If map callback not initialised return
+    if (map_callback_initialised_ == false) return;
 
-    laserScanToLDP(laser_msg_, current_ldp_);
+    // Transform current scan to LDP
+    laserScanToLDP(static_scan_, current_ldp_);
     current_ldp_->estimate[0] = 0.0;
     current_ldp_->estimate[1] = 0.0;
     current_ldp_->estimate[2] = 0.0;
 
+    // Do scan matching of current and previous node scan
     sm_icp_params_.laser_ref = prev_node_ldp_;
     sm_icp_params_.laser_sens = current_ldp_;
-
     sm_icp_params_.first_guess[0] = 0;
     sm_icp_params_.first_guess[1] = 0;
     sm_icp_params_.first_guess[2] = 0;
-
     sm_icp(&sm_icp_params_, &sm_icp_result_);
 
-    tf::Transform pose_diff_tf;
-    pose_diff_tf = xythetaToTF(sm_icp_result_.x[0],
-                               sm_icp_result_.x[1],
-                               sm_icp_result_.x[2]);
+    // Get result as tf
+    tf::Transform pose_diff_tf = xythetaToTF(sm_icp_result_.x[0],
+                                             sm_icp_result_.x[1],
+                                             sm_icp_result_.x[2]);
 
-    // Transform to base_link frame
+    // Transform to base_link frame and get map to latest laser tf
     pose_diff_tf = base_to_laser_ * pose_diff_tf * laser_to_base_;
-
-    // tf::poseMsgToTF(odom_msg_.pose.pose, current_odom_tf_);
-    // map_to_latest_tf_ = map_to_odom_tf_ * current_odom_tf_;
     map_to_latest_tf_ = current_pose_tf_ * pose_diff_tf;
     map_to_latest_laser_tf_ = map_to_latest_tf_ * base_to_laser_;
-    // nav_msgs::GridCells transformed_scan_msg;
 
     // Check each scan point if it is a wall from static occupancy map
-    dynamic_scan_ = laser_msg_;
-    static_scan_ = laser_msg_;
-    double theta = laser_msg_.angle_min;
-
-    for (size_t i = 0; i < laser_scan_size; i ++){
+    double theta = scan_angle_min_;
+    for (size_t i = 0; i < scan_ranges_size_; i ++){
       geometry_msgs::Point temp_point;
-      temp_point.x = laser_msg_.ranges[i] * cos(theta);
-      temp_point.y = laser_msg_.ranges[i] * sin(theta);
+      temp_point.x = static_scan_.ranges[i] * cos(theta);
+      temp_point.y = static_scan_.ranges[i] * sin(theta);
       temp_point.z = 0;
       tf::Point temp_tf;
       pointMsgToTF(temp_point, temp_tf);
       temp_tf = map_to_latest_laser_tf_ * temp_tf;
       pointTFToMsg(temp_tf, temp_point);
 
-      // transformed_scan_msg.header.frame_id = "map";
-      // transformed_scan_msg.cell_width = 0.05;
-      // transformed_scan_msg.cell_height = 0.05;
-      // temp_point.z = 0;
-      // transformed_scan_msg.cells.push_back(temp_point);
+      int id = positionToMapId(temp_point.x, temp_point.y, map_width_,
+                               map_height_, map_resolution_);
 
-      int id = positionToMapId(temp_point.x, temp_point.y, 2000,
-                                  2000, 0.05);
+      // Get neighbours around current scan point and check if there is a wall
       bool occupied = false;
-      // if (map_msg_.data[id] > 80) occupied = true;
-      // if (map_msg_.data[id+1] > 80) occupied = true;
-      // if (map_msg_.data[id-1] > 80) occupied = true;
-      // if (map_msg_.data[id+2000] > 80) occupied = true;
-      // if (map_msg_.data[id-2000] > 80) occupied = true;
-      // if (map_msg_.data[id+1999] > 80) occupied = true;
-      // if (map_msg_.data[id+2001] > 80) occupied = true;
-      // if (map_msg_.data[id-1999] > 80) occupied = true;
-      // if (map_msg_.data[id-2001] > 80) occupied = true;
       std::vector<unsigned int> neighbours;
-      neighbours = getNeighbourXCells(id, 2000, 2000, 2);
+      neighbours = getNeighbourXCells(id, map_width_, map_height_, 1);
       for (int iter = 0; iter < neighbours.size(); iter++){
-        if (map_msg_.data[neighbours[iter]] > 80) occupied = true;
+        if (map_msg_.data[neighbours[iter]] > wall_threshold_) occupied = true;
       }
-
+      // If it is a wall cell set as zero
       if (occupied == true){
         dynamic_scan_.ranges[i] = 0;
       }
-      theta += laser_msg_.angle_increment;
+      theta += scan_angle_increment_;
     }
 
     // Detect and Track objects (ABD + KF)
-    // Detect objects
     // TODO: define a cluster class
     list<map<int, double>> free_clusters;
     list<map<int, double>> occluded_clusters;
     object_detector_.detectObjectsFromScan(dynamic_scan_,
-                                           laser_msg_,
+                                           static_scan_,
                                            free_clusters,
                                            occluded_clusters);
 
-    // Track objects
+    // get means and save clusters for later
     free_means_.clear();
     occluded_means_.clear();
-    vector<vector<geometry_msgs::Point>> free_cluster_vectors;
-    vector<vector<geometry_msgs::Point>> occluded_cluster_vectors;
+    free_cluster_vectors_.clear();
+    occluded_cluster_vectors_.clear();
     for (auto cluster_it = free_clusters.begin(); cluster_it != free_clusters.end(); ++cluster_it){
       geometry_msgs::Point temp_mean;
       tf::Point temp_mean_tf;
-      free_cluster_vectors.push_back(getClusterInLaserFrame(*(cluster_it), laser_msg_));
-      temp_mean = getMean(free_cluster_vectors.back());
+      free_cluster_vectors_.push_back(getClusterInLaserFrame(*(cluster_it)));
+      temp_mean = getMean(free_cluster_vectors_.back());
       // Transform mean to Map frame
       pointMsgToTF(temp_mean, temp_mean_tf);
       temp_mean_tf = map_to_latest_laser_tf_ * temp_mean_tf;
@@ -451,8 +484,8 @@ void StaticScanExtractor::scanOdomCallback
     for (auto cluster_it = occluded_clusters.begin(); cluster_it != occluded_clusters.end(); ++cluster_it){
       geometry_msgs::Point temp_mean;
       tf::Point temp_mean_tf;
-      occluded_cluster_vectors.push_back(getClusterInLaserFrame(*(cluster_it), laser_msg_));
-      temp_mean = getMean(occluded_cluster_vectors.back());
+      occluded_cluster_vectors_.push_back(getClusterInLaserFrame(*(cluster_it)));
+      temp_mean = getMean(occluded_cluster_vectors_.back());
       // Transform mean to Map frame
       pointMsgToTF(temp_mean, temp_mean_tf);
       temp_mean_tf = map_to_latest_laser_tf_ * temp_mean_tf;
@@ -472,6 +505,7 @@ void StaticScanExtractor::scanOdomCallback
         tracked_objects_[i].state_var =
           kalman_filter_.prediction(tracked_objects_[i].state_var);
 
+        // Find association by searching for closest measurement
         int id = -1;
         double distance = 10;
         std::vector<geometry_msgs::Point> all_means = free_means_;
@@ -479,15 +513,16 @@ void StaticScanExtractor::scanOdomCallback
         for (size_t j = 0; j < all_means.size(); j++){
           // Check distance (later try mahalanobis)
           double temp_distance =
-          sqrt(pow(tracked_objects_[i].state_mean[0] - all_means[j].x, 2) +
-               pow(tracked_objects_[i].state_mean[1] - all_means[j].y, 2));
+                  pow(tracked_objects_[i].state_mean[0] - all_means[j].x, 2) +
+                  pow(tracked_objects_[i].state_mean[1] - all_means[j].y, 2);
           // Check if current distance smaller
-          if (temp_distance < 0.5 && temp_distance < distance){
+          if (temp_distance < association_radius_sq_ && temp_distance < distance){
             id = j;
             distance = temp_distance;
           }
         }
-        // Check if found assignement
+
+        // Check if found assignement, if yes update track
         if (id != -1){
           tracked_objects_[i].counter_not_seen = 0;
           // Update tracked object
@@ -499,60 +534,31 @@ void StaticScanExtractor::scanOdomCallback
 
           tracked_objects_[i].state_mean =
               kalman_filter_.update(tracked_objects_[i].state_mean, temp_z_m);
-
           tracked_objects_[i].state_var =
               kalman_filter_.update(tracked_objects_[i].state_var, temp_z_m);
 
+          // Check if unknown tracks are dynamic or static
           if (tracked_objects_[i].dynamic_or_static == "unknown"){
-            int map_id = positionToMapId(temp_z_m[0], temp_z_m[1], 2000,
-                                        2000, 0.05);
-
-            if (map_msg_.data[map_id] == -1 || map_msg_.data[map_id] > 80){
-              // To be sure check if more than 50% free space of scans points
-              int counter = 0;
+            int map_id = positionToMapId(temp_z_m[0], temp_z_m[1], map_width_,
+                                         map_height_, map_resolution_);
+            // Check if it is still possible to be dynamic, although the mean is
+            // not on free space
+            if (map_msg_.data[map_id] == -1 || map_msg_.data[map_id] > wall_threshold_){
               double p_free = 0;
-              if (id >= free_means_.size()){
-                tf::Point temp_tf;
-                auto temp_cluster = occluded_cluster_vectors[id - free_means_.size()];
-                for (int iter = 0; iter < temp_cluster.size(); iter++){
-                  pointMsgToTF(temp_cluster[iter], temp_tf);
-                  temp_tf = map_to_latest_laser_tf_ * temp_tf;
-                  int temp_map_id = positionToMapId(temp_tf.getX(), temp_tf.getY(),
-                                               2000, 2000, 0.05);
-                  if (map_msg_.data[temp_map_id] != -1 && map_msg_.data[temp_map_id] < 80) counter += 1;
-                }
-                p_free = double(counter) / temp_cluster.size();
-              }
-              else {
-                tf::Point temp_tf;
-                auto temp_cluster = free_cluster_vectors[id];
-                for (int iter = 0; iter < temp_cluster.size(); iter++){
-                  pointMsgToTF(temp_cluster[iter], temp_tf);
-                  temp_tf = map_to_latest_laser_tf_ * temp_tf;
-                  int temp_map_id = positionToMapId(temp_tf.getX(), temp_tf.getY(),
-                                               2000, 2000, 0.05);
-                  if (map_msg_.data[temp_map_id] != -1 && map_msg_.data[temp_map_id] < 80) counter += 1;
-                }
-                p_free = double(counter) / temp_cluster.size();
-              }
+              double p_free_patch = 0;
+              getFreeCellFraction(id, p_free);
+              getFreeCellFractionPatch(map_id, p_free_patch, patch_size_);
 
-              int free_counter = 0;
-              std::vector<unsigned int> temp_neighbours;
-              temp_neighbours = getNeighbourXCells(map_id, 2000, 2000, 2);
-              for (int iter = 0; iter < temp_neighbours.size(); iter++){
-                if (map_msg_.data[temp_neighbours[iter]] != -1 &&
-                    map_msg_.data[temp_neighbours[iter]] < 30) free_counter += 1;
-              }
-              double p_free_2 = double(free_counter) / temp_neighbours.size();
-
-              if (p_free > 0.5 && p_free_2 > 0.8){
-                // If object is in free space, assume it is dynamic
+              if (p_free > 0.6 && p_free_patch > 0.5){
                 tracked_objects_[i].dynamic_or_static = "dynamic";
               }
               else {
-                if (tracked_objects_[i].unknown_since > 45){
-                  // If object is in unknown space for longer time, assume it is static
+                // If object is in unknown space for longer time, assume it is static
+                if (tracked_objects_[i].unknown_since > unknown_since_threshold_){
                   tracked_objects_[i].dynamic_or_static = "static";
+                  // Set velocity to zero
+                  tracked_objects_[i].state_mean[2] = 0;
+                  tracked_objects_[i].state_mean[3] = 0;
                 }
                 else {
                   tracked_objects_[i].dynamic_or_static = "unknown";
@@ -561,34 +567,31 @@ void StaticScanExtractor::scanOdomCallback
               }
             }
             else {
-              int free_counter = 0;
-              std::vector<unsigned int> temp_neighbours;
-              temp_neighbours = getNeighbourXCells(map_id, 2000, 2000, 2);
-              for (int iter = 0; iter < temp_neighbours.size(); iter++){
-                if (map_msg_.data[temp_neighbours[iter]] != -1 &&
-                    map_msg_.data[temp_neighbours[iter]] < 30) free_counter += 1;
-              }
-              double p_free_2 = double(free_counter) / temp_neighbours.size();
-
-              if (p_free_2 > 80){
-                // If object is in free space, assume it is dynamic
+              double p_free_patch = 0;
+              getFreeCellFractionPatch(map_id, p_free_patch, patch_size_);
+              if (p_free_patch > 0.8){
                 tracked_objects_[i].dynamic_or_static = "dynamic";
               }
             }
           }
 
-          // Delete measurement
+          // If tracks are occluded
           if (id >= free_means_.size()){
             tracked_objects_[i].current_occlusion = "occluded";
-
+            // Check if unknown, and if cluster is bigger than a possible person
             if (tracked_objects_[i].dynamic_or_static == "unknown"){
-              auto tmp_clst = occluded_cluster_vectors[id - free_means_.size()];
-              if(sqrt(pow(tmp_clst.front().x - tmp_clst.back().x, 2) +
-                      pow(tmp_clst.front().y - tmp_clst.back().y, 2)) > 0.7){
+              auto tmp_clst = occluded_cluster_vectors_[id - free_means_.size()];
+              if(pow(tmp_clst.front().x - tmp_clst.back().x, 2) +
+                 pow(tmp_clst.front().y - tmp_clst.back().y, 2)
+                 > static_size_threshold_sq_){
                 tracked_objects_[i].dynamic_or_static = "static";
+                // Set velocity to zero
+                tracked_objects_[i].state_mean[2] = 0;
+                tracked_objects_[i].state_mean[3] = 0;
               }
             }
 
+            // Remove scan from static and dynamic scan
             auto it_delete = occluded_clusters.begin();
             std::advance(it_delete, id - free_means_.size());
             if (tracked_objects_[i].dynamic_or_static == "unknown"){
@@ -603,46 +606,45 @@ void StaticScanExtractor::scanOdomCallback
                    cluster_it != (*it_delete).end(); ++cluster_it){
                 dynamic_scan_.ranges[cluster_it->first] = 0;
               }
+              tracked_objects_[i].state_mean[2] = 0;
+              tracked_objects_[i].state_mean[3] = 0;
             }
-            else {
-              // for (auto cluster_it = (*it_delete).begin();
-              //      cluster_it != (*it_delete).end(); ++cluster_it){
-              //   static_scan_.ranges[cluster_it->first] = 0;
-              // }
-            }
-            occluded_clusters.erase(it_delete);
+            else {} // "dynamic", remove at end
 
-            tracked_objects_[i].saveCluster(occluded_cluster_vectors[id - free_means_.size()]);
-            occluded_cluster_vectors.erase(occluded_cluster_vectors.begin() + id - free_means_.size());
+            // Delete cluster and mean
+            occluded_clusters.erase(it_delete);
+            occluded_cluster_vectors_.erase(occluded_cluster_vectors_.begin() +
+                                            id - free_means_.size());
             occluded_means_.erase(occluded_means_.begin() + id - free_means_.size());
           }
+          // If free clusters check if they are moving
           else {
+            // If track was occluded before, set velocity to zero
             if (tracked_objects_[i].current_occlusion == "occluded"){
               tracked_objects_[i].current_occlusion = "free";
               tracked_objects_[i].state_mean[2] = 0;
               tracked_objects_[i].state_mean[3] = 0;
               tracked_objects_[i].unknown_since = 5;
             }
-
+            // Check if cluster is bigger than a possible person
             if (tracked_objects_[i].dynamic_or_static == "unknown"){
-              auto tmp_clst = free_cluster_vectors[id];
-              if(sqrt(pow(tmp_clst.front().x - tmp_clst.back().x, 2) +
-                      pow(tmp_clst.front().y - tmp_clst.back().y, 2)) > 0.7){
+              auto tmp_clst = free_cluster_vectors_[id];
+              if(pow(tmp_clst.front().x - tmp_clst.back().x, 2) +
+                 pow(tmp_clst.front().y - tmp_clst.back().y, 2)
+                 > static_size_threshold_sq_){
                 tracked_objects_[i].dynamic_or_static = "static";
+                tracked_objects_[i].state_mean[2] = 0;
+                tracked_objects_[i].state_mean[3] = 0;
               }
-            }
-
-            if (tracked_objects_[i].dynamic_or_static == "unknown"){
-              cout << sqrt(pow(tracked_objects_[i].state_mean[2], 2) +
-                       pow(tracked_objects_[i].state_mean[3], 2)) << endl;
-              if (sqrt(pow(tracked_objects_[i].state_mean[2], 2) +
-                       pow(tracked_objects_[i].state_mean[3], 2)) > 0.13){
+              // Check if track is moving
+              else if (pow(tracked_objects_[i].state_mean[2], 2) +
+                       pow(tracked_objects_[i].state_mean[3], 2)
+                       > dynamic_vel_threshold_sq_){
                 tracked_objects_[i].dynamic_or_static = "dynamic";
-                ROS_INFO("moving");
               }
-              else ROS_INFO("not moving");
             }
 
+            // Remove scan from static and dynamic scan
             auto it_delete = free_clusters.begin();
             std::advance(it_delete, id);
             if (tracked_objects_[i].dynamic_or_static == "unknown"){
@@ -658,21 +660,17 @@ void StaticScanExtractor::scanOdomCallback
                 dynamic_scan_.ranges[cluster_it->first] = 0;
               }
             }
-            else {
-              // for (auto cluster_it = (*it_delete).begin();
-              //      cluster_it != (*it_delete).end(); ++cluster_it){
-              //   static_scan_.ranges[cluster_it->first] = 0;
-              // }
-            }
-            free_clusters.erase(it_delete);
+            else {} // "dynamic", remove at end
 
-            tracked_objects_[i].saveCluster(free_cluster_vectors[id]);
-            free_cluster_vectors.erase(free_cluster_vectors.begin() + id);
+            // Delete cluster and mean
+            free_clusters.erase(it_delete);
+            free_cluster_vectors_.erase(free_cluster_vectors_.begin() + id);
             free_means_.erase(free_means_.begin() + id);
           }
-        }
+        } // (id != -1)
         else {
-          if (tracked_objects_[i].counter_not_seen < 10){
+          // Remove track if untracked for longer time
+          if (tracked_objects_[i].counter_not_seen < not_seen_threshold_){
             tracked_objects_[i].counter_not_seen += 1;
           }
           else {
@@ -683,20 +681,19 @@ void StaticScanExtractor::scanOdomCallback
       }
     }
 
+    // Generate new tracks for all unassigned measurements
     std::vector<geometry_msgs::Point> all_means = free_means_;
     all_means.insert(all_means.end(), occluded_means_.begin(), occluded_means_.end());
     if (!all_means.empty()){
-      // Generate new tracked objects
       for (size_t i = 0; i < all_means.size(); i++){
         TrackedObject temp_tracked_object(all_means[i].x, all_means[i].y);
 
         // Check if object is dynamic or static
-        int id = positionToMapId(all_means[i].x, all_means[i].y, 2000,
-                                    2000, 0.05);
+        int map_id = positionToMapId(all_means[i].x, all_means[i].y, map_width_,
+                                     map_height_, map_resolution_);
 
         auto it_delete = occluded_clusters.begin();
         if (i >= free_means_.size()){
-          it_delete = occluded_clusters.begin();
           std::advance(it_delete, i - free_means_.size());
         }
         else{
@@ -704,65 +701,51 @@ void StaticScanExtractor::scanOdomCallback
           std::advance(it_delete, i);
         }
 
-        if (map_msg_.data[id] == -1){
-          // If object is in unknown space, mark as unknown
+        // If object is in unknown space, mark as unknown
+        if (map_msg_.data[map_id] == -1){
           temp_tracked_object.dynamic_or_static = "unknown";
           temp_tracked_object.unknown_since = 0;
-
+          // Remove from all scans as still unknown
           for (auto cluster_it = (*it_delete).begin();
                cluster_it != (*it_delete).end(); ++cluster_it){
             dynamic_scan_.ranges[cluster_it->first] = 0;
             static_scan_.ranges[cluster_it->first] = 0;
           }
         }
-        else if (map_msg_.data[id] > 80){
+        else if (map_msg_.data[map_id] > wall_threshold_){
           // If object is in wall, assume it is static
           temp_tracked_object.dynamic_or_static = "static";
-
+          // Remove from dynamic scan
           for (auto cluster_it = (*it_delete).begin();
                cluster_it != (*it_delete).end(); ++cluster_it){
             dynamic_scan_.ranges[cluster_it->first] = 0;
           }
         }
-        else {
-          int free_counter = 0;
-          std::vector<unsigned int> temp_neighbours;
-          temp_neighbours = getNeighbourXCells(id, 2000, 2000, 2);
-          for (int iter = 0; iter < temp_neighbours.size(); iter++){
-            if (map_msg_.data[temp_neighbours[iter]] != -1 &&
-                map_msg_.data[temp_neighbours[iter]] < 30) free_counter += 1;
-          }
-
-          if (double(free_counter) / temp_neighbours.size() > 0.8){
+        else { // if on free space
+          double p_free_patch = 0;
+          getFreeCellFractionPatch(map_id, p_free_patch, patch_size_);
+          if (p_free_patch > 0.8){
             // If object is in free space, assume it is dynamic
             temp_tracked_object.dynamic_or_static = "dynamic";
-
-            // for (auto cluster_it = (*it_delete).begin();
-            //      cluster_it != (*it_delete).end(); ++cluster_it){
-            //   static_scan_.ranges[cluster_it->first] = 0;
-            // }
           }
           else {
             temp_tracked_object.dynamic_or_static = "unknown";
           }
-
         }
 
-        // Save occlusion and cluster
+        // Save occlusion
         if (i >= free_means_.size()){
           temp_tracked_object.current_occlusion = "occluded";
-          temp_tracked_object.saveCluster(occluded_cluster_vectors[i - free_means_.size()]);
         }
         else {
           temp_tracked_object.current_occlusion = "free";
-          temp_tracked_object.saveCluster(free_cluster_vectors[i]);
         }
 
         tracked_objects_.push_back(temp_tracked_object);
       }
     }
 
-    // Publish means of tracked objects
+    // Publish means of tracked objects as grid cells
     nav_msgs::GridCells moving_objects_msg;
     moving_objects_msg.header.frame_id = "map";
     moving_objects_msg.cell_width = 0.2;
@@ -776,25 +759,17 @@ void StaticScanExtractor::scanOdomCallback
     unknown_objects_msg.cell_width = 0.2;
     unknown_objects_msg.cell_height = 0.2;
     for (size_t i = 0; i < tracked_objects_.size(); i++){
+      geometry_msgs::Point temp_point;
+      temp_point.x = tracked_objects_[i].state_mean[0];
+      temp_point.y = tracked_objects_[i].state_mean[1];
+      temp_point.z = 0;
       if (tracked_objects_[i].dynamic_or_static == "dynamic"){
-        geometry_msgs::Point temp_point;
-        temp_point.x = tracked_objects_[i].state_mean[0];
-        temp_point.y = tracked_objects_[i].state_mean[1];
-        temp_point.z = 0;
         moving_objects_msg.cells.push_back(temp_point);
       }
       else if (tracked_objects_[i].dynamic_or_static == "static"){
-        geometry_msgs::Point temp_point;
-        temp_point.x = tracked_objects_[i].state_mean[0];
-        temp_point.y = tracked_objects_[i].state_mean[1];
-        temp_point.z = 0;
         static_objects_msg.cells.push_back(temp_point);
       }
       else {
-        geometry_msgs::Point temp_point;
-        temp_point.x = tracked_objects_[i].state_mean[0];
-        temp_point.y = tracked_objects_[i].state_mean[1];
-        temp_point.z = 0;
         unknown_objects_msg.cells.push_back(temp_point);
       }
     }
@@ -803,26 +778,27 @@ void StaticScanExtractor::scanOdomCallback
     unknown_objects_pub_.publish(unknown_objects_msg);
 
     // Update delta_t
-    curr_node_stamp_ = laser_msg_.header.stamp;
+    curr_node_stamp_ = dynamic_scan_.header.stamp;
     prev_delta_t_ = (curr_node_stamp_ - prev_node_stamp_).toSec();
     prev_node_stamp_ = curr_node_stamp_;
 
-    dynamic_scan_pub_.publish(dynamic_scan_);
-
+    // Remove dynamic scans from static scan
     for (int scan_i = 0; scan_i < dynamic_scan_.ranges.size(); scan_i++){
       if (dynamic_scan_.ranges[scan_i] != 0){
         static_scan_.ranges[scan_i] = 0;
       }
     }
 
+    // Publish dynamic and static scan
     static_scan_pub_.publish(static_scan_);
+    dynamic_scan_pub_.publish(dynamic_scan_);
   }
 }
 
 void StaticScanExtractor::mapCallback
     (const nav_msgs::OccupancyGrid::ConstPtr& map_msg){
   map_msg_ = *map_msg;
-  map_callback_initialized_ = true;
+  map_callback_initialised_ = true;
 }
 
 
