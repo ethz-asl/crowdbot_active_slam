@@ -613,6 +613,10 @@ int main(int argc, char** argv) {
 
   // Unpause simulation now
   unpause_simulation.call(physics);
+
+  // Set loop rate
+  ros::Rate loop_rate(30);
+
   // Calculate Forces
   while (ros::ok()) {
     // Get current pioneer position and speed
@@ -701,6 +705,7 @@ int main(int argc, char** argv) {
     }
     // Only when we calculated everything for every pedestrian
     ros::spinOnce();
+    loop_rate.sleep();
   }
   return 0;
 }
