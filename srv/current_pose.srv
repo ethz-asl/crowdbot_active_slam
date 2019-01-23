@@ -1,0 +1,5 @@
+#request
+
+---
+#response
+geometry_msgs/PoseStamped current_pose

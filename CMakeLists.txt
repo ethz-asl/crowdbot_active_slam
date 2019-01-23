@@ -40,6 +40,7 @@ add_service_files(
   FILES
   get_frontier_list.srv
   get_map.srv
+  current_pose.srv
   service_call.srv
   utility_calc.srv
 )
@@ -53,7 +54,7 @@ generate_messages(
 
 catkin_package(
 INCLUDE_DIRS include
-CATKIN_DEPENDS roscpp roslib tf std_msgs sensor_msgs geometry_msgs gazebo_ros pcl_ros
+CATKIN_DEPENDS roscpp roslib tf std_msgs sensor_msgs geometry_msgs gazebo_ros pcl_ros nodelet
 DEPENDS EIGEN3 plotty OpenMP grid_map_ros)
 
 include_directories(include ${catkin_INCLUDE_DIRS} ${csm_INCLUDE_DIRS}
@@ -65,22 +66,39 @@ include_directories(include ${catkin_INCLUDE_DIRS} ${csm_INCLUDE_DIRS}
 
 link_directories(${csm_LIBRARY_DIRS} ${SBPL_LIBRARY_DIRS})
 
+# Libraries
 add_library(pedestrian src/pedestrian.cpp)
 add_library(utils src/utils.cpp)
+add_library(ObjectDetector src/object_detector.cpp)
+add_library(TrackedObject src/tracked_object.cpp)
+add_library(KalmanFilter src/kalman_filter.cpp)
+add_library(graph_optimisation_lib src/graph_optimisation.cpp)
+target_link_libraries(graph_optimisation_lib gtsam ${catkin_LIBRARIES}
+                      ${csm_LIBRARIES} ${EIGEN3_LIBRARIES}
+                      ${GTSAM_LIBRARIES} ${libpointmatcher_LIBRARIES})
+add_library(static_scan_extractor_lib src/static_scan_extractor.cpp)
+target_link_libraries(static_scan_extractor_lib ${catkin_LIBRARIES} ObjectDetector
+                      TrackedObject KalmanFilter ${EIGEN3_LIBRARIES} ${csm_LIBRARIES})
+add_library(graph_optimisation_nodelet src/graph_optimisation_nodelet.cpp)
+target_link_libraries(graph_optimisation_nodelet graph_optimisation_lib)
+add_library(static_scan_extractor_nodelet src/static_scan_extractor_nodelet.cpp)
+target_link_libraries(static_scan_extractor_nodelet static_scan_extractor_lib)
 
+# Executables
 add_executable(graph_optimisation src/graph_optimisation.cpp)
 add_executable(frontier_exploration src/frontier_exploration.cpp)
 add_executable(decision_maker src/decision_maker.cpp)
 add_executable(combined_laser_scans src/combined_laser_scans.cpp)
 add_executable(pedestrian_simulator src/pedestrian_simulator.cpp)
+add_executable(static_scan_extractor src/static_scan_extractor.cpp)
 
-target_link_libraries(graph_optimisation gtsam
-                      ${catkin_LIBRARIES} ${csm_LIBRARIES} ${EIGEN3_LIBRARIES} ${GTSAM_LIBRARIES} ${libpointmatcher_LIBRARIES})
+target_link_libraries(graph_optimisation graph_optimisation_lib)
 target_link_libraries(frontier_exploration ${catkin_LIBRARIES})
 target_link_libraries(decision_maker ${catkin_LIBRARIES} ${SBPL_LIBRARIES})
 target_link_libraries(combined_laser_scans ${catkin_LIBRARIES} ${pcl_ros_LIBRARIES} ${glog_catkin_LIBRARIES})
 target_link_libraries(pedestrian_simulator ${catkin_LIBRARIES}
                       ${grid_map_ros_LIBRARIES} pedestrian utils)
+target_link_libraries(static_scan_extractor static_scan_extractor_lib)
 
 # add dependencies to make sure that srv files are generated before used
 add_dependencies(graph_optimisation crowdbot_active_slam_generate_messages_cpp)
@@ -104,6 +122,14 @@ target_link_libraries(pub_map_difference ${catkin_LIBRARIES})
 target_link_libraries(plot_SDF_diff ${catkin_LIBRARIES} ${EIGEN3_LIBRARIES} ${OpenCV_LIBRARIES})
 target_link_libraries(plot_cov_along_path ${catkin_LIBRARIES} ${plotty_LIBRARIES})
 target_link_libraries(plot_SDF ${catkin_LIBRARIES} ${EIGEN3_LIBRARIES} ${OpenCV_LIBRARIES})
+
+# Install
+install(TARGETS graph_optimisation_nodelet static_scan_extractor_nodelet
+        DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION})
+
+#Install nodelet description
+install(FILES nodelet_plugins.xml
+    DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION})
 
 install(DIRECTORY
   launch

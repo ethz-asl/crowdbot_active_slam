@@ -1,0 +1,17 @@
+<library path="lib/libgraph_optimisation_nodelet">
+  <class name="GraphOptimisationNodelet" type="GraphOptimisationNodelet"
+    base_class_type="nodelet::Nodelet">
+    <description>
+      Nodelet for graph optimisation.
+    </description>
+  </class>
+</library>
+
+<library path="lib/libstatic_laser_scan_combiner_nodelet">
+  <class name="StaticLaserScanCombinerNodelet" type="StaticLaserScanCombinerNodelet"
+    base_class_type="nodelet::Nodelet">
+    <description>
+      Nodelet for static laser scan combiner.
+    </description>
+  </class>
+</library>

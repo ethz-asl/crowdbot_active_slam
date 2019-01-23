@@ -46,6 +46,8 @@ void GraphOptimiser::initParams(){
   path_pub_ = nh_.advertise<nav_msgs::Path>("graph_path", 1);
   action_path_pub_ = nh_.advertise<nav_msgs::Path>("action_graph", 1);
   map_pub_ = nh_.advertise<nav_msgs::OccupancyGrid>("occupancy_map", 1);
+  map_pub_for_static_scan_comb_ =
+  nh_.advertise<nav_msgs::OccupancyGrid>("map_for_static_scan_extractor", 1);
   test_pose2D_pub_ = nh_.advertise<geometry_msgs::Pose2D>("test_pose2D", 1);
   test_pose_pub_ = nh_.advertise<geometry_msgs::PoseStamped>("test_pose", 1);
 
@@ -58,6 +60,8 @@ void GraphOptimiser::initParams(){
                       &GraphOptimiser::getMapServiceCallback, this);
   utility_calc_service_ = nh_.advertiseService("utility_calc_service",
                       &GraphOptimiser::utilityCalcServiceCallback, this);
+  current_pose_node_service_ = nh_.advertiseService("current_pose_node_service",
+                      &GraphOptimiser::currentPoseNodeServiceCallback, this);
   get_ground_truth_client_ = nh_.serviceClient<gazebo_msgs::GetModelState>
                                                     ("gazebo/get_model_state");
 
@@ -193,6 +197,9 @@ void GraphOptimiser::initParams(){
   std::ifstream config_file(config_path.c_str());
 
   icp_.loadFromYaml(config_file);
+
+  // Publish map in other thread at low rate (only for rviz)
+  boost::thread map_pub_thread(&GraphOptimiser::pubMap, this);
 }
 
 void GraphOptimiser::laserScanToMatrix(sensor_msgs::LaserScan& scan_msg, Eigen::MatrixXf& matrix){
@@ -903,7 +910,7 @@ bool GraphOptimiser::utilityCalcServiceCallback(
     if (p_percent != 0 && p_percent != 100){
       double p = double(p_percent) / 100.0;
       if (alpha[it->second] > 1000){
-        utility += -(p * log2(p) + (1 - p) * log2(1 - p)) + std::max(p, 1 - p);
+        utility += -(p * log2(p) + (1 - p) * log2(1 - p)) + log2(std::max(p, 1 - p));
       }
       else{
         utility += -(p * log2(p) + (1 - p) * log2(1 - p)) -
@@ -1028,6 +1035,8 @@ void GraphOptimiser::scanMatcherCallback(
     node_counter_ += 1;
     first_scan_pose_ = false;
     last_pose2_map_ = init_pose2_map_;
+    latest_pose_estimate_ = pose2ToPoseStamped(last_pose2_map_);
+    latest_pose_estimate_.header.stamp = latest_scan_msg_.header.stamp;
     prev_pose2_odom_ = current_pose2_odom_;
   }
   else {
@@ -1117,6 +1126,8 @@ void GraphOptimiser::scanMatcherCallback(
             // Add new factor between current_pose2_ and node i
             graph_.add(BetweenFactor<Pose2>(node_counter_, i, lc_mean,
                        scan_match_noise));
+            // We want only one loop closing (oldest) TODO: find better solution
+            break;
           }
         }
       }
@@ -1155,6 +1166,8 @@ void GraphOptimiser::scanMatcherCallback(
 
       // Update map to odom transform
       last_pose2_map_ = *dynamic_cast<const Pose2*>(&pose_estimates_.at(node_counter_));
+      latest_pose_estimate_ = pose2ToPoseStamped(last_pose2_map_);
+      latest_pose_estimate_.header.stamp = latest_scan_msg_.header.stamp;
 
       tf::Transform last_pose_tf;
       last_pose_tf = xythetaToTF(last_pose2_map_.x(), last_pose2_map_.y(), last_pose2_map_.theta());
@@ -1172,6 +1185,7 @@ void GraphOptimiser::scanMatcherCallback(
       }
       else {
         updateMap(pose_estimates_, keyframe_ldp_vec_);
+        map_pub_for_static_scan_comb_.publish(occupancy_grid_msg_);
       }
     }
   }
@@ -1203,6 +1217,7 @@ void GraphOptimiser::scanMatcherCallback(
     // Draw the map
     drawMap(pose_estimates_, keyframe_ldp_vec_);
     first_map_calculated_ = true;
+    map_pub_for_static_scan_comb_.publish(occupancy_grid_msg_);
   }
 }
 
@@ -1211,6 +1226,13 @@ bool GraphOptimiser::getMapServiceCallback(
     crowdbot_active_slam::get_map::Response &response){
   // Return current occupancy grid map
   response.map_msg = occupancy_grid_msg_;
+  return true;
+}
+
+bool GraphOptimiser::currentPoseNodeServiceCallback(
+    crowdbot_active_slam::current_pose::Request &request,
+    crowdbot_active_slam::current_pose::Response &response){
+  response.current_pose = latest_pose_estimate_;
   return true;
 }
 
@@ -1228,9 +1250,6 @@ int main(int argc, char **argv){
   ros::NodeHandle nh;
   ros::NodeHandle nh_("~");
   GraphOptimiser optimiser(nh, nh_);
-
-  // Publish map in other thread
-  boost::thread map_pub_thread(&GraphOptimiser::pubMap, &optimiser);
 
   ros::spin();
 

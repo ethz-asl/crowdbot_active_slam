@@ -25,13 +25,13 @@ void utils::PedestrianStartingPose(double limit_x, double limit_y,
   double obstacle = 0;
   grid_map::Position ped_position;
   while (index < number) {
-    ped_position.x() = utils::RandomFloat(limit_x);
-    ped_position.y() = utils::RandomFloat(limit_y);
-    obstacle = map->atPosition("Occupied", ped_position + map->getPosition());
+    ped_position.x() = utils::RandomFloat(limit_x) + map->getPosition().x();
+    ped_position.y() = utils::RandomFloat(limit_y) + map->getPosition().y();
+    obstacle = map->atPosition("Occupied", ped_position);
     if (obstacle != 1 && !(CheckIfObstacle(ped_position, map)) &&
         !(CheckOccupied(x, y, ped_position.x(), ped_position.y()))) {
-      x->at(index) = ped_position.x() + map->getPosition().x();
-      y->at(index) = ped_position.y() + map->getPosition().y();
+      x->at(index) = ped_position.x();
+      y->at(index) = ped_position.y();
       index++;
     }
   }
@@ -40,8 +40,8 @@ void utils::PedestrianStartingPose(double limit_x, double limit_y,
 bool utils::CheckIfObstacle(grid_map::Position position,
                             grid_map::GridMap* map) {
   double closest_x, closest_y;
-  closest_x = map->atPosition("Closest X", position + map->getPosition());
-  closest_y = map->atPosition("Closest Y", position + map->getPosition());
+  closest_x = map->atPosition("Closest X", position);
+  closest_y = map->atPosition("Closest Y", position);
   if (abs(closest_y) <= 0.5 || abs(closest_x) <= 0.5) {
     return true;
   } else {

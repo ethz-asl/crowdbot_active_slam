@@ -1,0 +1,21 @@
+<launch>
+  <arg name="scan_topic" default="/base_scan"/>
+  <node name="static_scan_extractor" pkg="crowdbot_active_slam"
+    type="static_scan_extractor" output="screen">
+    <param name="ABD_lambda" value="10"/>
+    <param name="ABD_sigma" value="0.02"/>
+    <param name="kf_std_dev_process" value="1"/>
+    <param name="kf_std_dev_range" value="0.01"/>
+    <param name="kf_std_dev_theta" value="0.01"/>
+    <param name="init_scan_unknown_pt" value="100"/>
+    <param name="init_min_time" value="4"/>
+    <param name="wall_threshold" value="80"/>
+    <param name="association_radius" value="0.5"/>
+    <param name="unknown_since_threshold" value="30"/>
+    <param name="static_size_threshold" value="0.7"/>
+    <param name="dynamic_vel_threshold" value="0.13"/>
+    <param name="not_seen_threshold" value="10"/>
+    <param name="patch_size" value="2"/>
+    <param name="scan_callback_topic" value="$(arg scan_topic)"/>
+  </node>
+</launch>
