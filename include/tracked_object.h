@@ -13,6 +13,8 @@
 
 #include <Eigen/Dense>
 
+typedef Eigen::Matrix<double, 6, 1> Vector6d;
+typedef Eigen::Matrix<double, 6, 6> Matrix6d;
 
 class TrackedObject{
 public:
@@ -32,15 +34,15 @@ public:
 
   // Variables
   int counter_not_seen;
-  Eigen::Vector4d state_mean;
-  Eigen::Matrix4d state_var;
+  Vector6d state_mean;
+  Matrix6d state_var;
   std::string current_occlusion;
   std::string dynamic_or_static;
   int unknown_since;
 
 private:
   // State
-  double x_, y_, x_vel_, y_vel_;
+  double x_, y_, x_vel_, y_vel_, x_acc_, y_acc_;
   std::vector<geometry_msgs::Point> prev_cluster_;
   std::vector<geometry_msgs::Point> current_cluster_;
 

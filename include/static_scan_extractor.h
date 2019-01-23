@@ -130,7 +130,7 @@ private:
 
   // Object detector
   double abd_lambda_;
-  int abd_sigma_;
+  double abd_sigma_;
   ObjectDetector object_detector_;
 
   // Parameters

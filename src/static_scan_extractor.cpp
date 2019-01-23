@@ -165,7 +165,7 @@ StaticScanExtractor::StaticScanExtractor
 
   // Object detector
   nh_private_.param<double>("ABD_lambda", abd_lambda_, 10);
-  nh_private_.param<int>("ABD_sigma", abd_sigma_, 0.01);
+  nh_private_.param<double>("ABD_sigma", abd_sigma_, 0.01);
   object_detector_ = ObjectDetector(abd_lambda_, abd_sigma_);
 
   // Subscriber
@@ -233,11 +233,11 @@ StaticScanExtractor::StaticScanExtractor
   laser_to_base_ = base_to_laser_tf.inverse();
 
   // KF init variables
-  nh_private_.param<double>("kf_std_dev_process", std_dev_process_, 0.1); // for what?
+  nh_private_.param<double>("kf_std_dev_process", std_dev_process_, 1);
   nh_private_.param<double>("kf_std_dev_range", std_dev_range_, 0.01);
   nh_private_.param<double>("kf_std_dev_theta", std_dev_theta_, 0.01);
 
-  kalman_filter_ = KalmanFilter(std_dev_range_, std_dev_theta_);
+  kalman_filter_ = KalmanFilter(std_dev_range_, std_dev_theta_, std_dev_process_);
 
   /*
   Init some sm_icp parameters (Most values are taken from the
@@ -559,6 +559,8 @@ void StaticScanExtractor::scanCallback
                   // Set velocity to zero
                   tracked_objects_[i].state_mean[2] = 0;
                   tracked_objects_[i].state_mean[3] = 0;
+                  tracked_objects_[i].state_mean[4] = 0;
+                  tracked_objects_[i].state_mean[5] = 0;
                 }
                 else {
                   tracked_objects_[i].dynamic_or_static = "unknown";
@@ -588,6 +590,8 @@ void StaticScanExtractor::scanCallback
                 // Set velocity to zero
                 tracked_objects_[i].state_mean[2] = 0;
                 tracked_objects_[i].state_mean[3] = 0;
+                tracked_objects_[i].state_mean[4] = 0;
+                tracked_objects_[i].state_mean[5] = 0;
               }
             }
 
@@ -608,6 +612,8 @@ void StaticScanExtractor::scanCallback
               }
               tracked_objects_[i].state_mean[2] = 0;
               tracked_objects_[i].state_mean[3] = 0;
+              tracked_objects_[i].state_mean[4] = 0;
+              tracked_objects_[i].state_mean[5] = 0;
             }
             else {} // "dynamic", remove at end
 
@@ -624,6 +630,8 @@ void StaticScanExtractor::scanCallback
               tracked_objects_[i].current_occlusion = "free";
               tracked_objects_[i].state_mean[2] = 0;
               tracked_objects_[i].state_mean[3] = 0;
+              tracked_objects_[i].state_mean[4] = 0;
+              tracked_objects_[i].state_mean[5] = 0;
               tracked_objects_[i].unknown_since = 5;
             }
             // Check if cluster is bigger than a possible person
@@ -635,6 +643,8 @@ void StaticScanExtractor::scanCallback
                 tracked_objects_[i].dynamic_or_static = "static";
                 tracked_objects_[i].state_mean[2] = 0;
                 tracked_objects_[i].state_mean[3] = 0;
+                tracked_objects_[i].state_mean[4] = 0;
+                tracked_objects_[i].state_mean[5] = 0;
               }
               // Check if track is moving
               else if (pow(tracked_objects_[i].state_mean[2], 2) +

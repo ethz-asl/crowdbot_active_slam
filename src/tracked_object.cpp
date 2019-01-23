@@ -13,13 +13,17 @@ TrackedObject::TrackedObject(double x, double y){
   y_ = y;
   x_vel_ = 0;
   y_vel_ = 0;
-  state_mean << x_, y_, x_vel_, y_vel_;
+  x_acc_ = 0;
+  y_acc_ = 0;
+  state_mean << x_, y_, x_vel_, y_vel_, x_acc_, y_acc_;
 
   // Init state var
-  state_var << 1, 0, 0, 0,
-                0, 1, 0, 0,
-                0, 0, 1, 0,
-                0, 0, 0, 1;
+  state_var << 1, 0, 0, 0, 0, 0,
+               0, 1, 0, 0, 0, 0,
+               0, 0, 1, 0, 0, 0,
+               0, 0, 0, 1, 0, 0,
+               0, 0, 0, 0, 1, 0,
+               0, 0, 0, 0, 0, 1;
 
   // Init counter for not seen
   counter_not_seen = 0;
@@ -34,6 +38,6 @@ void TrackedObject::saveCluster(std::vector<geometry_msgs::Point> cluster){
   }
   else {
     prev_cluster_ = current_cluster_;
-    current_cluster_ = cluster;  
+    current_cluster_ = cluster;
   }
 }

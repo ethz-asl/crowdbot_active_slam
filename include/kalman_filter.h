@@ -11,6 +11,8 @@
 #include <ros/ros.h>
 #include <Eigen/Dense>
 
+typedef Eigen::Matrix<double, 6, 1> Vector6d;
+typedef Eigen::Matrix<double, 6, 6> Matrix6d;
 
 class KalmanFilter{
 public:
@@ -22,7 +24,7 @@ public:
   /**
    *  Class Constructor
    */
-  KalmanFilter(double std_dev_range, double std_dev_theta);
+  KalmanFilter(double std_dev_range, double std_dev_theta, double std_dev_process);
 
   /**
    *  Class Destructor
@@ -31,17 +33,19 @@ public:
 
   void updateProcessMatrices(double dt);
 
-  Eigen::Vector4d prediction(Eigen::Vector4d prev_mean);
-  Eigen::Matrix4d prediction(Eigen::Matrix4d prev_var);
+  Vector6d prediction(Vector6d prev_mean);
+  Matrix6d prediction(Matrix6d prev_var);
 
-  void updateKalmanGain(Eigen::Matrix4d prev_var);
+  void updateKalmanGain(Matrix6d prev_var);
 
-  Eigen::Vector4d update(Eigen::Vector4d prev_mean, Eigen::Vector2d z_m);
-  Eigen::Matrix4d update(Eigen::Matrix4d prev_var, Eigen::Vector2d z_m);
+  Vector6d update(Vector6d prev_mean, Eigen::Vector2d z_m);
+  Matrix6d update(Matrix6d prev_var, Eigen::Vector2d z_m);
 
 private:
-  Eigen::Matrix4d A_prev_;
-  Eigen::Matrix4d Q_prev_;
+  double std_dev_process_;
+  double std_dev_process_sq_;
+  Matrix6d A_prev_;
+  Matrix6d Q_prev_;
   Eigen::MatrixXd H_prev_;
   Eigen::Matrix2d R_prev_;
   Eigen::MatrixXd kalman_gain_;
