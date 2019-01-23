@@ -910,7 +910,7 @@ bool GraphOptimiser::utilityCalcServiceCallback(
     if (p_percent != 0 && p_percent != 100){
       double p = double(p_percent) / 100.0;
       if (alpha[it->second] > 1000){
-        utility += -(p * log2(p) + (1 - p) * log2(1 - p)) + std::max(p, 1 - p);
+        utility += -(p * log2(p) + (1 - p) * log2(1 - p)) + log2(std::max(p, 1 - p));
       }
       else{
         utility += -(p * log2(p) + (1 - p) * log2(1 - p)) -
