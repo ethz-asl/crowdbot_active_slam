@@ -7,11 +7,11 @@
   </class>
 </library>
 
-<library path="lib/libstatic_laser_scan_combiner_nodelet">
-  <class name="StaticLaserScanCombinerNodelet" type="StaticLaserScanCombinerNodelet"
+<library path="lib/libstatic_scan_extractor_nodelet">
+  <class name="StaticScanExtractorNodelet" type="StaticScanExtractorNodelet"
     base_class_type="nodelet::Nodelet">
     <description>
-      Nodelet for static laser scan combiner.
+      Nodelet for static scan extractor.
     </description>
   </class>
 </library>
