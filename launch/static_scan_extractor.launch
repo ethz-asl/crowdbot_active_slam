@@ -3,8 +3,8 @@
   <node name="static_scan_extractor" pkg="crowdbot_active_slam"
     type="static_scan_extractor" output="screen">
     <param name="ABD_lambda" value="10"/>
-    <param name="ABD_sigma" value="0.01"/>
-    <param name="kf_std_dev_process" value="0.1"/>
+    <param name="ABD_sigma" value="0.02"/>
+    <param name="kf_std_dev_process" value="1"/>
     <param name="kf_std_dev_range" value="0.01"/>
     <param name="kf_std_dev_theta" value="0.01"/>
     <param name="init_scan_unknown_pt" value="100"/>
