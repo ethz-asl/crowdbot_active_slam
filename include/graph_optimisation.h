@@ -153,7 +153,6 @@ private:
   nav_msgs::OccupancyGrid occupancy_grid_msg_;
   nav_msgs::OccupancyGridPtr occupancy_grid_msg_ptr_;
   geometry_msgs::PoseStamped latest_pose_estimate_;
-  // sensor_msgs::LaserScan latest_scan_msg_;
 
   // Service, Publisher and Subscriber
   ros::Subscriber scan_sub_;
@@ -235,6 +234,7 @@ private:
   double scan_range_min_;
   double scan_range_max_;
   double max_range_allowed_;
+  double sigma_norm_;
   std::vector<gtsam::Matrix> uncertainty_matrices_path_;
   std::string scan_callback_topic_;
 };

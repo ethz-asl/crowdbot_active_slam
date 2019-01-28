@@ -196,6 +196,11 @@ void GraphOptimiser::initParams(){
   average_scan_match_noise_ = noiseModel::Diagonal::Variances(
                               (Vector(3) << 0.0000006, 0.0000006, 0.000000012));
 
+  // Parameter for utility computation of action path
+  double error_distance = 10;
+  sigma_norm_ = exp(1.0 / 3.0 * (2 * log(map_resolution_ * map_resolution_) +
+                          log(pow(atan(map_resolution_ / error_distance), 2))));
+
   // ISAM2
   ISAM2Params parameters;
   parameters.relinearizeThreshold = 0.01;
@@ -951,7 +956,7 @@ bool GraphOptimiser::utilityCalcServiceCallback(
                          log(eivals[1].real()) +
                          log(eivals[2].real());
     sigma_temp = exp(1.0 / 3.0 * sum_of_logs);
-    alpha.push_back(1.0 + 1.0 / sigma_temp);
+    alpha.push_back(1.0 + sigma_norm_ / sigma_temp);
   }
 
   std::map<int, int> subset;
@@ -1023,7 +1028,7 @@ void GraphOptimiser::scanCallback(
   tf::Transform odom_transform;
   odom_transform = static_cast<tf::Transform>(odom_stamped_transform);
 
-  // Process Scan (addapted from ro laser_scan_matcher)
+  // Process Scan (addapted from ros laser_scan_matcher)
   previous_ldp_->odometry[0] = 0.0;
   previous_ldp_->odometry[1] = 0.0;
   previous_ldp_->odometry[2] = 0.0;
@@ -1290,6 +1295,10 @@ void GraphOptimiser::scanCallback(
         map_pub_for_static_scan_comb_.publish(occupancy_grid_msg_);
       }
     }
+    else {
+      // Free memory for avoiding memory leaking
+      ld_free(current_ldp_);
+    }
   }
 
   // Update map to odom tf
@@ -1297,37 +1306,37 @@ void GraphOptimiser::scanCallback(
     map_br_.sendTransform(tf::StampedTransform(map_to_odom_tf_, ros::Time::now(),
                         "map", "odom"));
     new_node_ = false;
-    //
-    // gazebo_msgs::GetModelState ground_truth_msg;
-    // ground_truth_msg.request.model_name = "pioneer";
-    // get_ground_truth_client_.call(ground_truth_msg);
-    // tf::Quaternion ground_truth_orientation;
-    // quaternionMsgToTF(ground_truth_msg.response.pose.orientation, ground_truth_orientation);
-    // init_pose2_map_ = Pose2(ground_truth_msg.response.pose.position.x,
-    //                         ground_truth_msg.response.pose.position.y,
-    //                         tf::getYaw(ground_truth_orientation));
-    //
-    // Pose2 tmp_pose2 = *dynamic_cast<const Pose2*>(&pose_estimates_.at(node_counter_ - 1));
-    // tmp_pose2.between(init_pose2_map_).print();
-    //
-    // if (node_counter_ > 1){
-    //   // Calculate alpha for each node
-    //   double alpha;
-    //   double sigma;
-    //
-    //     // D-optimality
-    //     std::cout << isam_.marginalCovariance(node_counter_ - 1) << std::endl;
-    //   Eigen::VectorXcd eivals = isam_.marginalCovariance(node_counter_ - 1).eigenvalues();
-    //   double sum_of_logs = log(eivals[0].real()) +
-    //                        log(eivals[1].real()) +
-    //                        log(eivals[2].real());
-    //   sigma = exp(1.0 / 3.0 * sum_of_logs);
-    //   double sigma_norm = exp(1.0/3.0 * (2*log(map_resolution_ * map_resolution_) +
-    //                       log(pow(atan(map_resolution_/10.0), 2))));
-    //   alpha = (1.0 + sigma_norm / sigma);
-    //   std::cout << "sigma: " << sigma << std::endl;
-    //   std::cout << "alpha: " << alpha << std::endl;
-    // }
+
+    gazebo_msgs::GetModelState ground_truth_msg;
+    ground_truth_msg.request.model_name = "pioneer";
+    get_ground_truth_client_.call(ground_truth_msg);
+    tf::Quaternion ground_truth_orientation;
+    quaternionMsgToTF(ground_truth_msg.response.pose.orientation, ground_truth_orientation);
+    init_pose2_map_ = Pose2(ground_truth_msg.response.pose.position.x,
+                            ground_truth_msg.response.pose.position.y,
+                            tf::getYaw(ground_truth_orientation));
+
+    Pose2 tmp_pose2 = *dynamic_cast<const Pose2*>(&pose_estimates_.at(node_counter_ - 1));
+    tmp_pose2.between(init_pose2_map_).print();
+
+    if (node_counter_ > 1){
+      // Calculate alpha for each node
+      double alpha;
+      double sigma;
+
+        // D-optimality
+        std::cout << isam_.marginalCovariance(node_counter_ - 1) << std::endl;
+      Eigen::VectorXcd eivals = isam_.marginalCovariance(node_counter_ - 1).eigenvalues();
+      double sum_of_logs = log(eivals[0].real()) +
+                           log(eivals[1].real()) +
+                           log(eivals[2].real());
+      sigma = exp(1.0 / 3.0 * sum_of_logs);
+      double sigma_norm = exp(1.0/3.0 * (2*log(map_resolution_ * map_resolution_) +
+                          log(pow(atan(map_resolution_/10.0), 2))));
+      alpha = (1.0 + sigma_norm / sigma);
+      std::cout << "sigma: " << sigma << std::endl;
+      std::cout << "alpha: " << alpha << std::endl;
+    }
   }else{
     Pose2 between_pose2;
     Pose2 temp_last_pose2;
