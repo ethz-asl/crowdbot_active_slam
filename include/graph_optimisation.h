@@ -77,7 +77,8 @@ public:
   /**
    *  A helper function which creates LDP from laser scans.
    */
-  void laserScanToLDP(sensor_msgs::LaserScan& scan_msg, LDP& ldp);
+  void laserScanToLDP(
+      const sensor_msgs::LaserScan::ConstPtr& scan_msg, LDP& ldp);
 
   /**
    *  ...
@@ -106,9 +107,7 @@ public:
    *  A scan matcher callback on Pose estimates and used laser scans
    *  which does Graph construction and optimisation.
    */
- void scanMatcherCallback(
-   const sensor_msgs::LaserScan::ConstPtr& scan_msg,
-   const geometry_msgs::PoseWithCovarianceStamped::ConstPtr& pose_msg);
+ void scanCallback(const sensor_msgs::LaserScan::ConstPtr& scan_msg);
 
   /**
    *  Service callback for saving current uncertainty matrix along path
@@ -154,14 +153,10 @@ private:
   nav_msgs::OccupancyGrid occupancy_grid_msg_;
   nav_msgs::OccupancyGridPtr occupancy_grid_msg_ptr_;
   geometry_msgs::PoseStamped latest_pose_estimate_;
-  sensor_msgs::LaserScan latest_scan_msg_;
+  // sensor_msgs::LaserScan latest_scan_msg_;
 
   // Service, Publisher and Subscriber
-  message_filters::Subscriber<sensor_msgs::LaserScan> *scan_sub_;
-  message_filters::Subscriber<geometry_msgs::PoseWithCovarianceStamped> *pose_sub_;
-  message_filters::TimeSynchronizer<
-      sensor_msgs::LaserScan, geometry_msgs::PoseWithCovarianceStamped> *sync_;
-
+  ros::Subscriber scan_sub_;
   ros::Publisher path_pub_;
   ros::Publisher action_path_pub_;
   ros::Publisher map_pub_;
@@ -195,8 +190,11 @@ private:
   gtsam::ISAM2 isam_;
 
   // CSM
+  sm_params sm_frontend_input_;
+  sm_result sm_frontend_output_;
   sm_params sm_icp_params_;
   sm_result sm_icp_result_;
+  LDP previous_ldp_;
   LDP current_ldp_;
   std::vector<LDP> keyframe_ldp_vec_;
 
