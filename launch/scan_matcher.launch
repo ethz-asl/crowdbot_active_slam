@@ -21,6 +21,7 @@
     <param name="outliers_adaptive_order" value="0.99"/>
 
     <param name="do_compute_covariance" value="1"/>
+    <param name="sigma" value="0.01"/>
     <param name="publish_pose_with_covariance_stamped" value="true"/>
   </node>
 </launch>
