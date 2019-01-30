@@ -165,7 +165,7 @@ void GraphOptimiser::initParams(){
 
   sm_icp_params_.max_angular_correction_deg = 180.0;
   sm_icp_params_.max_linear_correction = 3 * lc_radius_;
-  sm_icp_params_.max_iterations = 10;
+  sm_icp_params_.max_iterations = 20;
   sm_icp_params_.epsilon_xy = 0.000001;
   sm_icp_params_.epsilon_theta = 0.000001;
   sm_icp_params_.max_correspondence_dist = 0.5;
@@ -339,8 +339,11 @@ void GraphOptimiser::getSubsetOfMap(nav_msgs::Path& action_path,
     double theta = 0;
     for (int j = 0; j < scan_ranges_size_; j++){
       bool wall_reached = false;
-      int dx = cos(theta);
-      int dy = sin(theta);
+      bool stop_raycasting = false;
+      int unknown_counter = 0;
+
+      int dx = 1000 * cos(theta); // up to 50m range (1000 * map_resolution)
+      int dy = 1000 * sin(theta);
       int xstep = 1;
       int ystep = 1;
 
@@ -358,7 +361,7 @@ void GraphOptimiser::getSubsetOfMap(nav_msgs::Path& action_path,
         int fraction = 2 * dy - dx;
         int x = x0 + xstep;
         int y = y0;
-        while (!wall_reached){
+        while (!stop_raycasting){
           fraction += fraction_increment;
           if (fraction >= 0){
             y += ystep;
@@ -367,7 +370,28 @@ void GraphOptimiser::getSubsetOfMap(nav_msgs::Path& action_path,
           int temp_id = mapIndexToId(x, y, map_width_);
           // Check if next cell is not wall and not unknown
           int temp_prob = int(occupancy_grid_msg_.data[temp_id]);
-          if (temp_prob < 90 && temp_prob != -1){
+          if (temp_prob == 100){
+            stop_raycasting = true;
+          }
+          else if (temp_prob == -1){
+            unknown_counter++;
+            // Check if already wall_reached
+            if (wall_reached){
+              stop_raycasting = true;
+            }
+            else if (unknown_counter > 20){ // 1m
+              stop_raycasting = true;
+            }
+          }
+          else if (temp_prob != 0){
+            if (temp_prob >= 90){
+              if (wall_reached){
+                stop_raycasting = true;
+              }
+              else {
+                wall_reached = true;
+              }
+            }
             // Check if already in subset
             finder = subset.find(temp_id);
             if (finder != subset.end()){
@@ -376,21 +400,6 @@ void GraphOptimiser::getSubsetOfMap(nav_msgs::Path& action_path,
             else {
               subset.insert(std::make_pair(temp_id, i));
             }
-          }
-          else if (temp_prob >= 90){
-            // Check if already in subset
-            finder = subset.find(temp_id);
-            if (finder != subset.end()){
-              finder->second = i;
-            }
-            else {
-              subset.insert(std::make_pair(temp_id, i));
-            }
-            wall_reached = true;
-          }
-          // if unknown
-          else {
-            wall_reached = true;
           }
           x += xstep;
         }
@@ -400,7 +409,7 @@ void GraphOptimiser::getSubsetOfMap(nav_msgs::Path& action_path,
         int fraction = 2 * dx - dy;
         int x = x0;
         int y = y0 + ystep;
-        while (!wall_reached){
+        while (!stop_raycasting){
           fraction += fraction_increment;
           if (fraction >= 0){
             x += xstep;
@@ -409,7 +418,28 @@ void GraphOptimiser::getSubsetOfMap(nav_msgs::Path& action_path,
           int temp_id = mapIndexToId(x, y, map_width_);
           // Check if next cell is not a wall or unkown
           int temp_prob = int(occupancy_grid_msg_.data[temp_id]);
-          if (temp_prob < 90 && temp_prob != -1){
+          if (temp_prob == 100){
+            stop_raycasting = true;
+          }
+          else if (temp_prob == -1){
+            unknown_counter++;
+            // Check if already wall_reached
+            if (wall_reached){
+              stop_raycasting = true;
+            }
+            else if (unknown_counter > 20){ // 1m
+              stop_raycasting = true;
+            }
+          }
+          else if (temp_prob != 0){
+            if (temp_prob >= 90){
+              if (wall_reached){
+                stop_raycasting = true;
+              }
+              else {
+                wall_reached = true;
+              }
+            }
             // Check if already in subset
             finder = subset.find(temp_id);
             if (finder != subset.end()){
@@ -418,21 +448,6 @@ void GraphOptimiser::getSubsetOfMap(nav_msgs::Path& action_path,
             else {
               subset.insert(std::make_pair(temp_id, i));
             }
-          }
-          else if (temp_prob >= 90){
-            // Check if already in subset
-            finder = subset.find(temp_id);
-            if (finder != subset.end()){
-              finder->second = i;
-            }
-            else {
-              subset.insert(std::make_pair(temp_id, i));
-            }
-            wall_reached = true;
-          }
-          // if unknown
-          else {
-            wall_reached = true;
           }
           y += ystep;
         }
@@ -801,7 +816,6 @@ bool GraphOptimiser::mapRecalculationServiceCallback(
 bool GraphOptimiser::utilityCalcServiceCallback(
   crowdbot_active_slam::utility_calc::Request &request,
   crowdbot_active_slam::utility_calc::Response &response){
-
   // ISAM2
   ISAM2Params parameters;
   parameters.relinearizeThreshold = 0.01;
@@ -850,7 +864,7 @@ bool GraphOptimiser::utilityCalcServiceCallback(
     double angle = xyDiffToYaw(x_diff, y_diff);
     double angle_diff = angle - prev_angle;
 
-    if ((diff_dist_linear_sq > dist_linear_sq_) or
+    if ((diff_dist_linear_sq > dist_linear_sq_) ||
        (std::abs(angle_diff) > node_dist_angular_)){
       //
       Pose2 next_pose(request.plan.poses[i].pose.position.x,
@@ -907,6 +921,8 @@ bool GraphOptimiser::utilityCalcServiceCallback(
               map_of_lc.insert(std::make_pair(j, lc_counter));
               lc_counter += 1;
             }
+            // We only want one loop closing (oldest) TODO: find better solution
+            break;
           }
         }
       }
@@ -956,7 +972,7 @@ bool GraphOptimiser::utilityCalcServiceCallback(
                          log(eivals[1].real()) +
                          log(eivals[2].real());
     sigma_temp = exp(1.0 / 3.0 * sum_of_logs);
-    alpha.push_back(1.0 + sigma_norm_ / sigma_temp);
+    alpha.push_back(1.0 + sigma_norm_ / (10 * sigma_temp));
   }
 
   std::map<int, int> subset;
@@ -1306,37 +1322,6 @@ void GraphOptimiser::scanCallback(
     map_br_.sendTransform(tf::StampedTransform(map_to_odom_tf_, ros::Time::now(),
                         "map", "odom"));
     new_node_ = false;
-
-    gazebo_msgs::GetModelState ground_truth_msg;
-    ground_truth_msg.request.model_name = "pioneer";
-    get_ground_truth_client_.call(ground_truth_msg);
-    tf::Quaternion ground_truth_orientation;
-    quaternionMsgToTF(ground_truth_msg.response.pose.orientation, ground_truth_orientation);
-    init_pose2_map_ = Pose2(ground_truth_msg.response.pose.position.x,
-                            ground_truth_msg.response.pose.position.y,
-                            tf::getYaw(ground_truth_orientation));
-
-    Pose2 tmp_pose2 = *dynamic_cast<const Pose2*>(&pose_estimates_.at(node_counter_ - 1));
-    tmp_pose2.between(init_pose2_map_).print();
-
-    if (node_counter_ > 1){
-      // Calculate alpha for each node
-      double alpha;
-      double sigma;
-
-        // D-optimality
-        std::cout << isam_.marginalCovariance(node_counter_ - 1) << std::endl;
-      Eigen::VectorXcd eivals = isam_.marginalCovariance(node_counter_ - 1).eigenvalues();
-      double sum_of_logs = log(eivals[0].real()) +
-                           log(eivals[1].real()) +
-                           log(eivals[2].real());
-      sigma = exp(1.0 / 3.0 * sum_of_logs);
-      double sigma_norm = exp(1.0/3.0 * (2*log(map_resolution_ * map_resolution_) +
-                          log(pow(atan(map_resolution_/10.0), 2))));
-      alpha = (1.0 + sigma_norm / sigma);
-      std::cout << "sigma: " << sigma << std::endl;
-      std::cout << "alpha: " << alpha << std::endl;
-    }
   }else{
     Pose2 between_pose2;
     Pose2 temp_last_pose2;
