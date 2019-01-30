@@ -20,12 +20,6 @@ pid="$pid $!"
 
 sleep 20s
 
-echo "Launching laser scan matcher..."
-roslaunch crowdbot_active_slam scan_matcher.launch scan_topic:=static_scan_extractor/static_scan &
-pid="$pid $!"
-
-sleep 2s
-
 echo "Launching factor graph SLAM system..."
 roslaunch crowdbot_active_slam graph_optimisation.launch scan_topic:=static_scan_extractor/static_scan &
 pid="$pid $!"

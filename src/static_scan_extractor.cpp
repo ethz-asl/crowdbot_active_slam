@@ -691,6 +691,11 @@ void StaticScanExtractor::scanCallback
           // Remove track if untracked for longer time
           if (tracked_objects_[i].counter_not_seen < not_seen_threshold_){
             tracked_objects_[i].counter_not_seen += 1;
+            
+            // Set acceleration to zero, as mostly lost tracks have high
+            // acceleration because of occlusion.
+            tracked_objects_[i].state_mean[4] = 0;
+            tracked_objects_[i].state_mean[5] = 0;
           }
           else {
             tracked_objects_.erase(tracked_objects_.begin() + i);
