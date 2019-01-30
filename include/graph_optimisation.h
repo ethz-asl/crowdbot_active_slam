@@ -160,8 +160,6 @@ private:
   ros::Publisher action_path_pub_;
   ros::Publisher map_pub_;
   ros::Publisher map_pub_for_static_scan_comb_;
-  ros::Publisher test_pose2D_pub_;
-  ros::Publisher test_pose_pub_;
   ros::ServiceServer map_recalc_service_;
   ros::ServiceServer get_map_service_;
   ros::ServiceServer utility_calc_service_;

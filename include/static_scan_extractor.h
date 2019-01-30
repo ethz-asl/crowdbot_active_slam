@@ -119,6 +119,7 @@ private:
   double scan_range_min_;
   double scan_range_max_;
   double scan_angle_min_;
+  bool first_ldp_;
 
   // TF
   tf::TransformListener base_to_laser_listener_;

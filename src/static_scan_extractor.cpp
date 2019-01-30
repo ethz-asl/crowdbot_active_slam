@@ -276,7 +276,7 @@ StaticScanExtractor::StaticScanExtractor
   sm_icp_params_.use_sigma_weights = 0;
   sm_icp_params_.debug_verify_tricks = 0;
   sm_icp_params_.sigma = 0.01;
-  sm_icp_params_.do_compute_covariance = 1;
+  sm_icp_params_.do_compute_covariance = 0;
 
   // Other params
   nh_private_.param<int>("init_scan_unknown_pt", init_scan_unknown_pt_, 100);
@@ -291,6 +291,9 @@ StaticScanExtractor::StaticScanExtractor
   dynamic_vel_threshold_sq_ = dynamic_vel_threshold_ * dynamic_vel_threshold_;
   nh_private_.param<int>("not_seen_threshold", not_seen_threshold_, 10);
   nh_private_.param<int>("patch_size", patch_size_, 2);
+
+  // Init param, which is needed to check if ldp already initialised or not
+  first_ldp_ = true;
 }
 
 StaticScanExtractor::~StaticScanExtractor(){}
@@ -363,6 +366,12 @@ void StaticScanExtractor::scanCallback
         static_scan_.header.stamp){
       tf::poseStampedMsgToTF(current_pose_srv.response.current_pose,
                              current_pose_tf_);
+
+      if (!first_ldp_){
+        // Free memory for avoiding memory leaking
+        ld_free(prev_node_ldp_);
+      }
+      else first_ldp_ = false;
 
       // Save previous static_scan as LDP
       laserScanToLDP(static_scan_, prev_node_ldp_);
@@ -802,6 +811,9 @@ void StaticScanExtractor::scanCallback
     // Publish dynamic and static scan
     static_scan_pub_.publish(static_scan_);
     dynamic_scan_pub_.publish(dynamic_scan_);
+
+    // Free memory for avoiding memory leaking
+    ld_free(current_ldp_);
   }
 }
 

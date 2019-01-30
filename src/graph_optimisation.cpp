@@ -38,8 +38,6 @@ void GraphOptimiser::initParams(){
   map_pub_ = nh_.advertise<nav_msgs::OccupancyGrid>("occupancy_map", 1);
   map_pub_for_static_scan_comb_ =
   nh_.advertise<nav_msgs::OccupancyGrid>("map_for_static_scan_extractor", 1);
-  test_pose2D_pub_ = nh_.advertise<geometry_msgs::Pose2D>("test_pose2D", 1);
-  test_pose_pub_ = nh_.advertise<geometry_msgs::PoseStamped>("test_pose", 1);
 
   // Initialise map service
   uncertainty_service_ = nh_.advertiseService("save_uncertainty_service",
