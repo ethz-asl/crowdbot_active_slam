@@ -21,7 +21,7 @@ pid="$pid $!"
 sleep 2s
 
 echo "Launching move_base..."
-roslaunch crowdbot_active_slam move_base.launch &
+roslaunch crowdbot_active_slam move_base.launch dynamic:=static &
 pid="$pid $!"
 
 sleep 2s
