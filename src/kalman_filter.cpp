@@ -24,7 +24,7 @@ KalmanFilter::KalmanFilter(double std_dev_range, double std_dev_theta, double st
 
   // Init A_prev with random dt
   A_prev_ << 1, 0, 0.067, 0, 0.067 * 0.067 / 2, 0,
-             0, 1, 0.067, 0, 0,                 0.067 * 0.067 / 2,
+             0, 1, 0, 0.067, 0,                 0.067 * 0.067 / 2,
              0, 0, 1,     0, 0.067,             0,
              0, 0, 0,     1, 0,                 0.067,
              0, 0, 0,     0, 1,                 0,
