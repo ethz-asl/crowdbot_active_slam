@@ -1093,7 +1093,8 @@ void GraphOptimiser::scanCallback(
     next_node_tf = base_to_laser_ * corr_ch_l * laser_to_base_;
   }
   else {
-    ROS_WARN("Scan match is invalid!");
+    ROS_WARN("Scan match is invalid! Skipping scan!");
+    return;
   }
 
   // Save scan match covariance for new node
