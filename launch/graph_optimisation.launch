@@ -10,7 +10,7 @@
     <param name="node_dist_angular" value="0.2"/>
 
     <!-- params for frontend scan matcher -->
-    <param name="frontend_max_iterations" value="10"/>
+    <param name="frontend_max_iterations" value="20"/>
     <param name="frontend_max_correspondence_dist" value="0.5"/>
     <param name="frontend_max_angular_correction_deg" value="80"/>
     <param name="frontend_max_linear_correction" value="0.4"/>

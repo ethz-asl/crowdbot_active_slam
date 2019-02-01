@@ -17,6 +17,8 @@
 #include <nav_msgs/Odometry.h>
 #include <nav_msgs/OccupancyGrid.h>
 #include <nav_msgs/GridCells.h>
+#include <costmap_converter/ObstacleMsg.h>
+#include <costmap_converter/ObstacleArrayMsg.h>
 #include <visualization_msgs/Marker.h>
 #include <message_filters/subscriber.h>
 #include <message_filters/time_synchronizer.h>
@@ -30,9 +32,6 @@
 #include <csm/csm_all.h>
 #undef min
 #undef max
-
-typedef message_filters::sync_policies::ApproximateTime
-        <sensor_msgs::LaserScan, nav_msgs::Odometry> SyncPolicy;
 
 
 class StaticScanExtractor{
@@ -100,6 +99,7 @@ private:
   ros::Publisher moving_objects_pub_;
   ros::Publisher static_objects_pub_;
   ros::Publisher unknown_objects_pub_;
+  ros::Publisher dyn_obstacles_pub_;
 
   // ROS msgs
   sensor_msgs::LaserScan init_scan_;
@@ -119,6 +119,7 @@ private:
   double scan_range_min_;
   double scan_range_max_;
   double scan_angle_min_;
+  bool first_ldp_;
 
   // TF
   tf::TransformListener base_to_laser_listener_;

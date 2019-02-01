@@ -44,15 +44,15 @@ DecisionMaker::DecisionMaker(ros::NodeHandle nh, ros::NodeHandle nh_)
   double robot_width = 0.3;
   createFootprint(perimeter, robot_width, robot_length);
 
-  env_.InitializeEnv(map_width_, map_height_, 0, //map data
-                                      0, 0, 0, // start
-                                      0, 0, 0, // goal
-                                      0, 0, 0, // goal tolerance
-                                      perimeter, map_resolution_,
-                                      0.5, // nominal vel (m/s)
-                                      1.0, // time to turn 45 degs in place (s)
-                                      20, // obstacle threshold
-                                      primitive_filename_.c_str());
+  // env_.InitializeEnv(map_width_, map_height_, 0, //map data
+  //                                     0, 0, 0, // start
+  //                                     0, 0, 0, // goal
+  //                                     0, 0, 0, // goal tolerance
+  //                                     perimeter, map_resolution_,
+  //                                     0.5, // nominal vel (m/s)
+  //                                     1.0, // time to turn 45 degs in place (s)
+  //                                     20, // obstacle threshold
+  //                                     primitive_filename_.c_str());
 
   // Planner
   bool bsearch = false;

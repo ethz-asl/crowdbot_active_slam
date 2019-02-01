@@ -153,7 +153,6 @@ private:
   nav_msgs::OccupancyGrid occupancy_grid_msg_;
   nav_msgs::OccupancyGridPtr occupancy_grid_msg_ptr_;
   geometry_msgs::PoseStamped latest_pose_estimate_;
-  // sensor_msgs::LaserScan latest_scan_msg_;
 
   // Service, Publisher and Subscriber
   ros::Subscriber scan_sub_;
@@ -161,8 +160,6 @@ private:
   ros::Publisher action_path_pub_;
   ros::Publisher map_pub_;
   ros::Publisher map_pub_for_static_scan_comb_;
-  ros::Publisher test_pose2D_pub_;
-  ros::Publisher test_pose_pub_;
   ros::ServiceServer map_recalc_service_;
   ros::ServiceServer get_map_service_;
   ros::ServiceServer utility_calc_service_;
@@ -235,6 +232,7 @@ private:
   double scan_range_min_;
   double scan_range_max_;
   double max_range_allowed_;
+  double sigma_norm_;
   std::vector<gtsam::Matrix> uncertainty_matrices_path_;
   std::string scan_callback_topic_;
 };

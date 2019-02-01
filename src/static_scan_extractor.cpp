@@ -183,6 +183,7 @@ StaticScanExtractor::StaticScanExtractor
   moving_objects_pub_ = nh_.advertise<nav_msgs::GridCells>("moving_objects", 1);
   static_objects_pub_ = nh_.advertise<nav_msgs::GridCells>("static_objects", 1);
   unknown_objects_pub_ = nh_.advertise<nav_msgs::GridCells>("unknown_objects", 1);
+  dyn_obstacles_pub_ = nh_.advertise<costmap_converter::ObstacleArrayMsg>("dyn_obstacles", 1);
 
   // Service
   get_current_pose_client_ = nh_.serviceClient<crowdbot_active_slam::current_pose>
@@ -276,7 +277,7 @@ StaticScanExtractor::StaticScanExtractor
   sm_icp_params_.use_sigma_weights = 0;
   sm_icp_params_.debug_verify_tricks = 0;
   sm_icp_params_.sigma = 0.01;
-  sm_icp_params_.do_compute_covariance = 1;
+  sm_icp_params_.do_compute_covariance = 0;
 
   // Other params
   nh_private_.param<int>("init_scan_unknown_pt", init_scan_unknown_pt_, 100);
@@ -291,6 +292,9 @@ StaticScanExtractor::StaticScanExtractor
   dynamic_vel_threshold_sq_ = dynamic_vel_threshold_ * dynamic_vel_threshold_;
   nh_private_.param<int>("not_seen_threshold", not_seen_threshold_, 10);
   nh_private_.param<int>("patch_size", patch_size_, 2);
+
+  // Init param, which is needed to check if ldp already initialised or not
+  first_ldp_ = true;
 }
 
 StaticScanExtractor::~StaticScanExtractor(){}
@@ -363,6 +367,12 @@ void StaticScanExtractor::scanCallback
         static_scan_.header.stamp){
       tf::poseStampedMsgToTF(current_pose_srv.response.current_pose,
                              current_pose_tf_);
+
+      if (!first_ldp_){
+        // Free memory for avoiding memory leaking
+        ld_free(prev_node_ldp_);
+      }
+      else first_ldp_ = false;
 
       // Save previous static_scan as LDP
       laserScanToLDP(static_scan_, prev_node_ldp_);
@@ -682,6 +692,11 @@ void StaticScanExtractor::scanCallback
           // Remove track if untracked for longer time
           if (tracked_objects_[i].counter_not_seen < not_seen_threshold_){
             tracked_objects_[i].counter_not_seen += 1;
+
+            // Set acceleration to zero, as mostly lost tracks have high
+            // acceleration because of occlusion.
+            tracked_objects_[i].state_mean[4] = 0;
+            tracked_objects_[i].state_mean[5] = 0;
           }
           else {
             tracked_objects_.erase(tracked_objects_.begin() + i);
@@ -755,6 +770,23 @@ void StaticScanExtractor::scanCallback
       }
     }
 
+    // Initialise Obstacle Array Msg for teb local planner
+    costmap_converter::ObstacleArrayMsg dyn_obstacles;
+    costmap_converter::ObstacleMsg obstacle;
+    dyn_obstacles.header.frame_id = "map";
+    dyn_obstacles.header.stamp = ros::Time::now();
+    obstacle.header.frame_id = "map";
+    obstacle.header.stamp = ros::Time::now();
+
+    // Init obstacle values which stay constant
+    tf::Quaternion quaternion;
+    quaternion.setEuler(0, 0, 0);
+    tf::quaternionTFToMsg(quaternion, obstacle.orientation);
+    obstacle.velocities.twist.linear.z = 0;
+    obstacle.velocities.twist.angular.x = 0;
+    obstacle.velocities.twist.angular.y = 0;
+    obstacle.velocities.twist.angular.z = 0;
+
     // Publish means of tracked objects as grid cells
     nav_msgs::GridCells moving_objects_msg;
     moving_objects_msg.header.frame_id = "map";
@@ -775,6 +807,20 @@ void StaticScanExtractor::scanCallback
       temp_point.z = 0;
       if (tracked_objects_[i].dynamic_or_static == "dynamic"){
         moving_objects_msg.cells.push_back(temp_point);
+
+        // Save obstacle information and add to array
+        obstacle.id = i; // id can change for the same object!
+        geometry_msgs::Point32 point;
+        point.x = temp_point.x;
+        point.y = temp_point.y;
+        point.z = temp_point.z;
+        obstacle.polygon.points.push_back(point);
+
+        obstacle.velocities.twist.linear.x = tracked_objects_[i].state_mean[2];
+        obstacle.velocities.twist.linear.y = tracked_objects_[i].state_mean[3];
+
+        dyn_obstacles.obstacles.push_back(obstacle);
+        obstacle.polygon.points.pop_back();
       }
       else if (tracked_objects_[i].dynamic_or_static == "static"){
         static_objects_msg.cells.push_back(temp_point);
@@ -784,6 +830,7 @@ void StaticScanExtractor::scanCallback
       }
     }
     moving_objects_pub_.publish(moving_objects_msg);
+    dyn_obstacles_pub_.publish(dyn_obstacles);
     static_objects_pub_.publish(static_objects_msg);
     unknown_objects_pub_.publish(unknown_objects_msg);
 
@@ -802,6 +849,9 @@ void StaticScanExtractor::scanCallback
     // Publish dynamic and static scan
     static_scan_pub_.publish(static_scan_);
     dynamic_scan_pub_.publish(dynamic_scan_);
+
+    // Free memory for avoiding memory leaking
+    ld_free(current_ldp_);
   }
 }
 
