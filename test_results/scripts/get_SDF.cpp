@@ -18,8 +18,7 @@ std::vector<int> positionToMapIndex(double x, double y,
   return index;
 }
 
-void findChange(bool& change, int occupation,
-                   int current_occupation, float& dist){
+void findChange(bool& change, int occupation, int current_occupation){
   if (current_occupation != occupation){
     if (std::abs(current_occupation + occupation) == 1){
       change = true;
@@ -27,7 +26,7 @@ void findChange(bool& change, int occupation,
   }
 }
 
-double xCircleMinDist(int ix ,int iy, int n_cells, Eigen::MatrixXi& map){
+double xCircleMinDist(int ix, int iy, int n_cells, Eigen::MatrixXi& map){
   // https://www.geeksforgeeks.org/bresenhams-circle-drawing-algorithm/
   float dist_sq = -1;
   int occupation = map(ix, iy);
@@ -36,7 +35,7 @@ double xCircleMinDist(int ix ,int iy, int n_cells, Eigen::MatrixXi& map){
   int err = 3 - (n_cells << 1);
   bool found_change = false;
 
-  double xc, yc;
+  int xc, yc;
   if (occupation != 0){
     xc = x - 1;
     yc = y;
@@ -47,18 +46,20 @@ double xCircleMinDist(int ix ,int iy, int n_cells, Eigen::MatrixXi& map){
   }
 
   while (x >= y){
-    findChange(found_change, occupation, map(ix + x, iy + y), dist_sq); // 1. octant
-    findChange(found_change, occupation, map(ix + y, iy + x), dist_sq); // 2. octant
-    findChange(found_change, occupation, map(ix - y, iy + x), dist_sq); // 3. octant
-    findChange(found_change, occupation, map(ix - x, iy + y), dist_sq); // 4. octant
-    findChange(found_change, occupation, map(ix - x, iy - y), dist_sq); // 5. octant
-    findChange(found_change, occupation, map(ix - y, iy - x), dist_sq); // 6. octant
-    findChange(found_change, occupation, map(ix + y, iy - x), dist_sq); // 7. octant
-    findChange(found_change, occupation, map(ix + x, iy - y), dist_sq); // 8. octant
+    findChange(found_change, occupation, map(ix + x, iy + y)); // 1. octant
+    findChange(found_change, occupation, map(ix + y, iy + x)); // 2. octant
+    findChange(found_change, occupation, map(ix - y, iy + x)); // 3. octant
+    findChange(found_change, occupation, map(ix - x, iy + y)); // 4. octant
+    findChange(found_change, occupation, map(ix - x, iy - y)); // 5. octant
+    findChange(found_change, occupation, map(ix - y, iy - x)); // 6. octant
+    findChange(found_change, occupation, map(ix + y, iy - x)); // 7. octant
+    findChange(found_change, occupation, map(ix + x, iy - y)); // 8. octant
 
     if (found_change){
-      dist_sq = xc * xc + yc * yc;
-      return sqrt(dist_sq);
+      double dist_sq_temp = xc * xc + yc * yc;
+      if (dist_sq == -1 || dist_sq > dist_sq_temp){
+        dist_sq = dist_sq_temp;
+      }
     }
 
     y++;
@@ -67,7 +68,7 @@ double xCircleMinDist(int ix ,int iy, int n_cells, Eigen::MatrixXi& map){
       err += ((y - x) << 2) + 10; //<< 2 -> 4*
     }
     else {
-      err = (y << 2) + 6;
+      err += (y << 2) + 6;
     }
 
     if (occupation != 0){
@@ -78,8 +79,10 @@ double xCircleMinDist(int ix ,int iy, int n_cells, Eigen::MatrixXi& map){
       yc = y;
       xc = x;
     }
+    found_change = false;
   }
-  return dist_sq;
+  if (dist_sq != -1) return sqrt(dist_sq);
+  else return dist_sq;
 }
 
 int main(int argc, char **argv)
@@ -156,7 +159,11 @@ int main(int argc, char **argv)
         }
         else {
           not_found = false;
-          if (n > 1) n -= 1;
+          double temp_dist = xCircleMinDist(i, j, n + 1, occ_mat);
+          if (dist > temp_dist && temp_dist != -1){
+            dist = temp_dist;
+          }
+          if (n > 2) n -= 2;
           else n = 1;
         }
       }

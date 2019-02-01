@@ -48,7 +48,7 @@ tf::Transform xythetaToTF(double x, double y, double theta){
 /**
  *  A helper function which creates map ids from index.
  */
-int mapIndexToId(int x, int y, unsigned int width){
+int mapIndexToId(int x, int y, int width){
   int id = x + y * width;
   return id;
 }
@@ -57,12 +57,21 @@ int mapIndexToId(int x, int y, unsigned int width){
  *  A helper function which creates map index from position information.
  */
 std::vector<int> positionToMapIndex(double x, double y,
-   unsigned int width, unsigned int height, float resolution){
+                                    int width, int height, float resolution){
   std::vector<int> index(2);
   index[0] = floor(x / resolution) + width / 2;
   index[1] = floor(y / resolution) + height / 2;
 
   return index;
+}
+
+/**
+ *  A helper function which creates map id from position information.
+ */
+int positionToMapId(double x, double y, int width, int height, float resolution){
+  int id = (floor(x / resolution) + width / 2) +
+           (floor(y / resolution) + height / 2) * width;
+  return id;
 }
 
 /**

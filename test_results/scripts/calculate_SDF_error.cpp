@@ -48,18 +48,22 @@ int main(int argc, char **argv)
   Eigen::MatrixXf ref_sdf_mat = load_SDF(ref_sdf_path);
 
   // Calculate score
-  double sdf_score = 0;
+  double sdf_score_full = 0;
+  double sdf_score_easy = 0;
 
   for (int i = 0; i < test_sdf_mat.rows(); i++){
     for (int j = 0; j < test_sdf_mat.cols(); j++){
-      sdf_score += pow(test_sdf_mat(i, j) - ref_sdf_mat(i, j), 2);
+      sdf_score_full += pow(std::abs(test_sdf_mat(i, j) - ref_sdf_mat(i, j)), 2);
+      if (ref_sdf_mat(i, j) >= 0){
+        if (std::abs(test_sdf_mat(i, j) - ref_sdf_mat(i, j)) > 1){
+          double score_increment = std::abs(test_sdf_mat(i, j) - ref_sdf_mat(i, j)) - 1;
+          sdf_score_easy += pow(score_increment, 2);
+        }
+      }
     }
   }
 
-  std::cout << "sdf_score: " << sdf_score << std::endl;
-  // std::cout << "Number of known cells: " << i << std::endl;
-  // std::cout << "Number of known test cells, while unknown in ref map: " << j << std::endl;
-  // std::cout << "score for known test cells, while unkown in ref map: " << over_ref_score << std::endl;
-  // std::cout << "Number of known ref cells, while unknown in test map: " << k << std::endl;
+  std::cout << "sdf_score_full: " << sdf_score_full << std::endl;
+  std::cout << "sdf_score_easy: " << sdf_score_easy << std::endl;
   return 0;
 }

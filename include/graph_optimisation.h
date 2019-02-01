@@ -16,6 +16,7 @@
 #include <ros/package.h>
 #include <geometry_msgs/Pose2D.h>
 #include <geometry_msgs/PoseStamped.h>
+#include <geometry_msgs/PoseWithCovarianceStamped.h>
 #include <geometry_msgs/Pose.h>
 #include <geometry_msgs/Point.h>
 #include <geometry_msgs/Quaternion.h>
@@ -29,7 +30,10 @@
 #include <crowdbot_active_slam/service_call.h>
 #include <crowdbot_active_slam/utility_calc.h>
 #include <crowdbot_active_slam/get_map.h>
+#include <crowdbot_active_slam/current_pose.h>
 #include <gazebo_msgs/GetModelState.h>
+#include <message_filters/subscriber.h>
+#include <message_filters/time_synchronizer.h>
 
 #include <gtsam/nonlinear/NonlinearFactorGraph.h>
 #include <gtsam/nonlinear/Marginals.h>
@@ -73,14 +77,14 @@ public:
   /**
    *  A helper function which creates LDP from laser scans.
    */
-  void laserScanToLDP(sensor_msgs::LaserScan& scan_msg, LDP& ldp);
+  void laserScanToLDP(
+      const sensor_msgs::LaserScan::ConstPtr& scan_msg, LDP& ldp);
 
   /**
    *  ...
    */
-  void getSubsetOfMap(nav_msgs::Path action_path,
-                      std::vector<double> alpha,
-                      std::map<int, double>& subset);
+  void getSubsetOfMap(nav_msgs::Path& action_path,
+                      std::map<int, int>& subset);
 
   /**
    *  ...
@@ -91,24 +95,19 @@ public:
   /**
    *  Calculates map with current factor graph and keyframe scans and draws map.
    */
-  void drawMap(gtsam::Values pose_estimates, std::vector<LDP>& keyframe_ldp_vec);
+  void drawMap(gtsam::Values& pose_estimates, std::vector<LDP>& keyframe_ldp_vec);
 
   /**
    *  Updates current map with newest scans.
    */
-  void updateMap(gtsam::Values pose_estimates,
+  void updateMap(gtsam::Values& pose_estimates,
                  std::vector<LDP>& keyframe_ldp_vec);
 
   /**
-   *  A callback function on laser scans.
-   */
-  void scanCallback(const sensor_msgs::LaserScan::ConstPtr& scan_msg);
-
-  /**
-   *  A callback function on Pose2D scans from the laser scan matcher
+   *  A scan matcher callback on Pose estimates and used laser scans
    *  which does Graph construction and optimisation.
    */
- void scanMatcherCallback(const geometry_msgs::Pose2D::ConstPtr& pose2D_msg);
+ void scanCallback(const sensor_msgs::LaserScan::ConstPtr& scan_msg);
 
   /**
    *  Service callback for saving current uncertainty matrix along path
@@ -138,6 +137,10 @@ public:
     crowdbot_active_slam::get_map::Request &request,
     crowdbot_active_slam::get_map::Response &response);
 
+  bool currentPoseNodeServiceCallback(
+    crowdbot_active_slam::current_pose::Request &request,
+    crowdbot_active_slam::current_pose::Response &response);
+
   void pubMap();
 
 private:
@@ -148,20 +151,20 @@ private:
   // Ros msgs
   nav_msgs::Path graph_path_;
   nav_msgs::OccupancyGrid occupancy_grid_msg_;
-  sensor_msgs::LaserScan latest_scan_msg_;
+  nav_msgs::OccupancyGridPtr occupancy_grid_msg_ptr_;
+  geometry_msgs::PoseStamped latest_pose_estimate_;
 
   // Service, Publisher and Subscriber
-  ros::Subscriber pose_sub_;
   ros::Subscriber scan_sub_;
   ros::Publisher path_pub_;
   ros::Publisher action_path_pub_;
   ros::Publisher map_pub_;
-  ros::Publisher test_pose2D_pub_;
-  ros::Publisher test_pose_pub_;
+  ros::Publisher map_pub_for_static_scan_comb_;
   ros::ServiceServer map_recalc_service_;
   ros::ServiceServer get_map_service_;
   ros::ServiceServer utility_calc_service_;
   ros::ServiceServer uncertainty_service_;
+  ros::ServiceServer current_pose_node_service_;
   ros::ServiceClient get_ground_truth_client_;
 
   // TF
@@ -173,19 +176,22 @@ private:
   tf::Transform laser_to_base_;
 
   // gtsam objects
-  gtsam::Pose2 prev_pose2_;
-  gtsam::Pose2 current_pose2_;
-  gtsam::Pose2 last_pose2_;
-  gtsam::Pose2 init_pose2_;
+  gtsam::Pose2 prev_pose2_odom_;
+  gtsam::Pose2 current_pose2_odom_;
+  gtsam::Pose2 last_pose2_map_;
+  gtsam::Pose2 init_pose2_map_;
   gtsam::NonlinearFactorGraph graph_;
-  gtsam::noiseModel::Diagonal::shared_ptr scan_match_noise_;
+  gtsam::noiseModel::Diagonal::shared_ptr average_scan_match_noise_;
   gtsam::Values pose_estimates_;
   gtsam::Values new_estimates_;
   gtsam::ISAM2 isam_;
 
   // CSM
+  sm_params sm_frontend_input_;
+  sm_result sm_frontend_output_;
   sm_params sm_icp_params_;
   sm_result sm_icp_result_;
+  LDP previous_ldp_;
   LDP current_ldp_;
   std::vector<LDP> keyframe_ldp_vec_;
 
@@ -225,8 +231,10 @@ private:
   double scan_angle_increment_;
   double scan_range_min_;
   double scan_range_max_;
+  double max_range_allowed_;
+  double sigma_norm_;
   std::vector<gtsam::Matrix> uncertainty_matrices_path_;
-
+  std::string scan_callback_topic_;
 };
 
 #endif  // GRAPH_OPTIMISATION_H

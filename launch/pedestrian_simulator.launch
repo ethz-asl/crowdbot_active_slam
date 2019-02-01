@@ -1,0 +1,7 @@
+<launch>
+  <arg name="N" default="10"/>
+  <node name="pedestrian_simulator" pkg="crowdbot_active_slam"
+    type="pedestrian_simulator" output="screen">
+    <param name="n_ped" value="$(arg N)"/>
+  </node>
+</launch>
