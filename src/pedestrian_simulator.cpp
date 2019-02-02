@@ -615,7 +615,7 @@ int main(int argc, char** argv) {
   unpause_simulation.call(physics);
 
   // Set loop rate
-  ros::Rate loop_rate(30);
+  ros::Rate loop_rate(15);
 
   // Calculate Forces
   while (ros::ok()) {

@@ -663,6 +663,45 @@ void StaticScanExtractor::scanCallback
                 tracked_objects_[i].dynamic_or_static = "dynamic";
               }
             }
+            else if (tracked_objects_[i].dynamic_or_static == "static"){
+              // Check if cluster is smaller than the static size threshold
+              auto tmp_clst = free_cluster_vectors_[id];
+              if(pow(tmp_clst.front().x - tmp_clst.back().x, 2) +
+                 pow(tmp_clst.front().y - tmp_clst.back().y, 2)
+                 < static_size_threshold_sq_){
+                int map_id = positionToMapId(temp_z_m[0], temp_z_m[1], map_width_,
+                                             map_height_, map_resolution_);
+                // Check if it is still possible to be dynamic, although the mean is
+                // not on free space
+                if (map_msg_.data[map_id] == -1 ||
+                    map_msg_.data[map_id] > wall_threshold_){
+                  double p_free = 0;
+                  double p_free_patch = 0;
+                  getFreeCellFraction(id, p_free);
+                  getFreeCellFractionPatch(map_id, p_free_patch, patch_size_);
+
+                  if (p_free > 0.6 && p_free_patch > 0.5){
+                    tracked_objects_[i].dynamic_or_static = "dynamic";
+                  }
+                }
+                else if (map_msg_.data[map_id] != -1 ||
+                         map_msg_.data[map_id] <= wall_threshold_) {
+                  double p_free_patch = 0;
+                  getFreeCellFractionPatch(map_id, p_free_patch, patch_size_);
+                  if (p_free_patch > 0.8){
+                    tracked_objects_[i].dynamic_or_static = "dynamic";
+                  }
+                }
+                else {
+                  // Check if track is moving
+                  if (pow(tracked_objects_[i].state_mean[2], 2) +
+                      pow(tracked_objects_[i].state_mean[3], 2)
+                      > dynamic_vel_threshold_sq_){
+                    tracked_objects_[i].dynamic_or_static = "dynamic";
+                  }
+                }
+              }
+            }
 
             // Remove scan from static and dynamic scan
             auto it_delete = free_clusters.begin();
