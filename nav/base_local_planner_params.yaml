@@ -9,8 +9,8 @@ TebLocalPlannerROS:
   dt_hysteresis: 0.1
   global_plan_overwrite_orientation: True
   max_global_plan_lookahead_dist: 3.0
-  feasibility_check_no_poses: 10
-  global_plan_viapoint_sep: 0.5
+  feasibility_check_no_poses: 4
+  # global_plan_viapoint_sep: 0.5
 
   # Robot
 
@@ -33,17 +33,16 @@ TebLocalPlannerROS:
   # Obstacles
 
   min_obstacle_dist: 0.1
-  inflation_dist: 0.5
+  inflation_dist: 0.8
   dynamic_obstacle_inflation_dist: 0.5
   include_costmap_obstacles: True
   include_dynamic_obstacles: True
   # visualize_with_time_as_z_axis_scale: 0.1
   costmap_obstacles_behind_robot_dist: 1.0
-  obstacle_poses_affected: 10
-  costmap_converter_plugin: "costmap_converter::CostmapToPolygonsDBSMCCH"
-  cluster_max_distance: 0.7
+  obstacle_poses_affected: 30
+  costmap_converter_plugin: ""
   costmap_converter_spin_thread: True
-  costmap_converter_rate: 2
+  costmap_converter_rate: 5
 
   # Optimization
 
@@ -52,18 +51,19 @@ TebLocalPlannerROS:
   optimization_activate: True
   optimization_verbose: False
   penalty_epsilon: 0.1
-  weight_max_vel_x: 2
+  weight_max_vel_x: 3
   weight_max_vel_theta: 1
-  weight_acc_lim_x: 1
-  weight_acc_lim_theta: 1
+  weight_acc_lim_x: 2
+  weight_acc_lim_theta: 2
   weight_kinematics_nh: 1000
   weight_kinematics_forward_drive: 100
   weight_kinematics_turning_radius: 1
   weight_optimaltime: 1
-  weight_obstacle: 100
+  weight_obstacle: 50
+  weight_dynamic_obstacle_inflation: 0.3
   weight_dynamic_obstacle: 50
-  weight_dynamic_obstacle_inflation: 1.5
-  weight_viapoint: 0.5
+  weight_dynamic_obstacle_inflation: 2.0
+  # weight_viapoint: 1.0
   alternative_time_cost: False # not in use yet
 
   # Homotopy Class Planner
