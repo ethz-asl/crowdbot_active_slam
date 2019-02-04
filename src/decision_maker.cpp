@@ -243,9 +243,9 @@ void DecisionMaker::startExploration(){
   nav_msgs::GetPlan get_plan;
   crowdbot_active_slam::utility_calc utility;
   std::vector<double> utility_vec;
-  std::vector<int> path_sizes;
+  std::vector<double> path_sizes;
   std::vector<double>::iterator max_utility;
-  std::vector<int>::iterator path_sizes_it;
+  std::vector<double>::iterator path_sizes_it;
   int goal_id = 0;
 
   for (int i = 0; i < frontier_size; i++){
@@ -259,7 +259,19 @@ void DecisionMaker::startExploration(){
     plan_pub_.publish(action_plan);
 
     if (exploration_type_ == "shortest_frontier"){
-      path_sizes.push_back(action_plan.poses.size());
+      double length = 0;
+      if (action_plan.poses.size() < 3){
+        length = 1000;
+      }
+      else {
+        for (int j = 1; j < action_plan.poses.size(); j++){
+          length += sqrt(pow(action_plan.poses[j].pose.position.x -
+                             action_plan.poses[j - 1].pose.position.x, 2) +
+                         pow(action_plan.poses[j].pose.position.y -
+                             action_plan.poses[j - 1].pose.position.y, 2));
+        }
+      }
+      path_sizes.push_back(length);
     }
 
     if (exploration_type_ == "utility_standard" ||
