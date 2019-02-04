@@ -60,6 +60,8 @@ DecisionMaker::DecisionMaker(ros::NodeHandle nh, ros::NodeHandle nh_)
 
   // Save start time
   start_time_ = ros::Time::now();
+  // Wait until time is not 0
+  while (start_time_.toSec() == 0) start_time_ = ros::Time::now();
 }
 
 DecisionMaker::~DecisionMaker() {
@@ -224,6 +226,7 @@ void DecisionMaker::startExploration(){
 
     // Save uncertainties along path
     crowdbot_active_slam::service_call uncertainty_srv;
+    uncertainty_srv.request.save_path = save_directory_path_;
     if (uncertainty_client_.call(uncertainty_srv)){
       ROS_INFO("Uncertainties of path have been saved!");
     }
@@ -331,15 +334,9 @@ void DecisionMaker::startExploration(){
 }
 
 void DecisionMaker::saveGridMap(){
-  // Save current time
-  std::time_t now = std::time(0);
-  char char_time[100];
-  std::strftime(char_time, sizeof(char_time), "_%Y_%m_%d_%H_%M_%S", std::localtime(&now));
-
   // Get path and file name
   std::string package_path = ros::package::getPath("crowdbot_active_slam");
-  std::string save_path = package_path + "/test_results/occupancy_grid_map" +
-                          char_time + ".txt";
+  std::string save_path = save_directory_path_ + "/occupancy_grid_map.txt";
 
   // Service call for latest occupancy grid map
   crowdbot_active_slam::get_map get_map_srv;
@@ -375,9 +372,13 @@ void DecisionMaker::saveGeneralResults(){
   std::strftime(char_time, sizeof(char_time), "_%Y_%m_%d_%H_%M_%S", std::localtime(&now));
 
   // Get path and file name
-  std::string package_path = ros::package::getPath("crowdbot_active_slam");
-  std::string save_path = package_path + "/test_results/general_results" +
-                          char_time + ".txt";
+  save_directory_path_ = ros::package::getPath("crowdbot_active_slam") +
+                    "/test_results/" + exploration_type_ + char_time;
+  boost::filesystem::path dir(save_directory_path_);
+  if(boost::filesystem::create_directory(dir)){}
+  else std::cout << "Failed creating directory!" << std::endl;
+
+  std::string save_path = save_directory_path_ + "/general_results.txt";
 
   //
   double diff_time = end_time_.toSec() - start_time_.toSec();
@@ -387,7 +388,7 @@ void DecisionMaker::saveGeneralResults(){
   if (result_file.is_open()){
     // Add information to file
     result_file << "Exploration type: " << exploration_type_ << std::endl;
-    result_file << "Exploration time: " << diff_time << "s" << std::endl;
+    result_file << "Exploration time: " << diff_time << " s" << std::endl;
     result_file << "Map width: " << map_width_ << std::endl;
     result_file << "Map height: " << map_height_ << std::endl;
     result_file << "Map resolution: " << map_resolution_ << std::endl;
@@ -396,7 +397,13 @@ void DecisionMaker::saveGeneralResults(){
     result_file << "loop_closing_radius: " << lc_radius_ << std::endl;
     result_file << "Node number: " << "FILL IN" << std::endl;
     result_file << "World: " << "FILL IN" << std::endl;
-    result_file << "Optimality: " << "FILL IN" << std::endl;
+
+    if (exploration_type_ == "shortest_frontier"){
+      result_file << "Optimality: " << "None" << std::endl;
+    }
+    else {
+      result_file << "Optimality: " << "D-optimality" << std::endl;
+    }
 
     // Close file
     result_file.close();

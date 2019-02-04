@@ -765,15 +765,8 @@ void GraphOptimiser::updateMap(gtsam::Values& pose_estimates,
 bool GraphOptimiser::saveUncertaintyMatServiceCallback(
   crowdbot_active_slam::service_call::Request &request,
   crowdbot_active_slam::service_call::Response &response){
-  // Save current time
-  std::time_t now = std::time(0);
-  char char_time[100];
-  std::strftime(char_time, sizeof(char_time), "_%Y_%m_%d_%H_%M_%S", std::localtime(&now));
-
   // Get path and file name
-  std::string package_path = ros::package::getPath("crowdbot_active_slam");
-  std::string save_path = package_path + "/test_results/uncertainty_matrices" +
-                          char_time + ".txt";
+  std::string save_path = request.save_path + "/uncertainty_matrices.txt";
 
   Pose2 current_pose;
   Pose2 previous_pose;

@@ -41,8 +41,12 @@ int main(int argc, char **argv)
 {
   // Get path and file name
   std::string package_path = ros::package::getPath("crowdbot_active_slam");
-  std::string test_sdf_path = package_path + "/" + argv[1];
-  std::string ref_sdf_path = package_path + "/" + argv[2];
+  std::string directory_path = package_path + "/" + argv[1];
+
+  std::string general_results_path = directory_path + "/general_results.txt";
+  std::string test_sdf_path = directory_path + "/sdf_map.txt";
+  std::string ref_sdf_path = package_path + "/worlds/sdf_maps/sdf_map_" + argv[2]
+                             + "_2000x2000.txt";
 
   Eigen::MatrixXf test_sdf_mat = load_SDF(test_sdf_path);
   Eigen::MatrixXf ref_sdf_mat = load_SDF(ref_sdf_path);
@@ -61,6 +65,20 @@ int main(int argc, char **argv)
         }
       }
     }
+  }
+
+  std::ofstream result_file(general_results_path.c_str(), std::ofstream::app);
+  if (result_file.is_open()){
+    // Add information to file
+    result_file << std::endl;
+    result_file << "sdf_score_full: " << sdf_score_full << std::endl;
+    result_file << "sdf_score_easy: " << sdf_score_easy << std::endl;
+
+    // Close file
+    result_file.close();
+  }
+  else{
+    ROS_INFO("Could not open general_results.txt!");
   }
 
   std::cout << "sdf_score_full: " << sdf_score_full << std::endl;

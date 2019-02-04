@@ -95,8 +95,9 @@ int main(int argc, char **argv)
 
   // Get path and file name
   std::string package_path = ros::package::getPath("crowdbot_active_slam");
-  std::string map_path = package_path + "/" + argv[1];
-  std::string save_path = package_path + "/" + argv[2];
+  std::string save_directory_path = package_path + "/" + argv[1];
+  std::string map_path = save_directory_path + "/occupancy_grid_map.txt";
+  std::string save_path = save_directory_path + "/sdf_map.txt";
 
   std::ifstream map_file(map_path.c_str());
 
@@ -193,6 +194,6 @@ int main(int argc, char **argv)
     sdf_file.close();
   }
   else{
-    ROS_INFO("Could not save sdf.txt!");
+    ROS_INFO("Could not save sdf_map.txt!");
   }
 }

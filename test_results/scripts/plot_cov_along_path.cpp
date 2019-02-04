@@ -79,19 +79,52 @@ int main(int argc, char **argv)
   // Get path and file name
   std::string package_path = ros::package::getPath("crowdbot_active_slam");
 
+std::string general_results_path;
+  if (argc == 2){
+    general_results_path = package_path + "/" + argv[1] + "/general_results.txt";
+  }
+
   int nr_of_tests = argc;
 
   std::vector<std::vector<double>> uncertainty_vecs;
   std::vector<std::vector<double>> path_length_vecs;
   std::vector<std::string> paths;
   for (int i = 1; i < nr_of_tests; i++){
-    paths.push_back(package_path + "/" + argv[i]);
+    paths.push_back(package_path + "/" + argv[i] + "uncertainty_matrices.txt");
 
     std::vector<double> uncertainty_vec;
     std::vector<double> path_length_vec;
     getUncertainty(paths[i - 1], uncertainty_vec, path_length_vec);
     uncertainty_vecs.push_back(uncertainty_vec);
     path_length_vecs.push_back(path_length_vec);
+  }
+
+  if (argc == 2){
+    std::ifstream result_file_in(general_results_path.c_str());
+    std::string result_file_string = "";
+    std::string line;
+    std::string node_number = "Node number";
+    if (result_file_in.is_open()){
+      while (std::getline(result_file_in, line)){
+        if (line.find(node_number) != std::string::npos){
+          result_file_string += "Node number: " + std::to_string(uncertainty_vecs[0].size()) + '\n';
+        }
+        else {
+          result_file_string += line + '\n';
+        }
+      }
+      result_file_in.close();
+    }
+    else {
+      ROS_INFO("Could not open general_results(input file).txt!");
+    }
+    std::ofstream result_file_out(general_results_path.c_str());
+    if (result_file_out.is_open()){
+      result_file_out << result_file_string;
+    }
+    else {
+      ROS_INFO("Could not open general_results(output file).txt!");
+    }
   }
 
   // Print node number

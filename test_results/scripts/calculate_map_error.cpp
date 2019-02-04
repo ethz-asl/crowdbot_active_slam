@@ -7,8 +7,12 @@ int main(int argc, char **argv)
 {
   // Get path and file name
   std::string package_path = ros::package::getPath("crowdbot_active_slam");
-  std::string test_results_path = package_path + "/" + argv[1];
-  std::string ground_truth_map_path = package_path + "/" + argv[2];
+  std::string directory_path = package_path + "/" + argv[1];
+
+  std::string general_results_path = directory_path + "/general_results.txt";
+  std::string test_results_path = directory_path + "/occupancy_grid_map.txt";
+  std::string ground_truth_map_path = package_path +
+      "/worlds/occupancy_maps/occupancy_grid_map_" + argv[2] + "_2000x2000.txt";
 
   std::ifstream test_map_file(test_results_path.c_str());
   std::ifstream ground_truth_map_file(ground_truth_map_path.c_str());
@@ -66,6 +70,24 @@ int main(int argc, char **argv)
   }
   else {
     ROS_INFO("Failed to open ground_truth_map_file!");
+  }
+
+  std::ofstream result_file(general_results_path.c_str(), std::ofstream::app);
+  if (result_file.is_open()){
+    // Add information to file
+    result_file << std::endl;
+    result_file << "Map:" << std::endl;
+    result_file << "map_score: " << map_score << std::endl;
+    result_file << "Number of known cells: " << i << std::endl;
+    result_file << "Number of known test cells, while unknown in ref map: " << j << std::endl;
+    result_file << "score for known test cells, while unkown in ref map: " << over_ref_score << std::endl;
+    result_file << "Number of known ref cells, while unknown in test map: " << k << std::endl;
+
+    // Close file
+    result_file.close();
+  }
+  else{
+    ROS_INFO("Could not open general_results.txt!");
   }
 
   std::cout << "map_score: " << map_score << std::endl;

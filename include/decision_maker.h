@@ -3,6 +3,7 @@
 
 #include <fstream>
 #include <ctime>
+#include <boost/filesystem.hpp>
 
 #include <ros/ros.h>
 #include <ros/package.h>
@@ -102,6 +103,7 @@ private:
   EnvironmentNAVXYTHETALAT env_;
   ros::Time start_time_;
   ros::Time end_time_;
+  std::string save_directory_path_;
 };
 
 
