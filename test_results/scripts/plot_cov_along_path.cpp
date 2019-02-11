@@ -144,6 +144,7 @@ std::string general_results_path;
   }
   plotty::xlabel("path length [m]");
   plotty::ylabel("sigma [1]");
+  // plotty::save(package_path + + "/" + argv[1] + "/uncertainy_along_path.png");
   plotty::show();
 
   return 0;
