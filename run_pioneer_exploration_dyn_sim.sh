@@ -15,7 +15,7 @@ pid="$pid $!"
 sleep 10s
 
 echo "Launching laser scan matcher..."
-roslaunch crowdbot_active_slam pedestrian_simulator.launch N:=50 &
+roslaunch crowdbot_active_slam pedestrian_simulator.launch N:=40 &
 pid="$pid $!"
 
 sleep 20s
