@@ -1,9 +1,9 @@
 <launch>
-  <arg name="using_gazebo" default="true"/>
+  <arg name="robot_name" default="pioneer_sim"/>
   <arg name="scan_topic" default="base_scan"/>
   <node name="graph_optimisation" pkg="crowdbot_active_slam"
     type="graph_optimisation" output="screen">
-    <param name="using_gazebo" value="$(arg using_gazebo)"/>
+    <param name="robot_name" value="$(arg robot_name)"/>
     <param name="scan_callback_topic" value="$(arg scan_topic)"/>
 
     <param name="node_dist_linear" value="0.15"/>

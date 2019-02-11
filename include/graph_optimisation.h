@@ -225,7 +225,7 @@ private:
   bool scan_callback_initialized_;
   bool new_node_;
   bool first_map_calculated_;
-  bool using_gazebo_;
+  std::string robot_name_;
   int node_counter_;
   unsigned int scan_ranges_size_;
   double scan_angle_increment_;

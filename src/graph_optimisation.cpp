@@ -28,7 +28,7 @@ void GraphOptimiser::initParams(){
   nh_private_.param<int>("map_width", map_width_, 1000);
   nh_private_.param<int>("map_height", map_height_, 1000);
   nh_private_.param<float>("map_resolution", map_resolution_, 0.05);
-  nh_private_.param<bool>("using_gazebo", using_gazebo_, false);
+  nh_private_.param<std::string>("robot_name", robot_name_, "pioneer_sim");
   nh_private_.param<std::string>("scan_callback_topic", scan_callback_topic_, "base_scan");
 
   // Initialise subscriber and publisher
@@ -58,7 +58,7 @@ void GraphOptimiser::initParams(){
 
   bool got_transform = false;
   while (!got_transform){
-    if (using_gazebo_){
+    if (robot_name_ == "pioneer_sim"){
       try {
         got_transform = base_to_laser_listener_.waitForTransform("base_link",
                                     "laser", ros::Time(0), ros::Duration(1.0));
@@ -69,11 +69,22 @@ void GraphOptimiser::initParams(){
         ROS_WARN("Could not get initial transform from base to laser frame, %s", ex.what());
       }
     }
-    else {
+    else if (robot_name_ == "pepper_real"){
       try {
         got_transform = base_to_laser_listener_.waitForTransform("base_footprint",
                           "sick_laser_front", ros::Time(0), ros::Duration(1.0));
         base_to_laser_listener_.lookupTransform("base_footprint", "sick_laser_front",
+                                               ros::Time(0), base_to_laser_tf_);
+      }
+      catch (tf::TransformException ex){
+        ROS_WARN("Could not get initial transform from base to laser frame, %s", ex.what());
+      }
+    }
+    else if (robot_name_ == "turtlebot_real"){
+      try {
+        got_transform = base_to_laser_listener_.waitForTransform("base_footprint",
+                          "base_scan", ros::Time(0), ros::Duration(1.0));
+        base_to_laser_listener_.lookupTransform("base_footprint", "base_scan",
                                                ros::Time(0), base_to_laser_tf_);
       }
       catch (tf::TransformException ex){
@@ -1019,13 +1030,19 @@ void GraphOptimiser::scanCallback(
 
   // Get newest transform from odom to base_link for later use
   tf::StampedTransform odom_stamped_transform;
-  if (using_gazebo_){
+  if (robot_name_ == "pioneer_sim"){
     odom_listener_.waitForTransform("/base_link", "/odom",
                                     ros::Time(0), ros::Duration(1.0));
     odom_listener_.lookupTransform("/base_link", "/odom", ros::Time(0),
                                    odom_stamped_transform);
   }
-  else{
+  else if (robot_name_ == "pepper_real"){
+    odom_listener_.waitForTransform("/base_footprint", "/odom",
+                                    ros::Time(0), ros::Duration(1.0));
+    odom_listener_.lookupTransform("/base_footprint", "/odom", ros::Time(0),
+                                   odom_stamped_transform);
+  }
+  else if (robot_name_ == "turtlebot_real"){
     odom_listener_.waitForTransform("/base_footprint", "/odom",
                                     ros::Time(0), ros::Duration(1.0));
     odom_listener_.lookupTransform("/base_footprint", "/odom", ros::Time(0),
@@ -1106,7 +1123,7 @@ void GraphOptimiser::scanCallback(
   // Check if it is the first scan
   if (first_scan_pose_){
     // if robot is in gazebo, take gazebo init pose for map
-    if (using_gazebo_) {
+    if (robot_name_ == "pioneer_sim") {
       gazebo_msgs::GetModelState ground_truth_msg;
       ground_truth_msg.request.model_name = "pioneer";
       get_ground_truth_client_.call(ground_truth_msg);
@@ -1117,7 +1134,10 @@ void GraphOptimiser::scanCallback(
                               ground_truth_msg.response.pose.position.y,
                               tf::getYaw(ground_truth_orientation));
     }
-    else {
+    else if (robot_name_ == "pepper_real"){
+      init_pose2_map_ = Pose2(0.0, 0.0, 0.0);
+    }
+    else if (robot_name_ == "turtlebot_real"){
       init_pose2_map_ = Pose2(0.0, 0.0, 0.0);
     }
 
