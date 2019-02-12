@@ -12,18 +12,18 @@
     <param name="node_dist_angular" value="0.2"/>
 
     <!-- params for frontend scan matcher -->
-    <param name="frontend_max_iterations" value="20"/>
-    <param name="frontend_max_correspondence_dist" value="0.5"/>
+    <param name="frontend_max_iterations" value="30"/>
+    <param name="frontend_max_correspondence_dist" value="0.3"/>
     <param name="frontend_max_angular_correction_deg" value="80"/>
     <param name="frontend_max_linear_correction" value="0.4"/>
-    <param name="frontend_outliers_maxPerc" value="0.99"/>
-    <param name="frontend_orientation_neighbourhood" value="10"/>
-    <param name="frontend_outliers_adaptive_order" value="0.99"/>
+    <param name="frontend_outliers_maxPerc" value="0.9"/>
+    <param name="frontend_orientation_neighbourhood" value="20"/>
+    <param name="frontend_outliers_adaptive_order" value="0.7"/>
     <param name="frontend_do_compute_covariance" value="1"/>
     <param name="frontend_sigma" value="0.01"/>
 
     <!-- params for graph building and map -->
-    <param name="loop_closing_radius" value="0.7"/>
+    <param name="loop_closing_radius" value="0.00007"/>
     <param name="const_map_update_steps" value="false"/>
     <param name="map_width" value="2000"/>
     <param name="map_height" value="2000"/>
