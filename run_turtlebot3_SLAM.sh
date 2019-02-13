@@ -8,14 +8,14 @@ roscore &
 pid=$!
 sleep 2s
 
-echo "Launching combined laser scans node..."
-roslaunch crowdbot_active_slam combined_laser_scans.launch &
+echo pid="$pid $!""Launching rviz..."
+rosrun rviz rviz -d `rospack find crowdbot_active_slam`/rviz/turtlebot.rviz &
 pid="$pid $!"
 
-sleep 10s
+sleep 2s
 
 echo "Launching factor graph SLAM system..."
-roslaunch crowdbot_active_slam graph_optimisation.launch robot_name:=pepper_real scan_topic:=combined_scan_sync &
+roslaunch crowdbot_active_slam graph_optimisation_turtlebot.launch robot_name:=turtlebot_real scan_topic:=scan &
 pid="$pid $!"
 
 trap "echo Killing all processes.; kill -2 TERM $pid; exit" SIGINT SIGTERM
