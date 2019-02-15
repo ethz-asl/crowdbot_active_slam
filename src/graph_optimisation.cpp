@@ -174,30 +174,30 @@ void GraphOptimiser::initParams(){
 
   sm_icp_params_.max_angular_correction_deg = 180.0;
   sm_icp_params_.max_linear_correction = 3 * lc_radius_;
-  sm_icp_params_.max_iterations = 20;
-  sm_icp_params_.epsilon_xy = 0.000001;
-  sm_icp_params_.epsilon_theta = 0.000001;
-  sm_icp_params_.max_correspondence_dist = 0.5;
-  sm_icp_params_.use_corr_tricks = 1;
-  sm_icp_params_.restart = 0;
-  sm_icp_params_.restart_threshold_mean_error = 0.01;
-  sm_icp_params_.restart_dt = 1.0;
-  sm_icp_params_.restart_dtheta = 0.1;
-  sm_icp_params_.outliers_maxPerc = 0.97;
-  sm_icp_params_.outliers_adaptive_order = 0.98;
-  sm_icp_params_.outliers_adaptive_mult = 2.0;
-  sm_icp_params_.outliers_remove_doubles = 1;
-  sm_icp_params_.clustering_threshold = 0.25;
-  sm_icp_params_.orientation_neighbourhood = 20;
-  sm_icp_params_.do_alpha_test = 0;
-  sm_icp_params_.do_alpha_test_thresholdDeg = 20.0;
-  sm_icp_params_.do_visibility_test = 0;
-  sm_icp_params_.use_point_to_line_distance = 1;
-  sm_icp_params_.use_ml_weights = 0;
-  sm_icp_params_.use_sigma_weights = 0;
-  sm_icp_params_.debug_verify_tricks = 0;
+  sm_icp_params_.max_iterations = sm_frontend_input_.max_iterations;
+  sm_icp_params_.epsilon_xy = sm_frontend_input_.epsilon_xy;
+  sm_icp_params_.epsilon_theta = sm_frontend_input_.epsilon_theta;
+  sm_icp_params_.max_correspondence_dist = sm_frontend_input_.max_correspondence_dist;
+  sm_icp_params_.use_corr_tricks = sm_frontend_input_.use_corr_tricks;
+  sm_icp_params_.restart = sm_frontend_input_.restart;
+  sm_icp_params_.restart_threshold_mean_error = sm_frontend_input_.restart_threshold_mean_error;
+  sm_icp_params_.restart_dt = sm_frontend_input_.restart_dt;
+  sm_icp_params_.restart_dtheta = sm_frontend_input_.restart_dtheta;
+  sm_icp_params_.outliers_maxPerc = sm_frontend_input_.outliers_maxPerc;
+  sm_icp_params_.outliers_adaptive_order = sm_frontend_input_.outliers_adaptive_order;
+  sm_icp_params_.outliers_adaptive_mult = sm_frontend_input_.outliers_adaptive_mult;
+  sm_icp_params_.outliers_remove_doubles = sm_frontend_input_.outliers_remove_doubles;
+  sm_icp_params_.clustering_threshold = sm_frontend_input_.clustering_threshold;
+  sm_icp_params_.orientation_neighbourhood = sm_frontend_input_.orientation_neighbourhood;
+  sm_icp_params_.do_alpha_test = sm_frontend_input_.do_alpha_test;
+  sm_icp_params_.do_alpha_test_thresholdDeg = sm_frontend_input_.do_alpha_test_thresholdDeg;
+  sm_icp_params_.do_visibility_test = sm_frontend_input_.do_visibility_test;
+  sm_icp_params_.use_point_to_line_distance = sm_frontend_input_.use_point_to_line_distance;
+  sm_icp_params_.use_ml_weights = sm_frontend_input_.use_ml_weights;
+  sm_icp_params_.use_sigma_weights = sm_frontend_input_.use_sigma_weights;
+  sm_icp_params_.debug_verify_tricks = sm_frontend_input_.debug_verify_tricks;
   sm_icp_params_.sigma = sm_frontend_input_.sigma;
-  sm_icp_params_.do_compute_covariance = 1;
+  sm_icp_params_.do_compute_covariance = sm_frontend_input_.do_compute_covariance;
 
   // Initialise noise on scan matching nodes for action path
   // Values are chosen empirical at noise std 0.01 of scans with adding some
