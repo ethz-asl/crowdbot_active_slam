@@ -32,7 +32,7 @@ void GraphOptimiser::initParams(){
   nh_private_.param<std::string>("scan_callback_topic", scan_callback_topic_, "base_scan");
 
   // Initialise subscriber and publisher
-  scan_sub_ = nh_.subscribe(scan_callback_topic_, 1, &GraphOptimiser::scanCallback, this);
+  scan_sub_ = nh_.subscribe(scan_callback_topic_, 10, &GraphOptimiser::scanCallback, this);
   path_pub_ = nh_.advertise<nav_msgs::Path>("graph_path", 1);
   action_path_pub_ = nh_.advertise<nav_msgs::Path>("action_graph", 1);
   map_pub_ = nh_.advertise<nav_msgs::OccupancyGrid>("occupancy_map", 1);
@@ -1107,6 +1107,11 @@ void GraphOptimiser::scanCallback(
     return;
   }
 
+  // std::cout << "stamp:      " << scan_msg->header.stamp << std::endl;
+  // std::cout << "iterations: " << sm_frontend_output_.iterations << std::endl;
+  std::cout << "error:      " << sm_frontend_output_.error << std::endl;
+  std::cout << "nvalid:     " << sm_frontend_output_.nvalid << std::endl;
+
   // Save scan match covariance for new node
   noiseModel::Gaussian::shared_ptr temp_scan_match_noise =
     noiseModel::Gaussian::Covariance(
@@ -1238,31 +1243,43 @@ void GraphOptimiser::scanCallback(
             // Do scan matching for new factor
             sm_icp(&sm_icp_params_, &sm_icp_result_);
 
-            // Get tf of scan matching result and transform to map frame
-            tf::Transform pose_diff_tf;
-            pose_diff_tf = xythetaToTF(sm_icp_result_.x[0],
-                                       sm_icp_result_.x[1],
-                                       sm_icp_result_.x[2]);
-
-            // Transform to base_link frame
-            pose_diff_tf = base_to_laser_ * pose_diff_tf * laser_to_base_;
-
-            // Save loop closing tf as Pose2
-            Pose2 lc_mean(pose_diff_tf.getOrigin().getX(),
-                          pose_diff_tf.getOrigin().getY(),
-                          tf::getYaw(pose_diff_tf.getRotation()));
-
-            noiseModel::Diagonal::shared_ptr scan_match_noise =
-              noiseModel::Diagonal::Variances(
-                  (Vector(3) << gsl_matrix_get(sm_icp_result_.cov_x_m, 0, 0),
-                                gsl_matrix_get(sm_icp_result_.cov_x_m, 1, 1),
-                                gsl_matrix_get(sm_icp_result_.cov_x_m, 2, 2)));
-
-            // Add new factor between current_pose2_ and node i
-            graph_.add(BetweenFactor<Pose2>(node_counter_, i, lc_mean,
-                       scan_match_noise));
             // We want only one loop closing (oldest) TODO: find better solution
-            break;
+            if (sm_icp_result_.valid){
+              if (sm_icp_result_.nvalid > 400 && sm_icp_result_.error < 50){
+                // Get tf of scan matching result and transform to map frame
+                tf::Transform pose_diff_tf;
+                pose_diff_tf = xythetaToTF(sm_icp_result_.x[0],
+                                           sm_icp_result_.x[1],
+                                           sm_icp_result_.x[2]);
+
+                // Transform to base_link frame
+                pose_diff_tf = base_to_laser_ * pose_diff_tf * laser_to_base_;
+
+                // Save loop closing tf as Pose2
+                Pose2 lc_mean(pose_diff_tf.getOrigin().getX(),
+                              pose_diff_tf.getOrigin().getY(),
+                              tf::getYaw(pose_diff_tf.getRotation()));
+
+                noiseModel::Diagonal::shared_ptr scan_match_noise =
+                  noiseModel::Diagonal::Variances(
+                      (Vector(3) << gsl_matrix_get(sm_icp_result_.cov_x_m, 0, 0),
+                                    gsl_matrix_get(sm_icp_result_.cov_x_m, 1, 1),
+                                    gsl_matrix_get(sm_icp_result_.cov_x_m, 2, 2)));
+
+                // Add new factor between current_pose2_ and node i
+                graph_.add(BetweenFactor<Pose2>(node_counter_, i, lc_mean,
+                           scan_match_noise));
+                break;
+              }
+              else {
+                ROS_WARN("Loop closing: not enough correspondances or error too high! Taking next point if available");
+                std::cout << "error:      " << sm_icp_result_.error << std::endl;
+                std::cout << "nvalid:     " << sm_icp_result_.nvalid << std::endl;
+              }
+            }
+            else {
+              ROS_WARN("Loop closing: Scan match not valid! Taking next point if available");
+            }
           }
         }
       }
