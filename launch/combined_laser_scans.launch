@@ -1,8 +1,8 @@
 <?xml version="1.0"?>
 <launch>
   <node pkg="asl_pepper_sensor_preprocessing" type="crop_laser_scan" name="crop_rear_scan" output="screen">
-      <param name="crop_angle_min" type="double" value="-2" />
-      <param name="crop_angle_max" type="double" value="2" />
+      <param name="crop_angle_min" type="double" value="-2.2" />
+      <param name="crop_angle_max" type="double" value="2.2" />
       <remap from="/crop_rear_scan/scan" to="/sick_laser_rear/scan"/>
       <remap from="/crop_rear_scan/cropped_scan" to="/sick_laser_rear/cropped_scan_2"/>
   </node>
