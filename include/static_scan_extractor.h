@@ -135,7 +135,7 @@ private:
   ObjectDetector object_detector_;
 
   // Parameters
-  bool using_gazebo_;
+  std::string robot_name_;
   int map_width_;
   int map_height_;
   double map_resolution_;

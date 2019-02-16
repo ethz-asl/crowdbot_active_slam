@@ -190,7 +190,7 @@ StaticScanExtractor::StaticScanExtractor
                              ("/current_pose_node_service");
 
   // Get params from other nodes
-  nh_.getParam("/graph_optimisation/using_gazebo", using_gazebo_);
+  nh_.getParam("/graph_optimisation/robot_name", robot_name_);
   nh_.getParam("/graph_optimisation/map_width", map_width_);
   nh_.getParam("/graph_optimisation/map_height", map_height_);
   nh_.getParam("/graph_optimisation/map_resolution", map_resolution_);
@@ -206,7 +206,7 @@ StaticScanExtractor::StaticScanExtractor
 
   bool got_transform = false;
   while (!got_transform){
-    if (using_gazebo_){
+    if (robot_name_ == "pioneer_sim"){
       try {
         got_transform = base_to_laser_listener_.waitForTransform("base_link",
                                     "laser", ros::Time(0), ros::Duration(1.0));
