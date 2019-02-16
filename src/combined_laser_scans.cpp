@@ -13,7 +13,15 @@
 #include <sensor_msgs/PointCloud.h>
 #include <sensor_msgs/PointCloud2.h>
 #include <sensor_msgs/point_cloud_conversion.h>
+#include <laser_geometry/laser_geometry.h>
 #include <pcl_ros/transforms.h>
+
+#include <message_filters/subscriber.h>
+#include <message_filters/time_synchronizer.h>
+#include <message_filters/sync_policies/approximate_time.h>
+
+typedef message_filters::sync_policies::ApproximateTime
+        <sensor_msgs::LaserScan, sensor_msgs::LaserScan> SyncPolicy;
 
 namespace combine_laser_scans {
 
@@ -107,15 +115,24 @@ class LaserScanCombiner {
       tf_is_known_ = false;
       reference_scan1_is_set_ = false;
       reference_scan2_is_set_ = false;
-      latest_published_scan_is_set_ = false;
-      latest_scan1_is_set_ = false;
 
       // Publishers and subscribers.
-      scan_1_sub_ = nh_.subscribe(kScan1Topic, 1000, &LaserScanCombiner::scan1Callback, this);
-      scan_2_sub_ = nh_.subscribe(kScan2Topic, 1000, &LaserScanCombiner::scan2Callback, this);
+      scan_1_sub_ = new message_filters::Subscriber<sensor_msgs::LaserScan>
+                    (nh_, kScan1Topic, 10);
+      scan_2_sub_ = new message_filters::Subscriber<sensor_msgs::LaserScan>
+                    (nh_, kScan2Topic, 10);
+      int q = 10; // queue size
+      sync_ = new message_filters::Synchronizer<SyncPolicy>
+              (SyncPolicy(q), *scan_1_sub_, *scan_2_sub_);
+      sync_->registerCallback(boost::bind(&LaserScanCombiner::scanCallback,
+                                          this, _1, _2));
       combined_scan_pub_ = nh_.advertise<sensor_msgs::LaserScan>(kCombinedScanTopic, 1);
     }
-    ~LaserScanCombiner() {}
+    ~LaserScanCombiner() {
+      delete scan_1_sub_;
+      delete scan_2_sub_;
+      delete sync_;
+    }
 
   protected:
     /// \brief returns value represents whether the callback should return
@@ -172,82 +189,65 @@ class LaserScanCombiner {
       return combined_scan;
     }
 
-    /// \brief receives scan 1 messages
-    void scan1Callback(const sensor_msgs::LaserScan::ConstPtr& msg) {
+    void scanCallback(const sensor_msgs::LaserScan::ConstPtr& msg_1,
+                      const sensor_msgs::LaserScan::ConstPtr& msg_2){
       VLOG(3) << "scan1callback";
       static constexpr bool CROP_SCAN1 = true;
-      static constexpr float kScan1CropAngleMin = -1.82;
+      static constexpr float kScan1CropAngleMin = -1.75;
       static constexpr float kScan1CropAngleMax =  1.87;
 
-      // On first run, only set reference scan.
-      if ( !reference_scan1_is_set_ ) {
-        reference_scan1_ = *msg;
-        reference_scan1_is_set_ = true;
-        LOG(INFO) << "First scan set as reference scan for sensor 1.";
-        return;
-      }
+      // std::cout << "front: " << msg_1->header.stamp << std::endl;
+      // std::cout << "rear:  " << msg_2->header.stamp << std::endl;
 
       // Set the reference static transform between lasers.
+      if ( !reference_scan1_is_set_ ) {
+        reference_scan1_ = *msg_1;
+        reference_scan1_is_set_ = true;
+        LOG(INFO) << "First scan set as reference scan for sensor 1.";
+      }
+      if ( !reference_scan2_is_set_ ) {
+        reference_scan2_ = *msg_2;
+        reference_scan2_is_set_ = true;
+        LOG(INFO) << "First scan set as reference scan for sensor 2.";
+      }
       if ( setTFScan1To2() ) {
         return;
       }
 
       // Generate the scan to fill in.
-      sensor_msgs::LaserScan combined_scan = generateEmptyOutputScan(msg->header.stamp);
+      sensor_msgs::LaserScan combined_scan = generateEmptyOutputScan(msg_1->header.stamp);
 
       // fill values from Scan 1 to combined scan
       // as the new scan has n times the resolution, and both start with the same angle,
       // this should be equivalent to mapping original values to every other cell in the new scan.
       // (except for the last part, where no values exist in the original scan)
-      CHECK( combined_scan.angle_min == msg->angle_min ); // sanity check
-      for ( size_t i = 0; i < msg->ranges.size(); i++ ) {
+      CHECK( combined_scan.angle_min == msg_1->angle_min ); // sanity check
+      for ( size_t i = 0; i < msg_1->ranges.size(); i++ ) {
         // Crop angles outside of desired range (valid for pepper with laptop tray)
-        float angle = msg->angle_min + i * msg->angle_increment;
+        float angle = msg_1->angle_min + i * msg_1->angle_increment;
         if ( angle < kScan1CropAngleMin || angle > kScan1CropAngleMax ) {
           continue;
         }
         // Fill values
-        combined_scan.ranges.at(i*kResolutionUpsampling) = msg->ranges.at(i);
-        combined_scan.intensities.at(i*kResolutionUpsampling) = msg->intensities.at(i);
+        combined_scan.ranges.at(i*kResolutionUpsampling) = msg_1->ranges.at(i);
+        combined_scan.intensities.at(i*kResolutionUpsampling) = msg_1->intensities.at(i);
       }
 
       VLOG(3) << "";
-      // publish result.
-      latest_scan1_ = combined_scan;
-      latest_scan1_is_set_ = true;
-      // combined_scan_pub_.publish(combined_scan);
-     }
-
-    /// \brief receives scan 2 messages
-    void scan2Callback(const sensor_msgs::PointCloud2::ConstPtr& msg) {
-      VLOG(3) << "scan2callback";
-
-      // On first run, only set reference scan.
-      if ( !reference_scan2_is_set_ ) {
-        reference_scan2_ = *msg;
-        reference_scan2_is_set_ = true;
-        LOG(INFO) << "First scan set as reference scan for sensor 2.";
-        return;
-      }
 
       // Set the reference static transform between lasers.
       if ( setTFScan1To2() ) {
         return;
       }
 
-      // Generate the scan to fill in.
-      sensor_msgs::LaserScan combined_scan;
-      if (latest_scan1_is_set_){
-        combined_scan = latest_scan1_;
-      }
-      else {
-        combined_scan = generateEmptyOutputScan(msg->header.stamp);
-      }
+      //
+      sensor_msgs::PointCloud2 temp_cloud2;
+      projector_.projectLaser(*msg_2, temp_cloud2);
 
       // Convert the point cloud to frame 1
       sensor_msgs::PointCloud2 scan2_in_frame1;
       pcl_ros::transformPointCloud(reference_scan1_.header.frame_id, tf_scan_1_to_scan_2_,
-          *msg, scan2_in_frame1);
+          temp_cloud2, scan2_in_frame1);
       // Convert the point cloud to scan values (angle, distance).
       sensor_msgs::PointCloud scan2_in_frame1_xyzi;
       sensor_msgs::convertPointCloud2ToPointCloud(scan2_in_frame1, scan2_in_frame1_xyzi);
@@ -289,34 +289,38 @@ class LaserScanCombiner {
         if ( relative_angle > 0 && combined_scan.angle_increment < 0 ) {
           relative_angle -= 2*M_PI;
         }
-        CHECK( ( relative_angle / combined_scan.angle_increment )  >= 0 );
-        size_t index = round(relative_angle / combined_scan.angle_increment);
-        if ( index == combined_scan.ranges.size() ) {
-          index = 0;
-        }
-        VLOG(2) << "angle: " << angle;
-        VLOG(2) << "min angle: " << combined_scan.angle_min;
-        VLOG(2) << "max angle: " << combined_scan.angle_max;
-        VLOG(2) << "angle inc: " << combined_scan.angle_increment;
-        VLOG(2) << "rel angle: " << relative_angle;
-        VLOG(2) << "index: " << index;
-        combined_scan.ranges.at(index) = range;
-        if ( found_intensities ) {
-          combined_scan.intensities.at(index) = scan2_intensities.at(i);
+        // if (relative_angle < -kScan1CropAngleMin - combined_scan.angle_min ||
+        //     relative_angle > kScan1CropAngleMax - combined_scan.angle_min){
+        if (true){
+          CHECK( ( relative_angle / combined_scan.angle_increment )  >= 0 );
+          size_t index = round(relative_angle / combined_scan.angle_increment);
+          if ( index == combined_scan.ranges.size() ) {
+            index = 0;
+          }
+          VLOG(2) << "angle: " << angle;
+          VLOG(2) << "min angle: " << combined_scan.angle_min;
+          VLOG(2) << "max angle: " << combined_scan.angle_max;
+          VLOG(2) << "angle inc: " << combined_scan.angle_increment;
+          VLOG(2) << "rel angle: " << relative_angle;
+          VLOG(2) << "index: " << index;
+          combined_scan.ranges.at(index) = range;
+          if ( found_intensities ) {
+            combined_scan.intensities.at(index) = scan2_intensities.at(i);
+          }
         }
       }
 
       // publish result.
       latest_published_scan_ = combined_scan;
-      latest_published_scan_is_set_ = true;
       combined_scan_pub_.publish(combined_scan);
     }
 
   private:
     // ROS
     ros::NodeHandle& nh_;
-    ros::Subscriber scan_1_sub_;
-    ros::Subscriber scan_2_sub_;
+    message_filters::Subscriber<sensor_msgs::LaserScan> *scan_1_sub_;
+    message_filters::Subscriber<sensor_msgs::LaserScan> *scan_2_sub_;
+    message_filters::Synchronizer<SyncPolicy> *sync_;
     ros::Publisher combined_scan_pub_;
     tf::TransformListener tf_listener_;
     // State
@@ -324,12 +328,11 @@ class LaserScanCombiner {
     bool tf_is_known_;
     sensor_msgs::LaserScan reference_scan1_;
     bool reference_scan1_is_set_;
-    sensor_msgs::PointCloud2 reference_scan2_;
+    sensor_msgs::LaserScan reference_scan2_;
     bool reference_scan2_is_set_;
+    laser_geometry::LaserProjection projector_;
     sensor_msgs::LaserScan latest_scan1_;
-    bool latest_scan1_is_set_;
     sensor_msgs::LaserScan latest_published_scan_;
-    bool latest_published_scan_is_set_;
     std::mutex mutex_;
     // Constant
     const size_t kResolutionUpsampling = 3; // how much finer is the combined scan vs orginal.
@@ -347,8 +350,6 @@ int main(int argc, char **argv) {
   LaserScanCombiner laser_scan_combiner(n);
 
   try {
-//     ros::MultiThreadedSpinner spinner(2); // Necessary to allow concurrent callbacks.
-//     spinner.spin();
     ros::spin();
   }
   catch (const std::exception& e) {

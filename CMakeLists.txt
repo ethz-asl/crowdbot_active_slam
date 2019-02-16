@@ -12,7 +12,8 @@ find_package(catkin REQUIRED COMPONENTS
   nav_msgs
   cmake_modules
   message_generation
-  pcl_ros)
+  pcl_ros
+  laser_geometry)
 
 find_package(GTSAM REQUIRED)
 find_package(PCL REQUIRED QUIET)
@@ -95,7 +96,8 @@ add_executable(static_scan_extractor src/static_scan_extractor.cpp)
 target_link_libraries(graph_optimisation graph_optimisation_lib)
 target_link_libraries(frontier_exploration ${catkin_LIBRARIES})
 target_link_libraries(decision_maker ${catkin_LIBRARIES} ${SBPL_LIBRARIES})
-target_link_libraries(combined_laser_scans ${catkin_LIBRARIES} ${pcl_ros_LIBRARIES} ${glog_catkin_LIBRARIES})
+target_link_libraries(combined_laser_scans ${catkin_LIBRARIES} ${pcl_ros_LIBRARIES}
+                               ${laser_geometry_LIBRARIES} ${glog_catkin_LIBRARIES})
 target_link_libraries(pedestrian_simulator ${catkin_LIBRARIES}
                       ${grid_map_ros_LIBRARIES} pedestrian utils)
 target_link_libraries(static_scan_extractor static_scan_extractor_lib)
