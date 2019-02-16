@@ -1,0 +1,37 @@
+<launch>
+  <node name="rviz" pkg="rviz" type="rviz"
+    args="-d $(find crowdbot_active_slam)/rviz/crowdbot_active_slam.rviz"/>
+  <!-- robot_name:
+       pioneer_sim, pepper_real, turtlebot_real-->
+  <arg name="robot_name" default="pioneer_sim"/>
+  <arg name="scan_topic" default="base_scan"/>
+  <node name="graph_optimisation" pkg="crowdbot_active_slam"
+    type="graph_optimisation" output="screen">
+    <param name="robot_name" value="$(arg robot_name)"/>
+    <param name="scan_callback_topic" value="$(arg scan_topic)"/>
+    <param name="node_dist_linear" value="0.1"/>
+    <param name="node_dist_angular" value="0.1"/>
+
+    <!-- params for frontend scan matcher -->
+    <param name="frontend_max_iterations" value="100"/>
+    <param name="frontend_max_correspondence_dist" value="0.5"/>
+    <param name="frontend_max_angular_correction_deg" value="20"/>
+    <param name="frontend_max_linear_correction" value="0.2"/>
+    <param name="frontend_outliers_maxPerc" value="0.96"/>
+    <param name="frontend_orientation_neighbourhood" value="20"/>
+    <param name="frontend_outliers_adaptive_order" value="0.96"/>
+    <param name="frontend_do_compute_covariance" value="1"/>
+    <param name="frontend_sigma" value="0.01"/>
+    <param name="frontend_use_corr_tricks" value="1"/>
+    <param name="frontend_use_point_to_line_distance" value="1"/>
+    <param name="frontend_outliers_remove_doubles" value="1"/>
+
+
+    <!-- params for graph building and map -->
+    <param name="loop_closing_radius" value="0.7"/>
+    <param name="const_map_update_steps" value="false"/>
+    <param name="map_width" value="2000"/>
+    <param name="map_height" value="2000"/>
+    <param name="map_resolution" value="0.05"/>
+  </node>
+</launch>
