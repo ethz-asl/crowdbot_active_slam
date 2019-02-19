@@ -226,15 +226,14 @@ void GraphOptimiser::initParams(){
 
   // Initialise noise on scan matching nodes for action path
   // Values are chosen empirical at noise std 0.01 of scans with adding some
-  // safety margin
+  // safety margin (pepper at noise std 0.03)
   if (robot_name_ == "pioneer_sim"){
     average_scan_match_noise_ = noiseModel::Diagonal::Variances(
                               (Vector(3) << 0.0000006, 0.0000006, 0.000000012));
   }
   else if (robot_name_ == "pepper_real"){
-    // TODO: get correct covariance
     average_scan_match_noise_ = noiseModel::Diagonal::Variances(
-                              (Vector(3) << 0.0000006, 0.0000006, 0.000000012));
+                              (Vector(3) << 0.00002, 0.00002, 0.0000002));
   }
   else {
     average_scan_match_noise_ = noiseModel::Diagonal::Variances(
