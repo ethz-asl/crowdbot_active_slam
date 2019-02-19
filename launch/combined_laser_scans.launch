@@ -15,15 +15,12 @@
     <remap from="scan_filtered" to="/sick_laser_front/scan_filtered" />
   </node>
 
-  <node pkg="asl_pepper_sensor_preprocessing" type="crop_laser_scan" name="crop_rear_scan" output="screen">
-      <param name="crop_angle_min" type="double" value="-2.2" />
-      <param name="crop_angle_max" type="double" value="2.2" />
-      <remap from="/crop_rear_scan/scan" to="/sick_laser_rear/scan_filtered"/>
-      <remap from="/crop_rear_scan/cropped_scan" to="/sick_laser_rear/scan_filtered_cropped"/>
-  </node>
-
   <node pkg="crowdbot_active_slam" type="combined_laser_scans" name="combined_laser_scans" output="screen">
+    <param name="front_scan_crop_angle_min" type="double" value="-1.75" />
+    <param name="front_scan_crop_angle_max" type="double" value="1.87" />
+    <param name="rear_scan_crop_angle_min" type="double" value="-2.2" />
+    <param name="rear_scan_crop_angle_max" type="double" value="2.2" />
     <remap from="scan1" to="/sick_laser_front/scan_filtered"/>
-    <remap from="scan2_cloud" to="/sick_laser_rear/scan_filtered_cropped"/>
+    <remap from="scan2" to="/sick_laser_rear/scan_filtered"/>
   </node>
 </launch>
