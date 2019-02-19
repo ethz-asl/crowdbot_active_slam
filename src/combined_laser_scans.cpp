@@ -289,9 +289,8 @@ class LaserScanCombiner {
         if ( relative_angle > 0 && combined_scan.angle_increment < 0 ) {
           relative_angle -= 2*M_PI;
         }
-        // if (relative_angle < -kScan1CropAngleMin - combined_scan.angle_min ||
-        //     relative_angle > kScan1CropAngleMax - combined_scan.angle_min){
-        if (true){
+        if (relative_angle < kScan1CropAngleMin - combined_scan.angle_min ||
+            relative_angle > kScan1CropAngleMax - combined_scan.angle_min){
           CHECK( ( relative_angle / combined_scan.angle_increment )  >= 0 );
           size_t index = round(relative_angle / combined_scan.angle_increment);
           if ( index == combined_scan.ranges.size() ) {
