@@ -9,11 +9,11 @@
     type="graph_optimisation" output="screen">
     <param name="robot_name" value="$(arg robot_name)"/>
     <param name="scan_callback_topic" value="$(arg scan_topic)"/>
-    <param name="node_dist_linear" value="0.1"/>
-    <param name="node_dist_angular" value="0.1"/>
+    <param name="node_dist_linear" value="0.2"/>
+    <param name="node_dist_angular" value="0.3"/>
 
     <!-- params for frontend scan matcher -->
-    <param name="frontend_max_iterations" value="100"/>
+    <param name="frontend_max_iterations" value="40"/>
     <param name="frontend_max_correspondence_dist" value="0.5"/>
     <param name="frontend_max_angular_correction_deg" value="20"/>
     <param name="frontend_max_linear_correction" value="0.2"/>
@@ -21,14 +21,18 @@
     <param name="frontend_orientation_neighbourhood" value="20"/>
     <param name="frontend_outliers_adaptive_order" value="0.96"/>
     <param name="frontend_do_compute_covariance" value="1"/>
-    <param name="frontend_sigma" value="0.01"/>
+    <!-- sigma = 0.02(sick lidar) + 0.01(combination/tf/reflection error) -->
+    <param name="frontend_sigma" value="0.03"/>
     <param name="frontend_use_corr_tricks" value="1"/>
     <param name="frontend_use_point_to_line_distance" value="1"/>
     <param name="frontend_outliers_remove_doubles" value="1"/>
-
+    <param name="frontend_restart" value="1"/>
+    <param name="frontend_restart_threshold_mean_error" value="0.0357"/> <!-- 25 / 700 -->
+    <param name="frontend_restart_dt" value="0.03"/>
+    <param name="frontend_frontend_restart_dtheta" value="0.1"/> <!-- 6 * 3.14 / 180 -->
 
     <!-- params for graph building and map -->
-    <param name="loop_closing_radius" value="0.7"/>
+    <param name="loop_closing_radius" value="1.0"/>
     <param name="const_map_update_steps" value="false"/>
     <param name="map_width" value="2000"/>
     <param name="map_height" value="2000"/>

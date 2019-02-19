@@ -194,6 +194,7 @@ private:
   LDP previous_ldp_;
   LDP current_ldp_;
   std::vector<LDP> keyframe_ldp_vec_;
+  tf::Transform corr_ch_l_;
 
   // Map parameters
   float map_resolution_;

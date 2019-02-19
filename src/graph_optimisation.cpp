@@ -160,6 +160,9 @@ void GraphOptimiser::initParams(){
   nh_private_.param<int>("frontend_do_compute_covariance",
       sm_frontend_input_.do_compute_covariance, 0);
 
+  // Init scan matcher change estimation
+  corr_ch_l_ = xythetaToTF(0, 0, 0);
+
   /*
   Init some sm_icp parameters for loop closing (Most values are taken from the
   ROS laser scan matcher package)
@@ -202,8 +205,19 @@ void GraphOptimiser::initParams(){
   // Initialise noise on scan matching nodes for action path
   // Values are chosen empirical at noise std 0.01 of scans with adding some
   // safety margin
-  average_scan_match_noise_ = noiseModel::Diagonal::Variances(
+  if (robot_name_ == "pioneer_sim"){
+    average_scan_match_noise_ = noiseModel::Diagonal::Variances(
                               (Vector(3) << 0.0000006, 0.0000006, 0.000000012));
+  }
+  else if (robot_name_ == "pepper_real"){
+    // TODO: get correct covariance
+    average_scan_match_noise_ = noiseModel::Diagonal::Variances(
+                              (Vector(3) << 0.0000006, 0.0000006, 0.000000012));
+  }
+  else {
+    average_scan_match_noise_ = noiseModel::Diagonal::Variances(
+                              (Vector(3) << 0.0000006, 0.0000006, 0.000000012));
+  }
 
   // Parameter for utility computation of action path
   double error_distance = 10;
@@ -1069,9 +1083,9 @@ void GraphOptimiser::scanCallback(
   sm_frontend_input_.laser_sens = current_ldp_;
 
   // zero-motion model as first guess
-  sm_frontend_input_.first_guess[0] = 0;
-  sm_frontend_input_.first_guess[1] = 0;
-  sm_frontend_input_.first_guess[2] = 0;
+  sm_frontend_input_.first_guess[0] = corr_ch_l_.getOrigin().getX();
+  sm_frontend_input_.first_guess[1] = corr_ch_l_.getOrigin().getY();
+  sm_frontend_input_.first_guess[2] = tf::getYaw(corr_ch_l_.getRotation());
 
   // If they are non-Null, free covariance gsl matrices to avoid leaking memory
   if (sm_frontend_output_.cov_x_m){
@@ -1094,23 +1108,17 @@ void GraphOptimiser::scanCallback(
 
   if (sm_frontend_output_.valid){
     // the correction of the laser's position, in the laser frame
-    tf::Transform corr_ch_l;
-    corr_ch_l = xythetaToTF(sm_frontend_output_.x[0],
-                            sm_frontend_output_.x[1],
-                            sm_frontend_output_.x[2]);
+    corr_ch_l_ = xythetaToTF(sm_frontend_output_.x[0],
+                             sm_frontend_output_.x[1],
+                             sm_frontend_output_.x[2]);
 
     // the correction of the base's position, in the base frame
-    next_node_tf = base_to_laser_ * corr_ch_l * laser_to_base_;
+    next_node_tf = base_to_laser_ * corr_ch_l_ * laser_to_base_;
   }
   else {
     ROS_WARN("Scan match is invalid! Skipping scan!");
     return;
   }
-
-  // std::cout << "stamp:      " << scan_msg->header.stamp << std::endl;
-  // std::cout << "iterations: " << sm_frontend_output_.iterations << std::endl;
-  std::cout << "error:      " << sm_frontend_output_.error << std::endl;
-  std::cout << "nvalid:     " << sm_frontend_output_.nvalid << std::endl;
 
   // Save scan match covariance for new node
   noiseModel::Gaussian::shared_ptr temp_scan_match_noise =
@@ -1350,7 +1358,21 @@ void GraphOptimiser::scanCallback(
   if (new_node_){
     map_br_.sendTransform(tf::StampedTransform(map_to_odom_tf_, ros::Time::now(),
                         "map", "odom"));
+    corr_ch_l_ = xythetaToTF(0, 0, 0);
     new_node_ = false;
+
+    // For debuging
+    std::cout << isam_.marginalCovariance(node_counter_ - 1) << std::endl;
+    Eigen::VectorXcd eivals = isam_.marginalCovariance(node_counter_ - 1).eigenvalues();
+    double sum_of_logs = log(eivals[0].real()) +
+                         log(eivals[1].real()) +
+                         log(eivals[2].real());
+    double sigma = exp(1.0 / 3.0 * sum_of_logs);
+    double sigma_norm = exp(1.0/3.0 * (2*log(map_resolution_ * map_resolution_) +
+                        log(pow(atan(map_resolution_/10.0), 2))));
+    double alpha = (1.0 + 0.1 * sigma_norm / sigma);
+    std::cout << "sigma: " << sigma << std::endl;
+    std::cout << "alpha: " << alpha << std::endl;
   }else{
     Pose2 between_pose2;
     Pose2 temp_last_pose2;
