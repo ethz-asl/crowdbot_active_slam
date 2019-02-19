@@ -174,6 +174,7 @@ private:
   tf::TransformListener base_to_laser_listener_;
   tf::Transform base_to_laser_;
   tf::Transform laser_to_base_;
+  tf::Transform base_to_rear_laser_;
 
   // gtsam objects
   gtsam::Pose2 prev_pose2_odom_;
@@ -206,6 +207,8 @@ private:
   float p_free_;
   float l_occ_;
   float l_free_;
+  float front_scan_crop_angle_max_;
+  float front_scan_crop_angle_min_;
 
   // Scan matcher libpointmatcher
   PointMatcher<float>::DataPoints laser_ref_;

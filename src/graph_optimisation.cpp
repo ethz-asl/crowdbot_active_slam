@@ -31,6 +31,12 @@ void GraphOptimiser::initParams(){
   nh_private_.param<std::string>("robot_name", robot_name_, "pioneer_sim");
   nh_private_.param<std::string>("scan_callback_topic", scan_callback_topic_, "base_scan");
 
+  // If using pepper get front scan crop params
+  if (robot_name_ == "pepper_real"){
+    nh_.getParam("/combined_laser_scans/front_scan_crop_angle_max", front_scan_crop_angle_max_);
+    nh_.getParam("/combined_laser_scans/front_scan_crop_angle_min", front_scan_crop_angle_min_);
+  }
+
   // Initialise subscriber and publisher
   scan_sub_ = nh_.subscribe(scan_callback_topic_, 10, &GraphOptimiser::scanCallback, this);
   path_pub_ = nh_.advertise<nav_msgs::Path>("graph_path", 1);
@@ -57,6 +63,7 @@ void GraphOptimiser::initParams(){
   tf::StampedTransform base_to_laser_tf_;
 
   bool got_transform = false;
+  bool got_rear_transform = false;
   while (!got_transform){
     if (robot_name_ == "pioneer_sim"){
       try {
@@ -79,6 +86,21 @@ void GraphOptimiser::initParams(){
       catch (tf::TransformException ex){
         ROS_WARN("Could not get initial transform from base to laser frame, %s", ex.what());
       }
+
+      try {
+        // Get base to rear laser for mapping
+        tf::StampedTransform base_to_rear_laser_tf;
+        got_rear_transform = base_to_laser_listener_.waitForTransform("base_footprint",
+                          "sick_laser_rear", ros::Time(0), ros::Duration(1.0));
+        base_to_laser_listener_.lookupTransform("base_footprint", "sick_laser_rear",
+                                               ros::Time(0), base_to_rear_laser_tf);
+        base_to_rear_laser_ = base_to_rear_laser_tf;
+      }
+      catch (tf::TransformException ex){
+        ROS_WARN("Could not get initial transform from base to rear laser frame, %s", ex.what());
+      }
+
+      if (got_transform && got_rear_transform) got_transform = true;
     }
     else if (robot_name_ == "turtlebot_real"){
       try {
@@ -250,7 +272,8 @@ void GraphOptimiser::initParams(){
   }
 
   // Init max allowed scan range
-  max_range_allowed_ = 30;
+  if(robot_name_ == "pepper_real") max_range_allowed_ = 50;
+  else max_range_allowed_ = 30;
 
   // Init log log_odds_array_
   log_odds_array_ = Eigen::MatrixXf(map_width_, map_height_);
@@ -561,10 +584,9 @@ void GraphOptimiser::drawMap(gtsam::Values& pose_estimates,
                                   pose2_estimate.y(),
                                   pose2_estimate.theta()) * base_to_laser_;
 
-    std::vector<int> laser_pose_index;
-
     double laser_x = map_to_laser_tf.getOrigin().getX();
     double laser_y = map_to_laser_tf.getOrigin().getY();
+    std::vector<int> laser_pose_index;
     laser_pose_index = positionToMapIndex(laser_x,
                                           laser_y,
                                           map_width_,
@@ -574,6 +596,32 @@ void GraphOptimiser::drawMap(gtsam::Values& pose_estimates,
     // Save index in shorter variable for later use
     int x0 = laser_pose_index[0];
     int y0 = laser_pose_index[1];
+
+    // Init parameters needed for mapping with rear laser scans from pepper
+    double rear_laser_x;
+    double rear_laser_y;
+    int rear_x0;
+    int rear_y0;
+    tf::Transform map_to_rear_laser_tf;
+    if (robot_name_ == "pepper_real"){
+      map_to_rear_laser_tf = xythetaToTF(pose2_estimate.x(),
+                                         pose2_estimate.y(),
+                                         pose2_estimate.theta()) * base_to_rear_laser_;
+
+      rear_laser_x = map_to_rear_laser_tf.getOrigin().getX();
+      rear_laser_y = map_to_rear_laser_tf.getOrigin().getY();
+
+      std::vector<int> rear_laser_pose_index;
+      rear_laser_pose_index = positionToMapIndex(rear_laser_x,
+                                                 rear_laser_y,
+                                                 map_width_,
+                                                 map_height_,
+                                                 map_resolution_);
+
+      // Save index in shorter variable for later use
+      rear_x0 = rear_laser_pose_index[0];
+      rear_y0 = rear_laser_pose_index[1];
+    }
 
     // Loop over each ray of the scan
     for (int j = 0; j < keyframe_ldp_vec[i]->nrays; j++){
@@ -590,6 +638,13 @@ void GraphOptimiser::drawMap(gtsam::Values& pose_estimates,
       double angle = keyframe_ldp_vec[i]->theta[j];
       double x_end = reading * cos(angle);
       double y_end = reading * sin(angle);
+
+      bool rear_scan = false;
+      if (robot_name_ == "pepper_real"){
+        if (angle > front_scan_crop_angle_max_ ||
+            angle < front_scan_crop_angle_min_) {rear_scan = true;}
+      }
+
       tf::Transform endpoint;
       endpoint = map_to_laser_tf * xythetaToTF(x_end, y_end, angle);
 
@@ -616,8 +671,15 @@ void GraphOptimiser::drawMap(gtsam::Values& pose_estimates,
       }
 
       // Check if +/- 0.5*resolution is in a new cell
-      double xdiff = endpoint_x - laser_x;
-      double ydiff = endpoint_y - laser_y;
+      double xdiff, ydiff;
+      if (rear_scan){
+        xdiff = endpoint_x - rear_laser_x;
+        ydiff = endpoint_y - rear_laser_y;
+      }
+      else {
+        xdiff = endpoint_x - laser_x;
+        ydiff = endpoint_y - laser_y;
+      }
 
       // Calculate delta_x/y with similar triangles
       double delta_x = 0.5 * map_resolution_ / reading * xdiff;
@@ -654,7 +716,12 @@ void GraphOptimiser::drawMap(gtsam::Values& pose_estimates,
         }
       }
 
-      updateLogOdsWithBresenham(x0, y0, x1, y1, end_point_index_m, false);
+      if (rear_scan){
+        updateLogOdsWithBresenham(rear_x0, rear_y0, x1, y1, end_point_index_m, false);
+      }
+      else {
+        updateLogOdsWithBresenham(x0, y0, x1, y1, end_point_index_m, false);
+      }
     }
   }
 
@@ -680,10 +747,9 @@ void GraphOptimiser::updateMap(gtsam::Values& pose_estimates,
                                 pose2_estimate.y(),
                                 pose2_estimate.theta()) * base_to_laser_;
 
-  std::vector<int> laser_pose_index;
-
   double laser_x = map_to_laser_tf.getOrigin().getX();
   double laser_y = map_to_laser_tf.getOrigin().getY();
+  std::vector<int> laser_pose_index;
   laser_pose_index = positionToMapIndex(laser_x,
                                         laser_y,
                                         map_width_,
@@ -693,6 +759,32 @@ void GraphOptimiser::updateMap(gtsam::Values& pose_estimates,
   // Save index in shorter variable for later use
   int x0 = laser_pose_index[0];
   int y0 = laser_pose_index[1];
+
+  // Init parameters needed for mapping with rear laser scans from pepper
+  double rear_laser_x;
+  double rear_laser_y;
+  int rear_x0;
+  int rear_y0;
+  tf::Transform map_to_rear_laser_tf;
+  if (robot_name_ == "pepper_real"){
+    map_to_rear_laser_tf = xythetaToTF(pose2_estimate.x(),
+                                       pose2_estimate.y(),
+                                       pose2_estimate.theta()) * base_to_rear_laser_;
+
+    rear_laser_x = map_to_rear_laser_tf.getOrigin().getX();
+    rear_laser_y = map_to_rear_laser_tf.getOrigin().getY();
+
+    std::vector<int> rear_laser_pose_index;
+    rear_laser_pose_index = positionToMapIndex(rear_laser_x,
+                                               rear_laser_y,
+                                               map_width_,
+                                               map_height_,
+                                               map_resolution_);
+
+    // Save index in shorter variable for later use
+    rear_x0 = rear_laser_pose_index[0];
+    rear_y0 = rear_laser_pose_index[1];
+  }
 
   // Loop over each ray of the scan
   for (int j = 0; j < keyframe_ldp_vec[i]->nrays; j++){
@@ -709,6 +801,13 @@ void GraphOptimiser::updateMap(gtsam::Values& pose_estimates,
     double angle = keyframe_ldp_vec[i]->theta[j];
     double x_end = reading * cos(angle);
     double y_end = reading * sin(angle);
+
+    bool rear_scan = false;
+    if (robot_name_ == "pepper_real"){
+      if (angle > front_scan_crop_angle_max_ ||
+          angle < front_scan_crop_angle_min_) {rear_scan = true;}
+    }
+
     tf::Transform endpoint;
     endpoint = map_to_laser_tf * xythetaToTF(x_end, y_end, angle);
 
@@ -737,8 +836,15 @@ void GraphOptimiser::updateMap(gtsam::Values& pose_estimates,
     occupancy_grid_msg_.data[temp_id] = 100 * (1.0 - 1.0 / (1.0 + exp(log_odds_array_(x1, y1))));
 
     // Check if +/- 0.5*resolution is in a new cell
-    double xdiff = endpoint_x - laser_x;
-    double ydiff = endpoint_y - laser_y;
+    double xdiff, ydiff;
+    if (rear_scan){
+      xdiff = endpoint_x - rear_laser_x;
+      ydiff = endpoint_y - rear_laser_y;
+    }
+    else {
+      xdiff = endpoint_x - laser_x;
+      ydiff = endpoint_y - laser_y;
+    }
 
     // Calculate delta_x/y with similar triangles
     double delta_x = 0.5 * map_resolution_ / reading * xdiff;
@@ -783,7 +889,12 @@ void GraphOptimiser::updateMap(gtsam::Values& pose_estimates,
           exp(log_odds_array_(end_point_index_m[0], end_point_index_m[1]))));
     }
 
-    updateLogOdsWithBresenham(x0, y0, x1, y1, end_point_index_m, true);
+    if (rear_scan){
+      updateLogOdsWithBresenham(rear_x0, rear_y0, x1, y1, end_point_index_m, true);
+    }
+    else {
+      updateLogOdsWithBresenham(x0, y0, x1, y1, end_point_index_m, true);
+    }
   }
 }
 
