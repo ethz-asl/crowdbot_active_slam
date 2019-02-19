@@ -1,14 +1,29 @@
 <?xml version="1.0"?>
 <launch>
+
+  <node pkg="laser_filters" type="scan_to_scan_filter_chain"
+      name="laser_filter_rear">
+    <rosparam command="load" file="$(find crowdbot_active_slam)/config/laser_filter.yaml" />
+    <remap from="scan" to="/sick_laser_rear/scan" />
+    <remap from="scan_filtered" to="/sick_laser_rear/scan_filtered" />
+  </node>
+
+  <node pkg="laser_filters" type="scan_to_scan_filter_chain"
+      name="laser_filter_front">
+    <rosparam command="load" file="$(find crowdbot_active_slam)/config/laser_filter.yaml" />
+    <remap from="scan" to="/sick_laser_front/scan" />
+    <remap from="scan_filtered" to="/sick_laser_front/scan_filtered" />
+  </node>
+
   <node pkg="asl_pepper_sensor_preprocessing" type="crop_laser_scan" name="crop_rear_scan" output="screen">
       <param name="crop_angle_min" type="double" value="-2.2" />
       <param name="crop_angle_max" type="double" value="2.2" />
-      <remap from="/crop_rear_scan/scan" to="/sick_laser_rear/scan"/>
-      <remap from="/crop_rear_scan/cropped_scan" to="/sick_laser_rear/cropped_scan_2"/>
+      <remap from="/crop_rear_scan/scan" to="/sick_laser_rear/scan_filtered"/>
+      <remap from="/crop_rear_scan/cropped_scan" to="/sick_laser_rear/scan_filtered_cropped"/>
   </node>
 
   <node pkg="crowdbot_active_slam" type="combined_laser_scans" name="combined_laser_scans" output="screen">
-    <remap from="scan1" to="/sick_laser_front/scan"/>
-    <remap from="scan2_cloud" to="/sick_laser_rear/cropped_scan_2"/>
+    <remap from="scan1" to="/sick_laser_front/scan_filtered"/>
+    <remap from="scan2_cloud" to="/sick_laser_rear/scan_filtered_cropped"/>
   </node>
 </launch>
