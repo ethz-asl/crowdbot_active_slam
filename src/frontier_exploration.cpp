@@ -95,7 +95,20 @@ bool FrontierExploration::serviceCallback(
 
   // Init with robot pose as a starting point of the search.
   // Assumption: robot pose is a free space
-  breadth_first_search.push(robot_x_cell + robot_y_cell * map_width_);
+  if (latest_map_msg_.data[robot_x_cell + robot_y_cell * map_width_] == -1){
+    if (latest_map_msg_.data[robot_x_cell + 10 + robot_y_cell * map_width_] == 0){
+      breadth_first_search.push(robot_x_cell + 10 + robot_y_cell * map_width_);
+    }
+    else if (latest_map_msg_.data[robot_x_cell + (robot_y_cell + 10) * map_width_] == 0) {
+      breadth_first_search.push(robot_x_cell + (robot_y_cell + 10) * map_width_);
+    }
+    else {
+      ROS_WARN("Frontier exploration starts at unknown space and has no free space in front! Change orientation!");
+    }
+  }
+  else {
+    breadth_first_search.push(robot_x_cell + robot_y_cell * map_width_);
+  }
   visited_flag[breadth_first_search.front()] = true;
 
   // Search for frontiers
