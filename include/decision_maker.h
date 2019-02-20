@@ -16,6 +16,7 @@
 #include <crowdbot_active_slam/service_call.h>
 #include <crowdbot_active_slam/get_frontier_list.h>
 #include <crowdbot_active_slam/utility_calc.h>
+#include <std_srvs/Empty.h>
 #include <move_base_msgs/MoveBaseAction.h>
 #include <nav_msgs/GetPlan.h>
 #include <crowdbot_active_slam/get_map.h>
@@ -88,6 +89,7 @@ private:
   ros::ServiceClient get_plan_move_base_client_;
   ros::ServiceClient uncertainty_client_;
   ros::ServiceClient get_map_client_;
+  ros::ServiceClient clear_costmap_client_;
 
   // ros params
   int map_width_;

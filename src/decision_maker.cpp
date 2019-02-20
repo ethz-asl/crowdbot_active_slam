@@ -27,6 +27,8 @@ DecisionMaker::DecisionMaker(ros::NodeHandle nh, ros::NodeHandle nh_)
   utility_calc_client_ = nh_.serviceClient
         <crowdbot_active_slam::utility_calc>
         ("/utility_calc_service");
+  clear_costmap_client_ = nh_.serviceClient<std_srvs::Empty>
+                          ("/move_base/clear_costmaps");
 
   nh_.getParam("/graph_optimisation/map_width", map_width_);
   nh_.getParam("/graph_optimisation/map_height", map_height_);
@@ -343,6 +345,16 @@ void DecisionMaker::startExploration(){
   {
     ROS_ERROR("Failed to call service map_recalculation");
   }
+
+  ros::Duration(1).sleep();
+  std_srvs::Empty clear_costmap_srv;
+  if (clear_costmap_client_.call(clear_costmap_srv)){
+    ROS_INFO("Clear costmap call successfull");
+  }
+  else {
+    ROS_ERROR("Failed to call service move_base/clear_costmaps");
+  }
+
 }
 
 void DecisionMaker::saveGridMap(){
