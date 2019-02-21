@@ -20,6 +20,8 @@
 #include <move_base_msgs/MoveBaseAction.h>
 #include <nav_msgs/GetPlan.h>
 #include <crowdbot_active_slam/get_map.h>
+#include <sensor_msgs/Joy.h>
+#include <actionlib_msgs/GoalID.h>
 
 
 class DecisionMaker {
@@ -71,6 +73,13 @@ public:
     */
    void saveGeneralResults();
 
+   /**
+    *  Callback for joystick msgs (when using real pepper). Emergency stop if
+    *  pepper should do something unintended. Cancels current move base goal and
+    *  shuts down node.
+    */
+   void joyCallback(const sensor_msgs::Joy::ConstPtr& msg);
+
 private:
   // Node handler
   ros::NodeHandle nh_;
@@ -82,7 +91,9 @@ private:
 
   // Publisher, subscriber and services
   ros::Publisher plan_pub_;
+  ros::Publisher cancel_move_base_pub_;
   ros::Subscriber map_sub_;
+  ros::Subscriber joy_sub_;
   ros::ServiceClient frontier_exploration_client_;
   ros::ServiceClient map_recalculation_client_;
   ros::ServiceClient utility_calc_client_;

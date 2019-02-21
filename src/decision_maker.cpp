@@ -9,6 +9,10 @@ DecisionMaker::DecisionMaker(ros::NodeHandle nh, ros::NodeHandle nh_)
 
   // Publisher
   plan_pub_ = nh_.advertise<nav_msgs::Path>("plans_path", 1);
+  cancel_move_base_pub_ = nh_.advertise<actionlib_msgs::GoalID>("/move_base/cancel", 1);
+
+  // Subscriber
+  joy_sub_ = nh_.subscribe("/joy", 10, &DecisionMaker::joyCallback, this);
 
   // Init service clients
   frontier_exploration_client_ = nh_.serviceClient
@@ -434,6 +438,14 @@ void DecisionMaker::saveGeneralResults(){
   }
   else{
     ROS_INFO("Could not open general_results.txt!");
+  }
+}
+
+void DecisionMaker::joyCallback(const sensor_msgs::Joy::ConstPtr& msg){
+  if (msg->buttons[2] == 1){
+    actionlib_msgs::GoalID cancel;
+    cancel_move_base_pub_.publish(cancel);
+    ros::shutdown();
   }
 }
 

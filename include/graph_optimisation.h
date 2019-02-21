@@ -31,6 +31,8 @@
 #include <crowdbot_active_slam/utility_calc.h>
 #include <crowdbot_active_slam/get_map.h>
 #include <crowdbot_active_slam/current_pose.h>
+#include <sensor_msgs/Joy.h>
+#include <actionlib_msgs/GoalID.h>
 #include <gazebo_msgs/GetModelState.h>
 #include <message_filters/subscriber.h>
 #include <message_filters/time_synchronizer.h>
@@ -107,7 +109,7 @@ public:
    *  A scan matcher callback on Pose estimates and used laser scans
    *  which does Graph construction and optimisation.
    */
- void scanCallback(const sensor_msgs::LaserScan::ConstPtr& scan_msg);
+  void scanCallback(const sensor_msgs::LaserScan::ConstPtr& scan_msg);
 
   /**
    *  Service callback for saving current uncertainty matrix along path
@@ -137,10 +139,23 @@ public:
     crowdbot_active_slam::get_map::Request &request,
     crowdbot_active_slam::get_map::Response &response);
 
+  /**
+   *  Service callback for receiving current pose from graph
+   */
   bool currentPoseNodeServiceCallback(
     crowdbot_active_slam::current_pose::Request &request,
     crowdbot_active_slam::current_pose::Response &response);
 
+  /**
+   *  Callback for joystick msgs (when using real pepper). Emergency stop if
+   *  pepper should do something unintended. Cancels current move base goal and
+   *  shuts down node.
+   */
+  void joyCallback(const sensor_msgs::Joy::ConstPtr& msg);
+
+  /**
+   *  Function which publishes map at certain rate. (Used in seperate thread)
+   */
   void pubMap();
 
 private:
@@ -156,10 +171,12 @@ private:
 
   // Service, Publisher and Subscriber
   ros::Subscriber scan_sub_;
+  ros::Subscriber joy_sub_;
   ros::Publisher path_pub_;
   ros::Publisher action_path_pub_;
   ros::Publisher map_pub_;
   ros::Publisher map_pub_for_static_scan_comb_;
+  ros::Publisher cancel_move_base_pub_;
   ros::ServiceServer map_recalc_service_;
   ros::ServiceServer get_map_service_;
   ros::ServiceServer utility_calc_service_;

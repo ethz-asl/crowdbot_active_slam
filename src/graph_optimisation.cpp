@@ -39,11 +39,13 @@ void GraphOptimiser::initParams(){
 
   // Initialise subscriber and publisher
   scan_sub_ = nh_.subscribe(scan_callback_topic_, 10, &GraphOptimiser::scanCallback, this);
+  joy_sub_ = nh_.subscribe("/joy", 10, &GraphOptimiser::joyCallback, this);
   path_pub_ = nh_.advertise<nav_msgs::Path>("graph_path", 1);
   action_path_pub_ = nh_.advertise<nav_msgs::Path>("action_graph", 1);
   map_pub_ = nh_.advertise<nav_msgs::OccupancyGrid>("occupancy_map", 1);
   map_pub_for_static_scan_comb_ =
   nh_.advertise<nav_msgs::OccupancyGrid>("map_for_static_scan_extractor", 1);
+  cancel_move_base_pub_ = nh_.advertise<actionlib_msgs::GoalID>("/move_base/cancel", 1);
 
   // Initialise map service
   uncertainty_service_ = nh_.advertiseService("save_uncertainty_service",
@@ -1524,6 +1526,14 @@ bool GraphOptimiser::currentPoseNodeServiceCallback(
     crowdbot_active_slam::current_pose::Response &response){
   response.current_pose = latest_pose_estimate_;
   return true;
+}
+
+void GraphOptimiser::joyCallback(const sensor_msgs::Joy::ConstPtr& msg){
+  if (msg->buttons[2] == 1){
+    actionlib_msgs::GoalID cancel;
+    cancel_move_base_pub_.publish(cancel);
+    ros::shutdown();
+  }
 }
 
 void GraphOptimiser::pubMap(){
