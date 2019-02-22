@@ -13,13 +13,13 @@
     <param name="node_dist_angular" value="0.3"/>
 
     <!-- params for frontend scan matcher -->
-    <param name="frontend_max_iterations" value="40"/>
+    <param name="frontend_max_iterations" value="20"/>
     <param name="frontend_max_correspondence_dist" value="0.5"/>
     <param name="frontend_max_angular_correction_deg" value="20"/>
     <param name="frontend_max_linear_correction" value="0.2"/>
-    <param name="frontend_outliers_maxPerc" value="0.96"/>
+    <param name="frontend_outliers_maxPerc" value="0.97"/>
     <param name="frontend_orientation_neighbourhood" value="20"/>
-    <param name="frontend_outliers_adaptive_order" value="0.96"/>
+    <param name="frontend_outliers_adaptive_order" value="0.97"/>
     <param name="frontend_do_compute_covariance" value="1"/>
     <!-- sigma = 0.02(sick lidar) + 0.01(combination/tf/reflection error) -->
     <param name="frontend_sigma" value="0.03"/>

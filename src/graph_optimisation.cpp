@@ -1333,6 +1333,10 @@ void GraphOptimiser::scanCallback(
       double y_low = current_pose2_map.y() - lc_radius_;
       double lc_radius_squared = lc_radius_ * lc_radius_;
 
+      int test = 0;
+      if (node_counter_ > 5){
+        test = node_counter_ - 5;
+      }
       for (int i = 0; i < node_counter_ - 1; i++){
         Pose2 tmp_pose2 = *dynamic_cast<const Pose2*>(&pose_estimates_.at(i));
 
@@ -1365,7 +1369,7 @@ void GraphOptimiser::scanCallback(
 
             // We want only one loop closing (oldest) TODO: find better solution
             if (sm_icp_result_.valid){
-              if (sm_icp_result_.nvalid > 400 && sm_icp_result_.error < 50){
+              if (sm_icp_result_.nvalid > 400 && sm_icp_result_.error < 60){
                 // Get tf of scan matching result and transform to map frame
                 tf::Transform pose_diff_tf;
                 pose_diff_tf = xythetaToTF(sm_icp_result_.x[0],
@@ -1389,12 +1393,21 @@ void GraphOptimiser::scanCallback(
                 // Add new factor between current_pose2_ and node i
                 graph_.add(BetweenFactor<Pose2>(node_counter_, i, lc_mean,
                            scan_match_noise));
-                break;
+
+                if (i < (node_counter_ - 5) && node_counter_ > 5){
+                  i = node_counter_ - 5;
+                }
+                else {
+                  break;
+                }
               }
               else {
                 ROS_WARN("Loop closing: not enough correspondances or error too high! Taking next point if available");
                 std::cout << "error:      " << sm_icp_result_.error << std::endl;
                 std::cout << "nvalid:     " << sm_icp_result_.nvalid << std::endl;
+                if (i < (node_counter_ - 5)){
+                  i += 2;
+                }
               }
             }
             else {
