@@ -1100,7 +1100,7 @@ bool GraphOptimiser::utilityCalcServiceCallback(
                          log(eivals[1].real()) +
                          log(eivals[2].real());
     sigma_temp = exp(1.0 / 3.0 * sum_of_logs);
-    alpha.push_back(1.0 + sigma_norm_ / (10 * sigma_temp));
+    alpha.push_back(1.0 + sigma_norm_ / (sigma_temp));
   }
 
   std::map<int, int> subset;
@@ -1495,7 +1495,7 @@ void GraphOptimiser::scanCallback(
     double sigma = exp(1.0 / 3.0 * sum_of_logs);
     double sigma_norm = exp(1.0/3.0 * (2*log(map_resolution_ * map_resolution_) +
                         log(pow(atan(map_resolution_/10.0), 2))));
-    double alpha = (1.0 + 0.1 * sigma_norm / sigma);
+    double alpha = (1.0 + sigma_norm / sigma);
     std::cout << "sigma: " << sigma << std::endl;
     std::cout << "alpha: " << alpha << std::endl;
   }else{
