@@ -133,11 +133,17 @@ bool FrontierExploration::serviceCallback(
         geometry_msgs::Pose2D frontier_centroid;
         if (getFrontierCentroid(neighbour_vec[i], frontier_flag, map_width_, map_height_,
                                 map_resolution_, frontier_centroid)){
-          response.frontier_list.push_back(frontier_centroid);
+          // Check if frontier is not on robot position(problem on initialisation)
+          if (abs(frontier_centroid.x - robot_x) > 0.5 &&
+              abs(frontier_centroid.y - robot_y) > 0.5){
+            response.frontier_list.push_back(frontier_centroid);
+          }
         }
       }
     }
   }
+
+  // Add starting pose as frontier TODO
 
   // Generate GridCells msg of frontier centroids
   nav_msgs::GridCells frontier_points_msg;
