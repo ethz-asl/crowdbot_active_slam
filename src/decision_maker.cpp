@@ -219,8 +219,8 @@ void DecisionMaker::startExploration(){
     ROS_ERROR("Failed to call service frontier_exploration");
   }
 
-  int frontier_size = frontier_srv.response.frontier_list.size();
-  if (frontier_size == 0){
+  // Check if frontier list empty
+  if (frontier_srv.response.frontier_list.size() == 0){
     ROS_INFO("Exploration finished!");
     end_time_ = ros::Time::now();
 
@@ -254,12 +254,22 @@ void DecisionMaker::startExploration(){
   std::vector<double>::iterator path_sizes_it;
   int goal_id = 0;
 
-  for (int i = 0; i < frontier_size; i++){
+  for (int i = 0; i < frontier_srv.response.frontier_list.size(); i++){
     // Get action plan
     get_plan.request.start = pose2DToPoseStamped(frontier_srv.response.start_pose);
     get_plan.request.goal = pose2DToPoseStamped(frontier_srv.response.frontier_list[i]);
-    get_plan.request.tolerance = 0.3;
+    // if using NavfnROS set tolerance to 0.0. This tolerance is used from move_base
+    // to find a goal. But NavfnROS has itself a tolerance, which can be set
+    // from rosparams. If both values set can screw things up.
+    // If using Global planner use this tolerance as itself is not using rosparam
+    // tolerance!!
+    get_plan.request.tolerance = 0.0;
     get_plan_move_base_client_.call(get_plan);
+    if (get_plan.response.plan.poses.size() == 0){
+      frontier_srv.response.frontier_list.erase(frontier_srv.response.frontier_list.begin() + i);
+      i -= 1;
+      continue;
+    }
     action_plan = get_plan.response.plan;
     action_plan.header.frame_id = "/map";
     plan_pub_.publish(action_plan);
@@ -267,7 +277,7 @@ void DecisionMaker::startExploration(){
     if (exploration_type_ == "shortest_frontier"){
       double length = 0;
       if (action_plan.poses.size() < 3){
-        length = 1000;
+        length = 10000;
       }
       else {
         for (int j = 1; j < action_plan.poses.size(); j++){
@@ -291,6 +301,32 @@ void DecisionMaker::startExploration(){
       // Save utility values in vec
       utility_vec.push_back(utility.response.utility);
     }
+  }
+
+  // Check again if frontier list empty
+  if (frontier_srv.response.frontier_list.size() == 0){
+    ROS_INFO("Exploration finished!");
+    end_time_ = ros::Time::now();
+
+    // Save general test information
+    saveGeneralResults();
+
+    // Save the occupancy grid map
+    saveGridMap();
+
+    // Save uncertainties along path
+    crowdbot_active_slam::service_call uncertainty_srv;
+    uncertainty_srv.request.save_path = save_directory_path_;
+    if (uncertainty_client_.call(uncertainty_srv)){
+      ROS_INFO("Uncertainties of path have been saved!");
+    }
+    else{
+      ROS_INFO("Uncertainty service failed!");
+    }
+
+    // Shutdown
+    ROS_INFO("This node will be shutdown now!");
+    ros::shutdown();
   }
 
   if (exploration_type_ == "shortest_frontier"){

@@ -86,4 +86,4 @@ recovery_behavior_enabled: false
 
 NavfnROS:
   allow_unknown: false
-  default_tolerance: 2.5
+  default_tolerance: 0.5
