@@ -134,8 +134,9 @@ bool FrontierExploration::serviceCallback(
         if (getFrontierCentroid(neighbour_vec[i], frontier_flag, map_width_, map_height_,
                                 map_resolution_, frontier_centroid)){
           // Check if frontier is not on robot position(problem on initialisation)
-          if (abs(frontier_centroid.x - robot_x) > 0.5 &&
-              abs(frontier_centroid.y - robot_y) > 0.5){
+          if (abs(frontier_centroid.x - robot_x) < 0.8 &&
+              abs(frontier_centroid.y - robot_y) < 0.8){}
+          else {
             response.frontier_list.push_back(frontier_centroid);
           }
         }
