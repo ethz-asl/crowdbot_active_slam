@@ -117,6 +117,7 @@ private:
   ros::Time start_time_;
   ros::Time end_time_;
   std::string save_directory_path_;
+  bool return_to_start_;
 };
 
 

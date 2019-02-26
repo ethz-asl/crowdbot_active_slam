@@ -68,6 +68,9 @@ DecisionMaker::DecisionMaker(ros::NodeHandle nh, ros::NodeHandle nh_)
   start_time_ = ros::Time::now();
   // Wait until time is not 0
   while (start_time_.toSec() == 0) start_time_ = ros::Time::now();
+
+  //
+  return_to_start_ = false;
 }
 
 DecisionMaker::~DecisionMaker() {
@@ -220,7 +223,7 @@ void DecisionMaker::startExploration(){
   }
 
   // Check if frontier list empty
-  if (frontier_srv.response.frontier_list.size() == 0){
+  if (frontier_srv.response.frontier_list.size() == 0 && return_to_start_){
     ROS_INFO("Exploration finished!");
     end_time_ = ros::Time::now();
 
@@ -243,6 +246,14 @@ void DecisionMaker::startExploration(){
     // Shutdown
     ROS_INFO("This node will be shutdown now!");
     ros::shutdown();
+  }
+  else if (frontier_srv.response.frontier_list.size() == 0 && !return_to_start_){
+    geometry_msgs::Pose2D start_pose;
+    start_pose.x = 0;
+    start_pose.y = 0;
+    start_pose.theta = 0;
+    frontier_srv.response.frontier_list.push_back(start_pose);
+    return_to_start_ = true;
   }
 
   nav_msgs::Path action_plan;
@@ -304,7 +315,7 @@ void DecisionMaker::startExploration(){
   }
 
   // Check again if frontier list empty
-  if (frontier_srv.response.frontier_list.size() == 0){
+  if (frontier_srv.response.frontier_list.size() == 0 && return_to_start_){
     ROS_INFO("Exploration finished!");
     end_time_ = ros::Time::now();
 
@@ -327,6 +338,22 @@ void DecisionMaker::startExploration(){
     // Shutdown
     ROS_INFO("This node will be shutdown now!");
     ros::shutdown();
+  }
+  else if (frontier_srv.response.frontier_list.size() == 0 && !return_to_start_) {
+    geometry_msgs::Pose2D start_pose;
+    start_pose.x = 0;
+    start_pose.y = 0;
+    start_pose.theta = 0;
+    frontier_srv.response.frontier_list.push_back(start_pose);
+    return_to_start_ = true;
+    ROS_INFO("start pose added!2");
+    if (exploration_type_ == "shortest_frontier"){
+      path_sizes.push_back(10);
+    }
+    if (exploration_type_ == "utility_standard" ||
+        exploration_type_ == "utility_normalized"){
+      utility_vec.push_back(10);
+    }
   }
 
   if (exploration_type_ == "shortest_frontier"){
@@ -365,7 +392,7 @@ void DecisionMaker::startExploration(){
 
   goal_client.sendGoal(goal);
 
-  bool finished_before_timeout = goal_client.waitForResult(ros::Duration(150.0));
+  bool finished_before_timeout = goal_client.waitForResult(ros::Duration(180.0));
 
   if (finished_before_timeout)
   {
@@ -375,7 +402,7 @@ void DecisionMaker::startExploration(){
   else
     ROS_INFO("Action did not finish before the time out.");
 
-  ros::Duration(1).sleep();
+  // ros::Duration(1.5).sleep();
   crowdbot_active_slam::service_call map_srv;
   if (map_recalculation_client_.call(map_srv))
   {
@@ -386,7 +413,7 @@ void DecisionMaker::startExploration(){
     ROS_ERROR("Failed to call service map_recalculation");
   }
 
-  ros::Duration(1).sleep();
+  // ros::Duration(1.5).sleep();
   std_srvs::Empty clear_costmap_srv;
   if (clear_costmap_client_.call(clear_costmap_srv)){
     ROS_INFO("Clear costmap call successfull");
@@ -394,7 +421,7 @@ void DecisionMaker::startExploration(){
   else {
     ROS_ERROR("Failed to call service move_base/clear_costmaps");
   }
-
+  // ros::Duration(1.0).sleep();
 }
 
 void DecisionMaker::saveGridMap(){

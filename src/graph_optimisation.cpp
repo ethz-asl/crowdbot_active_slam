@@ -935,9 +935,12 @@ bool GraphOptimiser::saveUncertaintyMatServiceCallback(
 bool GraphOptimiser::mapRecalculationServiceCallback(
   crowdbot_active_slam::service_call::Request &request,
   crowdbot_active_slam::service_call::Response &response){
+  ROS_INFO("Started Map recalculation!");
 
   // Draw the whole map
   drawMap(pose_estimates_, keyframe_ldp_vec_);
+  ROS_INFO("Finished Map recalculation!");
+
   return true;
   }
 
