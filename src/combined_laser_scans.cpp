@@ -232,7 +232,12 @@ class LaserScanCombiner {
       // Fill in ranges.
       for ( size_t j = 0; j < cropped_len; j++ ) {
         size_t i = j + i_first;
-        cropped_scan.ranges.at(j) = scan_msg->ranges.at(i);
+        if (scan_msg->ranges.at(i) < cropped_scan.range_min){
+          cropped_scan.ranges.at(j) = 0;
+        }
+        else {
+          cropped_scan.ranges.at(j) = scan_msg->ranges.at(i);
+        }
       }
 
       // Fill in intensities. if no intensities, spoof intensities
@@ -282,8 +287,14 @@ class LaserScanCombiner {
           continue;
         }
         // Fill values
-        combined_scan.ranges.at(i*kResolutionUpsampling) = front_msg->ranges.at(i);
-        combined_scan.intensities.at(i*kResolutionUpsampling) = front_msg->intensities.at(i);
+        if (front_msg->ranges.at(i) < combined_scan.range_min){
+          combined_scan.ranges.at(i*kResolutionUpsampling) = 0;
+          combined_scan.intensities.at(i*kResolutionUpsampling) = 0;
+        }
+        else {
+          combined_scan.ranges.at(i*kResolutionUpsampling) = front_msg->ranges.at(i);
+          combined_scan.intensities.at(i*kResolutionUpsampling) = front_msg->intensities.at(i);
+        }
       }
 
       VLOG(3) << "";
