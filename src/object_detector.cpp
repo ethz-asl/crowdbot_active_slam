@@ -24,7 +24,8 @@ ObjectDetector::~ObjectDetector(){}
 void ObjectDetector::detectObjectsFromScan(sensor_msgs::LaserScan& dynamic_laser_msg,
                                            sensor_msgs::LaserScan& raw_laser_msg,
                                            list<map<int, double>>& normal_clusters,
-                                           list<map<int, double>>& occluded_clusters){
+                                           list<map<int, double>>& occluded_clusters,
+                                           int upsampling_factor){
   // Init cluster maps
   map<int, double> temp_cluster;
   map<int, double> first_cluster;
@@ -36,29 +37,40 @@ void ObjectDetector::detectObjectsFromScan(sensor_msgs::LaserScan& dynamic_laser
   bool first_cluster_finished = false;
 
   // Predefine constant variables
-  double delta_theta = dynamic_laser_msg.angle_increment;
+  double delta_theta = upsampling_factor * dynamic_laser_msg.angle_increment;
   double constant_factor = sin(delta_theta) / sin(lambda_ - delta_theta);
   double three_sigma = 3 * sigma_;
   int scan_size = dynamic_laser_msg.ranges.size();
+  int jump = 1;
+  int start_id = 0;
+
+  // Determine first id which has nonzero values
+  for (size_t i = 0; i < scan_size; i++){
+    if (raw_laser_msg.ranges[i] != 0){
+      start_id = i;
+      break;
+    }
+  }
 
   // Iterate through all scan points and decide size of cluster and if occluded
-  for (size_t i = 0; i < scan_size; i++){
-    if ((i == scan_size - 1 && dynamic_laser_msg.ranges[0] != 0)
-        || (i != scan_size - 1 && dynamic_laser_msg.ranges[(i + 1) % scan_size] != 0)){
+  for (size_t i = start_id; i < scan_size; i++){
+    if (raw_laser_msg.ranges[(i + jump) % scan_size] == 0){
+      jump += 1;
+      i -= 1;
+      continue;
+    }
+    int next_id = (i + jump) % scan_size;
+    if ((i <= scan_size - 1 && i + jump >= scan_size &&
+         dynamic_laser_msg.ranges[next_id] != 0)
+        || (i != scan_size - 1 && dynamic_laser_msg.ranges[next_id] != 0)){
       if (dynamic_laser_msg.ranges[i] != 0){
         // Compute maximal distance to be in a cluster
         double d_max = dynamic_laser_msg.ranges[i] * constant_factor + three_sigma;
 
         // Compute distance between two scan points (formula in polar coordinates)
         double distance;
-        if (i == scan_size - 1){
-          distance = sqrt(pow(dynamic_laser_msg.ranges[0], 2) + pow(dynamic_laser_msg.ranges[i], 2)
-                - 2 * dynamic_laser_msg.ranges[0] * dynamic_laser_msg.ranges[i] * cos(delta_theta));
-        }
-        else {
-          distance = sqrt(pow(dynamic_laser_msg.ranges[i + 1], 2) + pow(dynamic_laser_msg.ranges[i], 2)
-            - 2 * dynamic_laser_msg.ranges[i + 1] * dynamic_laser_msg.ranges[i] * cos(delta_theta));
-        }
+        distance = sqrt(pow(dynamic_laser_msg.ranges[next_id], 2) + pow(dynamic_laser_msg.ranges[i], 2)
+              - 2 * dynamic_laser_msg.ranges[next_id] * dynamic_laser_msg.ranges[i] * cos(delta_theta));
 
         // Check if distance smaller than d_max
         if (distance < d_max){
@@ -70,7 +82,7 @@ void ObjectDetector::detectObjectsFromScan(sensor_msgs::LaserScan& dynamic_laser
           else {
             temp_cluster.insert(make_pair(i, dynamic_laser_msg.ranges[i]));
             // If we are at the last scan point merge temp_cluster with first_cluster
-            if (i == scan_size - 1){
+            if (i <= scan_size - 1 && i + jump >= scan_size){
               if (!first_cluster.empty()){
                 temp_cluster.insert(first_cluster.begin(), first_cluster.end());
               }
@@ -90,7 +102,7 @@ void ObjectDetector::detectObjectsFromScan(sensor_msgs::LaserScan& dynamic_laser
           if (!first_cluster_finished){
             first_cluster.insert(make_pair(i, dynamic_laser_msg.ranges[i]));
             first_cluster_finished = true;
-            if (dynamic_laser_msg.ranges[(i + 1) % scan_size] + 0.1 >
+            if (dynamic_laser_msg.ranges[next_id] + 0.1 >
                 dynamic_laser_msg.ranges[i]){
               first_cluster_occluded = false;
               start_occluded = true;
@@ -106,7 +118,7 @@ void ObjectDetector::detectObjectsFromScan(sensor_msgs::LaserScan& dynamic_laser
               temp_cluster.insert(make_pair(i, dynamic_laser_msg.ranges[i]));
 
               // Check if end is occluded or not
-              if (dynamic_laser_msg.ranges[(i + 1) % scan_size] + 0.1 >
+              if (dynamic_laser_msg.ranges[next_id] + 0.1 >
                   dynamic_laser_msg.ranges[i]){
                 end_occluded = false;
               }
@@ -128,7 +140,7 @@ void ObjectDetector::detectObjectsFromScan(sensor_msgs::LaserScan& dynamic_laser
             // Noise (or single occluded object)
             else {
               // Check if start is occluded or not
-              if (dynamic_laser_msg.ranges[(i + 1) % scan_size] + 0.1 >
+              if (dynamic_laser_msg.ranges[next_id] + 0.1 >
                   dynamic_laser_msg.ranges[i]){
                 start_occluded = true;
               }
@@ -141,7 +153,7 @@ void ObjectDetector::detectObjectsFromScan(sensor_msgs::LaserScan& dynamic_laser
       }
       else{
         // Check if start is occluded or not
-        if (dynamic_laser_msg.ranges[(i + 1) % scan_size] + 0.1 >
+        if (dynamic_laser_msg.ranges[next_id] + 0.1 >
             raw_laser_msg.ranges[i]){
           start_occluded = true;
         }
@@ -156,13 +168,13 @@ void ObjectDetector::detectObjectsFromScan(sensor_msgs::LaserScan& dynamic_laser
       // Finish current cluster
       // Check if first cluster already finished
       if (!first_cluster_finished){
-        if (i == 0 && dynamic_laser_msg.ranges[i] == 0){
+        if (i == start_id && dynamic_laser_msg.ranges[start_id] == 0){
           first_cluster_finished = true;
         }
         else {
           first_cluster.insert(make_pair(i, dynamic_laser_msg.ranges[i]));
           first_cluster_finished = true;
-          if (raw_laser_msg.ranges[(i + 1) % scan_size] > dynamic_laser_msg.ranges[i] + 0.1){
+          if (raw_laser_msg.ranges[next_id] > dynamic_laser_msg.ranges[i] + 0.1){
             first_cluster_occluded = false;
             start_occluded = true;
           }
@@ -178,7 +190,7 @@ void ObjectDetector::detectObjectsFromScan(sensor_msgs::LaserScan& dynamic_laser
           temp_cluster.insert(make_pair(i, dynamic_laser_msg.ranges[i]));
 
           // Check if end is occluded or not
-          if (raw_laser_msg.ranges[(i + 1) % scan_size] > dynamic_laser_msg.ranges[i] + 0.1){
+          if (raw_laser_msg.ranges[next_id] > dynamic_laser_msg.ranges[i] + 0.1){
             end_occluded = false;
           }
           else {
@@ -202,5 +214,8 @@ void ObjectDetector::detectObjectsFromScan(sensor_msgs::LaserScan& dynamic_laser
         }
       }
     }
+    // Reset jump
+    i += jump - 1;
+    jump = 1;
   }
 }
