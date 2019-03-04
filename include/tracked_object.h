@@ -39,6 +39,10 @@ public:
   std::string current_occlusion;
   std::string dynamic_or_static;
   int unknown_since;
+  int unknown_since_ever;
+  int velocity_counter;
+  double x_vel_sum;
+  double y_vel_sum;
 
 private:
   // State

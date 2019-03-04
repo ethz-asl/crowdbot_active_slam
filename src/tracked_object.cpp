@@ -27,6 +27,10 @@ TrackedObject::TrackedObject(double x, double y){
 
   // Init counter for not seen
   counter_not_seen = 0;
+
+  velocity_counter = 0;
+  x_vel_sum = 0;
+  y_vel_sum = 0;
 }
 
 TrackedObject::~TrackedObject(){}
