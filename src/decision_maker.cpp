@@ -212,7 +212,7 @@ nav_msgs::Path DecisionMaker::planPathSBPL(geometry_msgs::Pose2D start_pose,
 void DecisionMaker::startExploration(){
   // Get frontiers
   crowdbot_active_slam::get_frontier_list frontier_srv;
-
+  ros::Duration(0.5).sleep();
   if (frontier_exploration_client_.call(frontier_srv))
   {
     ROS_INFO("Frontier exploration call successfull");
@@ -413,7 +413,7 @@ void DecisionMaker::startExploration(){
     ROS_ERROR("Failed to call service map_recalculation");
   }
 
-  // ros::Duration(1.5).sleep();
+  ros::Duration(1.5).sleep();
   std_srvs::Empty clear_costmap_srv;
   if (clear_costmap_client_.call(clear_costmap_srv)){
     ROS_INFO("Clear costmap call successfull");
@@ -421,7 +421,6 @@ void DecisionMaker::startExploration(){
   else {
     ROS_ERROR("Failed to call service move_base/clear_costmaps");
   }
-  // ros::Duration(1.0).sleep();
 }
 
 void DecisionMaker::saveGridMap(){
