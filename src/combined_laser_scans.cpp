@@ -16,12 +16,6 @@
 #include <laser_geometry/laser_geometry.h>
 #include <pcl_ros/transforms.h>
 
-#include <message_filters/subscriber.h>
-#include <message_filters/time_synchronizer.h>
-#include <message_filters/sync_policies/approximate_time.h>
-
-typedef message_filters::sync_policies::ApproximateTime
-        <sensor_msgs::LaserScan, sensor_msgs::LaserScan> SyncPolicy;
 
 namespace combine_laser_scans {
 
@@ -124,22 +118,15 @@ class LaserScanCombiner {
       nh_private_.getParam("rear_scan_crop_angle_max", kScanRearCropAngleMax);
 
       // Publishers and subscribers.
-      scan_1_sub_ = new message_filters::Subscriber<sensor_msgs::LaserScan>
-                    (nh_, kScan1Topic, 10);
-      scan_2_sub_ = new message_filters::Subscriber<sensor_msgs::LaserScan>
-                    (nh_, kScan2Topic, 10);
-      int q = 10; // queue size
-      sync_ = new message_filters::Synchronizer<SyncPolicy>
-              (SyncPolicy(q), *scan_1_sub_, *scan_2_sub_);
-      sync_->registerCallback(boost::bind(&LaserScanCombiner::scanCallback,
-                                          this, _1, _2));
+      scan_1_sub_ = nh_.subscribe(kScan1Topic, 1, &LaserScanCombiner::scan1Callback, this);
+      scan_2_sub_ = nh_.subscribe(kScan2Topic, 1, &LaserScanCombiner::scan2Callback, this);
+
+      new_scan_1_ = false;
+      new_scan_2_ = false;
+
       combined_scan_pub_ = nh_.advertise<sensor_msgs::LaserScan>(kCombinedScanTopic, 1);
     }
-    ~LaserScanCombiner() {
-      delete scan_1_sub_;
-      delete scan_2_sub_;
-      delete sync_;
-    }
+    ~LaserScanCombiner() {}
 
   protected:
     /// \brief returns value represents whether the callback should return
@@ -196,34 +183,34 @@ class LaserScanCombiner {
       return combined_scan;
     }
 
-    void cropRearScan(const sensor_msgs::LaserScan::ConstPtr& scan_msg,
+    void cropRearScan(sensor_msgs::LaserScan& scan_msg,
                       sensor_msgs::LaserScan& cropped_scan){
       // Find the index of the first and last points within angle crop
       double first_scan_index_after_anglemin =
-          (kScanRearCropAngleMin - scan_msg->angle_min) / scan_msg->angle_increment;
+          (kScanRearCropAngleMin - scan_msg.angle_min) / scan_msg.angle_increment;
       double last_scan_index_before_anglemax =
-          (kScanRearCropAngleMax - scan_msg->angle_min) / scan_msg->angle_increment;
+          (kScanRearCropAngleMax - scan_msg.angle_min) / scan_msg.angle_increment;
       if ( first_scan_index_after_anglemin < 0 || last_scan_index_before_anglemax < 0 ) {
               LOG(ERROR) << "Angle index should not have negative value:"
                 << first_scan_index_after_anglemin << " " << last_scan_index_before_anglemax << std::endl
-                << "angle_increment: " << scan_msg->angle_increment << ", angle_min: " << scan_msg->angle_min
+                << "angle_increment: " << scan_msg.angle_increment << ", angle_min: " << scan_msg.angle_min
                 << ", kScanCropAngleMin: " << kScanRearCropAngleMin
                 << ", kScanCropAngleMax: " << kScanRearCropAngleMax;
       }
       size_t i_first = std::max(0., std::ceil(first_scan_index_after_anglemin));
-      size_t i_last = std::min(std::floor(last_scan_index_before_anglemax), scan_msg->ranges.size() - 1.);
+      size_t i_last = std::min(std::floor(last_scan_index_before_anglemax), scan_msg.ranges.size() - 1.);
       size_t cropped_len = i_last - i_first + 1;
       // Angles
-      double angle_first = scan_msg->angle_min + i_first * scan_msg->angle_increment;
-      double angle_last = angle_first + (cropped_len - 1.) * scan_msg->angle_increment;
+      double angle_first = scan_msg.angle_min + i_first * scan_msg.angle_increment;
+      double angle_last = angle_first + (cropped_len - 1.) * scan_msg.angle_increment;
 
       // Generate the scan to fill in.
-      cropped_scan.header = scan_msg->header;
-      cropped_scan.angle_increment = scan_msg->angle_increment;
-      cropped_scan.time_increment = scan_msg->time_increment;
-      cropped_scan.scan_time = scan_msg->scan_time;
-      cropped_scan.range_min = scan_msg->range_min;
-      cropped_scan.range_max = scan_msg->range_max;
+      cropped_scan.header = scan_msg.header;
+      cropped_scan.angle_increment = scan_msg.angle_increment;
+      cropped_scan.time_increment = scan_msg.time_increment;
+      cropped_scan.scan_time = scan_msg.scan_time;
+      cropped_scan.range_min = scan_msg.range_min;
+      cropped_scan.range_max = scan_msg.range_max;
       cropped_scan.angle_min = angle_first;
       cropped_scan.angle_max = angle_last;
       cropped_scan.ranges.resize(cropped_len);
@@ -232,16 +219,16 @@ class LaserScanCombiner {
       // Fill in ranges.
       for ( size_t j = 0; j < cropped_len; j++ ) {
         size_t i = j + i_first;
-        if (scan_msg->ranges.at(i) < cropped_scan.range_min){
+        if (scan_msg.ranges.at(i) < cropped_scan.range_min){
           cropped_scan.ranges.at(j) = 0;
         }
         else {
-          cropped_scan.ranges.at(j) = scan_msg->ranges.at(i);
+          cropped_scan.ranges.at(j) = scan_msg.ranges.at(i);
         }
       }
 
       // Fill in intensities. if no intensities, spoof intensities
-      if ( scan_msg->intensities.size() == 0 ) {
+      if ( scan_msg.intensities.size() == 0 ) {
         for ( size_t j = 0; j < cropped_len; j++ ) {
           size_t i = j + i_first;
           cropped_scan.intensities.at(j) = 1.0;
@@ -249,51 +236,99 @@ class LaserScanCombiner {
       } else {
         for ( size_t j = 0; j < cropped_len; j++ ) {
           size_t i = j + i_first;
-          cropped_scan.intensities.at(j) = scan_msg->intensities.at(i);
+          cropped_scan.intensities.at(j) = scan_msg.intensities.at(i);
         }
       }
     }
 
-    void scanCallback(const sensor_msgs::LaserScan::ConstPtr& front_msg,
-                      const sensor_msgs::LaserScan::ConstPtr& rear_msg){
+    void scan1Callback(const sensor_msgs::LaserScan::ConstPtr& front_msg){
+      new_scan_1_ = true;
+      front_msg_ = *front_msg;
+      if (new_scan_1_ && new_scan_2_){
+        int duration = (front_msg_.header.stamp - rear_msg_.header.stamp).toSec();
+        if (duration < 0) duration = -duration;
+        if (duration < 0.02){
+          scanCallback(front_msg_, rear_msg_);
+          new_scan_1_ = false;
+          new_scan_2_ = false;
+        }
+        else {
+          ROS_WARN("combined_laser_scans: Skipping scan as stamps difference greater than 0.02");
+        }
+      }
+    }
+
+    void scan2Callback(const sensor_msgs::LaserScan::ConstPtr& rear_msg){
+      new_scan_2_ = true;
+      rear_msg_ = *rear_msg;
+      if (new_scan_1_ && new_scan_2_){
+        int duration = (front_msg_.header.stamp - rear_msg_.header.stamp).toSec();
+        if (duration < 0) duration = -duration;
+        if (duration < 0.02){
+          scanCallback(front_msg_, rear_msg_);
+          new_scan_1_ = false;
+          new_scan_2_ = false;
+        }
+        else {
+          ROS_WARN("combined_laser_scans: Skipping scan as stamps difference greater than 0.02");
+        }
+      }
+    }
+
+    void scanCallback(sensor_msgs::LaserScan& front_msg,
+                      sensor_msgs::LaserScan& rear_msg){
       VLOG(3) << "scan1callback";
       // Set the reference static transform between lasers.
-      if ( !reference_scan1_is_set_ ) {
-        reference_scan1_ = *front_msg;
-        reference_scan1_is_set_ = true;
-        LOG(INFO) << "First scan set as reference scan for sensor 1.";
+      if (front_msg.header.stamp < rear_msg.header.stamp){
+        if ( !reference_scan1_is_set_ ) {
+          reference_scan1_ = front_msg;
+          reference_scan1_is_set_ = true;
+          LOG(INFO) << "First scan set as reference scan for sensor 1.";
+        }
+        if ( !reference_scan2_is_set_ ) {
+          reference_scan2_ = rear_msg;
+          reference_scan2_is_set_ = true;
+          LOG(INFO) << "First scan set as reference scan for sensor 2.";
+        }
       }
-      if ( !reference_scan2_is_set_ ) {
-        reference_scan2_ = *rear_msg;
-        reference_scan2_is_set_ = true;
-        LOG(INFO) << "First scan set as reference scan for sensor 2.";
+      else {
+        if ( !reference_scan2_is_set_ ) {
+          reference_scan2_ = rear_msg;
+          reference_scan2_is_set_ = true;
+          LOG(INFO) << "First scan set as reference scan for sensor 2.";
+        }
+        if ( !reference_scan1_is_set_ ) {
+          reference_scan1_ = front_msg;
+          reference_scan1_is_set_ = true;
+          LOG(INFO) << "First scan set as reference scan for sensor 1.";
+        }
       }
       if ( setTFScan1To2() ) {
         return;
       }
 
       // Generate the scan to fill in.
-      sensor_msgs::LaserScan combined_scan = generateEmptyOutputScan(front_msg->header.stamp);
+      sensor_msgs::LaserScan combined_scan = generateEmptyOutputScan(front_msg.header.stamp);
 
       // fill values from Scan 1 to combined scan
       // as the new scan has n times the resolution, and both start with the same angle,
       // this should be equivalent to mapping original values to every other cell in the new scan.
       // (except for the last part, where no values exist in the original scan)
-      CHECK( combined_scan.angle_min == front_msg->angle_min ); // sanity check
-      for ( size_t i = 0; i < front_msg->ranges.size(); i++ ) {
+      CHECK( combined_scan.angle_min == front_msg.angle_min ); // sanity check
+      for ( size_t i = 0; i < front_msg.ranges.size(); i++ ) {
         // Crop angles outside of desired range (valid for pepper with laptop tray)
-        float angle = front_msg->angle_min + i * front_msg->angle_increment;
+        float angle = front_msg.angle_min + i * front_msg.angle_increment;
         if ( angle < kScanFrontCropAngleMin || angle > kScanFrontCropAngleMax ) {
           continue;
         }
         // Fill values
-        if (front_msg->ranges.at(i) < combined_scan.range_min){
+        if (front_msg.ranges.at(i) < combined_scan.range_min){
           combined_scan.ranges.at(i*kResolutionUpsampling) = 0;
           combined_scan.intensities.at(i*kResolutionUpsampling) = 0;
         }
         else {
-          combined_scan.ranges.at(i*kResolutionUpsampling) = front_msg->ranges.at(i);
-          combined_scan.intensities.at(i*kResolutionUpsampling) = front_msg->intensities.at(i);
+          combined_scan.ranges.at(i*kResolutionUpsampling) = front_msg.ranges.at(i);
+          combined_scan.intensities.at(i*kResolutionUpsampling) = front_msg.intensities.at(i);
         }
       }
 
@@ -388,9 +423,8 @@ class LaserScanCombiner {
     // ROS
     ros::NodeHandle& nh_;
     ros::NodeHandle& nh_private_;
-    message_filters::Subscriber<sensor_msgs::LaserScan> *scan_1_sub_;
-    message_filters::Subscriber<sensor_msgs::LaserScan> *scan_2_sub_;
-    message_filters::Synchronizer<SyncPolicy> *sync_;
+    ros::Subscriber scan_1_sub_;
+    ros::Subscriber scan_2_sub_;
     ros::Publisher combined_scan_pub_;
     tf::TransformListener tf_listener_;
     // State
@@ -410,6 +444,10 @@ class LaserScanCombiner {
     double kScanFrontCropAngleMax;
     double kScanRearCropAngleMin;
     double kScanRearCropAngleMax;
+    bool new_scan_1_;
+    bool new_scan_2_;
+    sensor_msgs::LaserScan front_msg_;
+    sensor_msgs::LaserScan rear_msg_;
 
 }; // class LaserScanCombiner
 
