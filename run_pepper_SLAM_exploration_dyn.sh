@@ -27,6 +27,24 @@ echo "Launching static scan extractor..."
 roslaunch crowdbot_active_slam static_scan_extractor_pepper.launch scan_topic:=/combined_scan_sync &
 pid="$pid $!"
 
+sleep 2s
+
+echo "Launching move_base..."
+roslaunch crowdbot_active_slam move_base_pepper.launch &
+pid="$pid $!"
+
+sleep 2s
+
+echo "Launching frontier exploration..."
+roslaunch crowdbot_active_slam frontier_exploration_service.launch &
+pid="$pid $!"
+
+sleep 2s
+
+echo "Launching decision maker..."
+roslaunch crowdbot_active_slam decision_maker.launch &
+pid="$pid $!"
+
 trap "echo Killing all processes.; kill -2 TERM $pid; exit" SIGINT SIGTERM
 
 sleep 24h
