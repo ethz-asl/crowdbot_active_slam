@@ -30,6 +30,8 @@ void GraphOptimiser::initParams(){
   nh_private_.param<float>("map_resolution", map_resolution_, 0.05);
   nh_private_.param<std::string>("robot_name", robot_name_, "pioneer_sim");
   nh_private_.param<std::string>("scan_callback_topic", scan_callback_topic_, "base_scan");
+  nh_private_.param<double>("time_thershold_frontend", time_thershold_frontend_, 0.08);
+  nh_private_.param<double>("time_thershold_loopclosing", time_thershold_loopclosing_, 0.12);
 
   // If using pepper get front scan crop params
   if (robot_name_ == "pepper_real"){
@@ -38,7 +40,7 @@ void GraphOptimiser::initParams(){
   }
 
   // Initialise subscriber and publisher
-  scan_sub_ = nh_.subscribe(scan_callback_topic_, 10, &GraphOptimiser::scanCallback, this);
+  scan_sub_ = nh_.subscribe(scan_callback_topic_, 3, &GraphOptimiser::scanCallback, this);
   joy_sub_ = nh_.subscribe("/joy", 10, &GraphOptimiser::joyCallback, this);
   path_pub_ = nh_.advertise<nav_msgs::Path>("graph_path", 1);
   action_path_pub_ = nh_.advertise<nav_msgs::Path>("action_graph", 1);
@@ -46,6 +48,7 @@ void GraphOptimiser::initParams(){
   map_pub_for_static_scan_comb_ =
   nh_.advertise<nav_msgs::OccupancyGrid>("map_for_static_scan_extractor", 1);
   cancel_move_base_pub_ = nh_.advertise<actionlib_msgs::GoalID>("/move_base/cancel", 1);
+  current_pose_pub_ = nh_.advertise<geometry_msgs::PoseStamped>("current_node_estimate", 1);
 
   // Initialise map service
   uncertainty_service_ = nh_.advertiseService("save_uncertainty_service",
@@ -206,7 +209,7 @@ void GraphOptimiser::initParams(){
   sm_icp_params_.epsilon_theta = sm_frontend_input_.epsilon_theta;
   sm_icp_params_.max_correspondence_dist = sm_frontend_input_.max_correspondence_dist;
   sm_icp_params_.use_corr_tricks = sm_frontend_input_.use_corr_tricks;
-  sm_icp_params_.restart = sm_frontend_input_.restart;
+  sm_icp_params_.restart = 0;
   sm_icp_params_.restart_threshold_mean_error = sm_frontend_input_.restart_threshold_mean_error;
   sm_icp_params_.restart_dt = sm_frontend_input_.restart_dt;
   sm_icp_params_.restart_dtheta = sm_frontend_input_.restart_dtheta;
@@ -1139,6 +1142,14 @@ bool GraphOptimiser::utilityCalcServiceCallback(
 
 void GraphOptimiser::scanCallback(
   const sensor_msgs::LaserScan::ConstPtr& scan_msg){
+  if ((ros::Time::now() - scan_msg->header.stamp).toSec() > time_thershold_frontend_){
+    ROS_WARN("Static_scan_extractor took too long, skipping this scan!");
+    std::cout << ros::Time::now() << std::endl;
+    std::cout << scan_msg->header.stamp << std::endl;
+    map_br_.sendTransform(tf::StampedTransform(map_to_odom_tf_, scan_msg->header.stamp,
+                        "map", "odom"));
+    return;
+  }
   // First scan intialisation
   if (!scan_callback_initialized_){
     scan_ranges_size_ = scan_msg->ranges.size();
@@ -1302,6 +1313,7 @@ void GraphOptimiser::scanCallback(
     latest_pose_estimate_ = pose2ToPoseStamped(last_pose2_map_);
     latest_pose_estimate_.header.stamp = scan_msg->header.stamp;
     prev_pose2_odom_ = current_pose2_odom_;
+    current_pose_pub_.publish(latest_pose_estimate_);
   }
   else {
     // Calculate some variables for decision if to add a new node
@@ -1341,6 +1353,12 @@ void GraphOptimiser::scanCallback(
         test = node_counter_ - 5;
       }
       for (int i = 0; i < node_counter_ - 1; i++){
+        // Check if still enough time for another factor
+        if ((ros::Time::now() - scan_msg->header.stamp).toSec() > time_thershold_loopclosing_){
+          ROS_WARN("SLAM node took too long, skipping further scan matching!(loop clossings)");
+          break;
+        }
+
         Pose2 tmp_pose2 = *dynamic_cast<const Pose2*>(&pose_estimates_.at(i));
 
         // Check if tmp_pose2 is in square region around current pose estimate
@@ -1484,10 +1502,13 @@ void GraphOptimiser::scanCallback(
 
   // Update map to odom tf
   if (new_node_){
-    map_br_.sendTransform(tf::StampedTransform(map_to_odom_tf_, ros::Time::now(),
+    map_br_.sendTransform(tf::StampedTransform(map_to_odom_tf_, scan_msg->header.stamp,
                         "map", "odom"));
     corr_ch_l_ = xythetaToTF(0, 0, 0);
     new_node_ = false;
+
+    // Publish latest node pose estimate
+    current_pose_pub_.publish(latest_pose_estimate_);
 
     // For debuging
     std::cout << isam_.marginalCovariance(node_counter_ - 1) << std::endl;
@@ -1516,7 +1537,7 @@ void GraphOptimiser::scanCallback(
 
     map_to_odom_tf_ = last_pose_tf * odom_transform;
 
-    map_br_.sendTransform(tf::StampedTransform(map_to_odom_tf_, ros::Time::now(),
+    map_br_.sendTransform(tf::StampedTransform(map_to_odom_tf_, scan_msg->header.stamp,
                         "map", "odom"));
   }
 

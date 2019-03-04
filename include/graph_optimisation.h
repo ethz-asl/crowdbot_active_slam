@@ -177,6 +177,7 @@ private:
   ros::Publisher map_pub_;
   ros::Publisher map_pub_for_static_scan_comb_;
   ros::Publisher cancel_move_base_pub_;
+  ros::Publisher current_pose_pub_;
   ros::ServiceServer map_recalc_service_;
   ros::ServiceServer get_map_service_;
   ros::ServiceServer utility_calc_service_;
@@ -256,6 +257,8 @@ private:
   double sigma_norm_;
   std::vector<gtsam::Matrix> uncertainty_matrices_path_;
   std::string scan_callback_topic_;
+  double time_thershold_frontend_;
+  double time_thershold_loopclosing_;
 };
 
 #endif  // GRAPH_OPTIMISATION_H
