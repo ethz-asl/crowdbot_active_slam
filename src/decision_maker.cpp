@@ -246,6 +246,7 @@ void DecisionMaker::startExploration(){
     // Shutdown
     ROS_INFO("This node will be shutdown now!");
     ros::shutdown();
+    return;
   }
   else if (frontier_srv.response.frontier_list.size() == 0 && !return_to_start_){
     geometry_msgs::Pose2D start_pose;
