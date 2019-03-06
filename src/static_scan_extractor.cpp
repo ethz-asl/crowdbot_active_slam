@@ -524,14 +524,14 @@ void StaticScanExtractor::scanCallback
           }
           if (tracked_objects_[i].dynamic_or_static == "dynamic" && temp_distance < 1){
             // Check if cluster is in velocity dependent ellipse
-            double a = 0.35;
+            double b = 0.35;
             double v_norm = 0.8;
-            double angle_temp = tan(tracked_objects_[i].state_mean[0] /
-                                    tracked_objects_[i].state_mean[1]);
-            double v = sqrt(pow(tracked_objects_[i].state_mean[0], 2) +
-                            pow(tracked_objects_[i].state_mean[1], 2));
-            double b = a * (1 + v / v_norm);
-            a = a * (1 + v / (10 * v_norm));
+            double angle_temp = atan(tracked_objects_[i].state_mean[3] /
+                                     tracked_objects_[i].state_mean[2]);
+            double v = sqrt(pow(tracked_objects_[i].state_mean[2], 2) +
+                            pow(tracked_objects_[i].state_mean[3], 2));
+            double a = b * (1 + v / v_norm);
+            b = b * (1 + v / (10 * v_norm));
             tf::Transform cluster_temp = xythetaToTF(all_means[j].x - tracked_objects_[i].state_mean[0],
                                                      all_means[j].y - tracked_objects_[i].state_mean[1],
                                                      0);
