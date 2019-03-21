@@ -36,7 +36,8 @@ public:
   void detectObjectsFromScan(sensor_msgs::LaserScan& dynamic_laser_msg,
                              sensor_msgs::LaserScan& raw_laser_msg,
                              list<map<int, double>>& normal_clusters,
-                             list<map<int, double>>& occluded_clusters);
+                             list<map<int, double>>& occluded_clusters,
+                             int upsampling_factor);
 
 private:
   // Laser scan variables

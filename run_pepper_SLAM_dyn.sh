@@ -18,7 +18,13 @@ pid="$pid $!"
 sleep 2s
 
 echo "Launching factor graph SLAM system..."
-roslaunch crowdbot_active_slam graph_optimisation_pepper.launch robot_name:=pepper_real scan_topic:=combined_scan_sync &
+roslaunch crowdbot_active_slam graph_optimisation_pepper.launch robot_name:=pepper_real scan_topic:=static_scan_extractor/static_scan &
+pid="$pid $!"
+
+sleep 2s
+
+echo "Launching static scan extractor..."
+roslaunch crowdbot_active_slam static_scan_extractor_pepper.launch scan_topic:=/combined_scan_sync &
 pid="$pid $!"
 
 trap "echo Killing all processes.; kill -2 TERM $pid; exit" SIGINT SIGTERM

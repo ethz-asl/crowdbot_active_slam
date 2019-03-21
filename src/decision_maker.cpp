@@ -9,6 +9,10 @@ DecisionMaker::DecisionMaker(ros::NodeHandle nh, ros::NodeHandle nh_)
 
   // Publisher
   plan_pub_ = nh_.advertise<nav_msgs::Path>("plans_path", 1);
+  cancel_move_base_pub_ = nh_.advertise<actionlib_msgs::GoalID>("/move_base/cancel", 1);
+
+  // Subscriber
+  joy_sub_ = nh_.subscribe("/joy", 10, &DecisionMaker::joyCallback, this);
 
   // Init service clients
   frontier_exploration_client_ = nh_.serviceClient
@@ -27,6 +31,8 @@ DecisionMaker::DecisionMaker(ros::NodeHandle nh, ros::NodeHandle nh_)
   utility_calc_client_ = nh_.serviceClient
         <crowdbot_active_slam::utility_calc>
         ("/utility_calc_service");
+  clear_costmap_client_ = nh_.serviceClient<std_srvs::Empty>
+                          ("/move_base/clear_costmaps");
 
   nh_.getParam("/graph_optimisation/map_width", map_width_);
   nh_.getParam("/graph_optimisation/map_height", map_height_);
@@ -62,6 +68,9 @@ DecisionMaker::DecisionMaker(ros::NodeHandle nh, ros::NodeHandle nh_)
   start_time_ = ros::Time::now();
   // Wait until time is not 0
   while (start_time_.toSec() == 0) start_time_ = ros::Time::now();
+
+  //
+  return_to_start_ = false;
 }
 
 DecisionMaker::~DecisionMaker() {
@@ -203,7 +212,7 @@ nav_msgs::Path DecisionMaker::planPathSBPL(geometry_msgs::Pose2D start_pose,
 void DecisionMaker::startExploration(){
   // Get frontiers
   crowdbot_active_slam::get_frontier_list frontier_srv;
-
+  ros::Duration(0.5).sleep();
   if (frontier_exploration_client_.call(frontier_srv))
   {
     ROS_INFO("Frontier exploration call successfull");
@@ -213,8 +222,101 @@ void DecisionMaker::startExploration(){
     ROS_ERROR("Failed to call service frontier_exploration");
   }
 
-  int frontier_size = frontier_srv.response.frontier_list.size();
-  if (frontier_size == 0){
+  // Check if frontier list empty
+  if (frontier_srv.response.frontier_list.size() == 0 && return_to_start_){
+    ROS_INFO("Exploration finished!");
+    end_time_ = ros::Time::now();
+
+    // Save general test information
+    saveGeneralResults();
+
+    // Save the occupancy grid map
+    saveGridMap();
+
+    // Save uncertainties along path
+    crowdbot_active_slam::service_call uncertainty_srv;
+    uncertainty_srv.request.save_path = save_directory_path_;
+    if (uncertainty_client_.call(uncertainty_srv)){
+      ROS_INFO("Uncertainties of path have been saved!");
+    }
+    else{
+      ROS_INFO("Uncertainty service failed!");
+    }
+
+    // Shutdown
+    ROS_INFO("This node will be shutdown now!");
+    ros::shutdown();
+    return;
+  }
+  else if (frontier_srv.response.frontier_list.size() == 0 && !return_to_start_){
+    geometry_msgs::Pose2D start_pose;
+    start_pose.x = 0;
+    start_pose.y = 0;
+    start_pose.theta = 0;
+    frontier_srv.response.frontier_list.push_back(start_pose);
+    return_to_start_ = true;
+  }
+
+  nav_msgs::Path action_plan;
+  nav_msgs::GetPlan get_plan;
+  crowdbot_active_slam::utility_calc utility;
+  std::vector<double> utility_vec;
+  std::vector<double> path_sizes;
+  std::vector<double>::iterator max_utility;
+  std::vector<double>::iterator path_sizes_it;
+  int goal_id = 0;
+
+  for (int i = 0; i < frontier_srv.response.frontier_list.size(); i++){
+    // Get action plan
+    get_plan.request.start = pose2DToPoseStamped(frontier_srv.response.start_pose);
+    get_plan.request.goal = pose2DToPoseStamped(frontier_srv.response.frontier_list[i]);
+    // if using NavfnROS set tolerance to 0.0. This tolerance is used from move_base
+    // to find a goal. But NavfnROS has itself a tolerance, which can be set
+    // from rosparams. If both values set can screw things up.
+    // If using Global planner use this tolerance as itself is not using rosparam
+    // tolerance!!
+    get_plan.request.tolerance = 0.0;
+    get_plan_move_base_client_.call(get_plan);
+    if (get_plan.response.plan.poses.size() == 0){
+      frontier_srv.response.frontier_list.erase(frontier_srv.response.frontier_list.begin() + i);
+      i -= 1;
+      continue;
+    }
+    action_plan = get_plan.response.plan;
+    action_plan.header.frame_id = "/map";
+    plan_pub_.publish(action_plan);
+
+    if (exploration_type_ == "shortest_frontier"){
+      double length = 0;
+      if (action_plan.poses.size() < 3){
+        length = 10000;
+      }
+      else {
+        for (int j = 1; j < action_plan.poses.size(); j++){
+          length += sqrt(pow(action_plan.poses[j].pose.position.x -
+                             action_plan.poses[j - 1].pose.position.x, 2) +
+                         pow(action_plan.poses[j].pose.position.y -
+                             action_plan.poses[j - 1].pose.position.y, 2));
+        }
+      }
+      path_sizes.push_back(length);
+    }
+
+    if (exploration_type_ == "utility_standard" ||
+        exploration_type_ == "utility_normalized"){
+      // Get utility of action plan
+      utility.request.plan = action_plan;
+      utility.request.exploration_type = exploration_type_;
+      utility_calc_client_.call(utility);
+
+      std::cout << "utility: " << utility.response.utility << std::endl;
+      // Save utility values in vec
+      utility_vec.push_back(utility.response.utility);
+    }
+  }
+
+  // Check again if frontier list empty
+  if (frontier_srv.response.frontier_list.size() == 0 && return_to_start_){
     ROS_INFO("Exploration finished!");
     end_time_ = ros::Time::now();
 
@@ -238,52 +340,20 @@ void DecisionMaker::startExploration(){
     ROS_INFO("This node will be shutdown now!");
     ros::shutdown();
   }
-
-  nav_msgs::Path action_plan;
-  nav_msgs::GetPlan get_plan;
-  crowdbot_active_slam::utility_calc utility;
-  std::vector<double> utility_vec;
-  std::vector<double> path_sizes;
-  std::vector<double>::iterator max_utility;
-  std::vector<double>::iterator path_sizes_it;
-  int goal_id = 0;
-
-  for (int i = 0; i < frontier_size; i++){
-    // Get action plan
-    get_plan.request.start = pose2DToPoseStamped(frontier_srv.response.start_pose);
-    get_plan.request.goal = pose2DToPoseStamped(frontier_srv.response.frontier_list[i]);
-    get_plan.request.tolerance = 0.3;
-    get_plan_move_base_client_.call(get_plan);
-    action_plan = get_plan.response.plan;
-    action_plan.header.frame_id = "/map";
-    plan_pub_.publish(action_plan);
-
+  else if (frontier_srv.response.frontier_list.size() == 0 && !return_to_start_) {
+    geometry_msgs::Pose2D start_pose;
+    start_pose.x = 0;
+    start_pose.y = 0;
+    start_pose.theta = 0;
+    frontier_srv.response.frontier_list.push_back(start_pose);
+    return_to_start_ = true;
+    ROS_INFO("start pose added!2");
     if (exploration_type_ == "shortest_frontier"){
-      double length = 0;
-      if (action_plan.poses.size() < 3){
-        length = 1000;
-      }
-      else {
-        for (int j = 1; j < action_plan.poses.size(); j++){
-          length += sqrt(pow(action_plan.poses[j].pose.position.x -
-                             action_plan.poses[j - 1].pose.position.x, 2) +
-                         pow(action_plan.poses[j].pose.position.y -
-                             action_plan.poses[j - 1].pose.position.y, 2));
-        }
-      }
-      path_sizes.push_back(length);
+      path_sizes.push_back(10);
     }
-
     if (exploration_type_ == "utility_standard" ||
         exploration_type_ == "utility_normalized"){
-      // Get utility of action plan
-      utility.request.plan = action_plan;
-      utility.request.exploration_type = exploration_type_;
-      utility_calc_client_.call(utility);
-
-      std::cout << "utility: " << utility.response.utility << std::endl;
-      // Save utility values in vec
-      utility_vec.push_back(utility.response.utility);
+      utility_vec.push_back(10);
     }
   }
 
@@ -323,7 +393,7 @@ void DecisionMaker::startExploration(){
 
   goal_client.sendGoal(goal);
 
-  bool finished_before_timeout = goal_client.waitForResult(ros::Duration(150.0));
+  bool finished_before_timeout = goal_client.waitForResult(ros::Duration(180.0));
 
   if (finished_before_timeout)
   {
@@ -333,7 +403,7 @@ void DecisionMaker::startExploration(){
   else
     ROS_INFO("Action did not finish before the time out.");
 
-  ros::Duration(1).sleep();
+  // ros::Duration(1.5).sleep();
   crowdbot_active_slam::service_call map_srv;
   if (map_recalculation_client_.call(map_srv))
   {
@@ -342,6 +412,15 @@ void DecisionMaker::startExploration(){
   else
   {
     ROS_ERROR("Failed to call service map_recalculation");
+  }
+
+  ros::Duration(1.5).sleep();
+  std_srvs::Empty clear_costmap_srv;
+  if (clear_costmap_client_.call(clear_costmap_srv)){
+    ROS_INFO("Clear costmap call successfull");
+  }
+  else {
+    ROS_ERROR("Failed to call service move_base/clear_costmaps");
   }
 }
 
@@ -422,6 +501,14 @@ void DecisionMaker::saveGeneralResults(){
   }
   else{
     ROS_INFO("Could not open general_results.txt!");
+  }
+}
+
+void DecisionMaker::joyCallback(const sensor_msgs::Joy::ConstPtr& msg){
+  if (msg->buttons[2] == 1){
+    actionlib_msgs::GoalID cancel;
+    cancel_move_base_pub_.publish(cancel);
+    ros::shutdown();
   }
 }
 

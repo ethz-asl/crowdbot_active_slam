@@ -8,6 +8,8 @@
 #ifndef STATIC_SCAN_EXTRACTOR_H
 #define STATIC_SCAN_EXTRACTOR_H
 
+#include <queue>
+
 #include <ros/ros.h>
 #include <object_detector.h>
 #include <tracked_object.h>
@@ -61,6 +63,11 @@ public:
                 sensor_msgs::LaserScan& init_scan);
 
   /**
+   *  ....
+   */
+  void poseCallback(const geometry_msgs::PoseStamped::ConstPtr& pose_msg);
+
+  /**
    *  The main function which recives the raw laser scan and publishes then the
    *  extracted static laser scan for the SLAM framework.
    */
@@ -77,10 +84,6 @@ public:
    */
    vector<geometry_msgs::Point> getClusterInLaserFrame(map<int, double>& cluster);
 
-   void getFreeCellFraction(int id, double& p_free);
-
-   void getFreeCellFractionPatch(int map_id, double& p_free, int n_cells);
-
 
 private:
   // Node handler
@@ -93,12 +96,14 @@ private:
   // Publisher, Subscriber
   ros::Subscriber map_sub_;
   ros::Subscriber scan_sub_;
+  ros::Subscriber current_pose_sub_;
 
   ros::Publisher static_scan_pub_;
   ros::Publisher dynamic_scan_pub_;
   ros::Publisher moving_objects_pub_;
   ros::Publisher static_objects_pub_;
   ros::Publisher unknown_objects_pub_;
+  ros::Publisher debug_scan_pub_;
   ros::Publisher dyn_obstacles_pub_;
 
   // ROS msgs
@@ -128,14 +133,16 @@ private:
   tf::Stamped<tf::Transform> current_pose_tf_;
   tf::Transform map_to_latest_tf_;
   tf::Transform map_to_latest_laser_tf_;
+  tf::Transform laser_diff_tf_;
 
   // Object detector
   double abd_lambda_;
   double abd_sigma_;
   ObjectDetector object_detector_;
+  int upsampling_factor_;
 
   // Parameters
-  bool using_gazebo_;
+  std::string robot_name_;
   int map_width_;
   int map_height_;
   double map_resolution_;
@@ -169,7 +176,13 @@ private:
   double dynamic_vel_threshold_;
   double dynamic_vel_threshold_sq_;
   int not_seen_threshold_;
-  int patch_size_;
+  geometry_msgs::PoseStamped current_pose_;
+  ros::Time current_pose_stamp_;
+  bool current_pose_intialised_;
+  std::queue<sensor_msgs::LaserScan> static_scan_queue_;
+  int static_cell_range_;
+  int min_cluster_size_for_moving_;
+  int min_velocity_count_;
 };
 
 #endif  // STATIC_SCAN_EXTRACTOR_H

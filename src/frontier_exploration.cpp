@@ -95,7 +95,20 @@ bool FrontierExploration::serviceCallback(
 
   // Init with robot pose as a starting point of the search.
   // Assumption: robot pose is a free space
-  breadth_first_search.push(robot_x_cell + robot_y_cell * map_width_);
+  if (latest_map_msg_.data[robot_x_cell + robot_y_cell * map_width_] == -1){
+    if (latest_map_msg_.data[robot_x_cell + 10 + robot_y_cell * map_width_] == 0){
+      breadth_first_search.push(robot_x_cell + 10 + robot_y_cell * map_width_);
+    }
+    else if (latest_map_msg_.data[robot_x_cell + (robot_y_cell + 10) * map_width_] == 0) {
+      breadth_first_search.push(robot_x_cell + (robot_y_cell + 10) * map_width_);
+    }
+    else {
+      ROS_WARN("Frontier exploration starts at unknown space and has no free space in front! Change orientation!");
+    }
+  }
+  else {
+    breadth_first_search.push(robot_x_cell + robot_y_cell * map_width_);
+  }
   visited_flag[breadth_first_search.front()] = true;
 
   // Search for frontiers
@@ -120,11 +133,18 @@ bool FrontierExploration::serviceCallback(
         geometry_msgs::Pose2D frontier_centroid;
         if (getFrontierCentroid(neighbour_vec[i], frontier_flag, map_width_, map_height_,
                                 map_resolution_, frontier_centroid)){
-          response.frontier_list.push_back(frontier_centroid);
+          // Check if frontier is not on robot position(problem on initialisation)
+          if (abs(frontier_centroid.x - robot_x) < 0.8 &&
+              abs(frontier_centroid.y - robot_y) < 0.8){}
+          else {
+            response.frontier_list.push_back(frontier_centroid);
+          }
         }
       }
     }
   }
+
+  // Add starting pose as frontier TODO
 
   // Generate GridCells msg of frontier centroids
   nav_msgs::GridCells frontier_points_msg;
