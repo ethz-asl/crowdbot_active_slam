@@ -2,6 +2,7 @@
  *  Adapted from:
  *  https://github.com/ethz-asl/deep_interaction_modeling/blob/master/sf_model/
  *  gazebo_sim/src/social_force_model.cpp
+ *  author was: Giuseppe Paolo
  */
 
 #include <gazebo_msgs/DeleteModel.h>
