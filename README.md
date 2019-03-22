@@ -14,17 +14,21 @@ This repository contains tools for active SLAM in crowded environments. It conta
 
 2. Clone all packages listed in **Needed Packages**.
 
-  1. Make sure to checkout on devel branch for [naoqi_driver](https://github.com/danieldugas/naoqi_driver).
-  2. Make sure to checkout on devel branch for [asl_pepper](https://github.com/ethz-asl/asl_pepper).
-  3. Make sure to checkout on kinetic-devel branch for [navigation](https://github.com/dmammolo/navigation).
+  - Make sure to checkout on devel branch for [naoqi_driver](https://github.com/danieldugas/naoqi_driver).
+  - Make sure to checkout on devel branch for [asl_pepper](https://github.com/ethz-asl/asl_pepper).
+  - Make sure to checkout on kinetic-devel branch for [navigation](https://github.com/dmammolo/navigation).
 
-3. For building all packages either remove certain packages or only build the bellow listed ones:
+3. Install GTSAM library following the steps here [GTSAM 3.2.1](https://borg.cc.gatech.edu/download.html). (Only version 3.2.1 has been tested)
+
+4. Make sure that you have an [Eigen3](http://eigen.tuxfamily.org/index.php?title=Main_Page) installation.
+
+5. For building all packages either remove certain packages or only build the bellow listed ones:
 
   ```bash
   catkin build sick_scan gazebo_ros_2Dmap_plugin pioneer_description naoqi_driver eigen_catkin glog_catkin eigen_catkin plotty asl_pepper_basic_functions asl_pepper_joystick
   ```
 
-4. Finally build this package and the fixed move_base package. We recommend to build it in Release mode to assure online behaviour:
+6. Finally build this package and the fixed move_base package. We recommend to build it in Release mode to assure online behaviour:
 
   ```bash
   catkin build crowdbot_active_slam move_base --cmake-args -DCMAKE_BUILD_TYPE=Release
@@ -76,6 +80,20 @@ This package contains a nodelet implementation, but is currently not running wit
 The [gazebo_ros_2Dmap_plugin](https://github.com/dmammolo/gazebo_ros_2Dmap_plugin) is a plugin, which can be used to extract the groundtruth map of asimulation world.
 
 ## Known issues
+
+- GTSAM 3.2.1 boost issue. If you have an issue building or using GTSAM, you may need to adapt some files:
+
+  - gtsam/inference/Ordering.cpp, add this line
+
+    ```c++
+    #include <boost/serialization/serialization.hpp>
+    ```
+
+  - gtsam/base/tests/testFastContainers.cpp, add this line
+
+    ```c++
+    #include <boost/serialization/serialization.hpp>
+    ```
 
 - Installing cartographer ros forces installing protobuf >v3.4.1\. This is not compatible with gazebo_ros and can cause problems when building this packages used here, e.g. gazebo_ros_2Dmap_plugin.
 
