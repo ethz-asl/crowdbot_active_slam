@@ -30,8 +30,8 @@ void GraphOptimiser::initParams(){
   nh_private_.param<float>("map_resolution", map_resolution_, 0.05);
   nh_private_.param<std::string>("robot_name", robot_name_, "pioneer_sim");
   nh_private_.param<std::string>("scan_callback_topic", scan_callback_topic_, "base_scan");
-  nh_private_.param<double>("time_thershold_frontend", time_thershold_frontend_, 0.08);
-  nh_private_.param<double>("time_thershold_loopclosing", time_thershold_loopclosing_, 0.12);
+  nh_private_.param<double>("time_thershold_frontend", time_threshold_frontend_, 0.08);
+  nh_private_.param<double>("time_thershold_loopclosing", time_threshold_loopclosing_, 0.12);
 
   // If using pepper get front scan crop params
   if (robot_name_ == "pepper_real"){
@@ -297,18 +297,6 @@ void GraphOptimiser::initParams(){
   new_node_ = false;
   first_map_calculated_ = false;
   node_counter_ = 0;
-
-  feature_labels_.push_back(PointMatcher<float>::DataPoints::Label("x", 1));
-  feature_labels_.push_back(PointMatcher<float>::DataPoints::Label("y", 1));
-  feature_labels_.push_back(PointMatcher<float>::DataPoints::Label("pad", 1));
-
-  // Get path and file name
-  std::string package_path = ros::package::getPath("crowdbot_active_slam");
-  std::string config_path = package_path + "/config/icp_cfg.yaml";
-
-  std::ifstream config_file(config_path.c_str());
-
-  icp_.loadFromYaml(config_file);
 
   // Publish map in other thread at low rate (only for rviz)
   boost::thread map_pub_thread(&GraphOptimiser::pubMap, this);
@@ -1142,7 +1130,7 @@ bool GraphOptimiser::utilityCalcServiceCallback(
 
 void GraphOptimiser::scanCallback(
   const sensor_msgs::LaserScan::ConstPtr& scan_msg){
-  if ((ros::Time::now() - scan_msg->header.stamp).toSec() > time_thershold_frontend_){
+  if ((ros::Time::now() - scan_msg->header.stamp).toSec() > time_threshold_frontend_){
     ROS_WARN("Static_scan_extractor took too long, skipping this scan!");
     std::cout << ros::Time::now() << std::endl;
     std::cout << scan_msg->header.stamp << std::endl;
@@ -1354,7 +1342,7 @@ void GraphOptimiser::scanCallback(
       }
       for (int i = 0; i < node_counter_ - 1; i++){
         // Check if still enough time for another factor
-        if ((ros::Time::now() - scan_msg->header.stamp).toSec() > time_thershold_loopclosing_){
+        if ((ros::Time::now() - scan_msg->header.stamp).toSec() > time_threshold_loopclosing_){
           ROS_WARN("SLAM node took too long, skipping further scan matching!(loop clossings)");
           break;
         }

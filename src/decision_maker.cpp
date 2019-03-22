@@ -4,7 +4,6 @@
 DecisionMaker::DecisionMaker(ros::NodeHandle nh, ros::NodeHandle nh_)
     : nh_(nh), nh_private_(nh_) {
   // Get ros param
-  nh_private_.param("primitive_filename", primitive_filename_, std::string(""));
   nh_private_.param("exploration_type", exploration_type_, std::string("utility"));
 
   // Publisher
@@ -41,29 +40,6 @@ DecisionMaker::DecisionMaker(ros::NodeHandle nh, ros::NodeHandle nh_)
   nh_.getParam("/graph_optimisation/node_dist_angular", node_dist_angular_);
   nh_.getParam("/graph_optimisation/loop_closing_radius", lc_radius_);
 
-  // Init SBPL env
-  // set the perimeter of the robot
-  std::vector<sbpl_2Dpt_t> perimeter;
-
-  // See costmap_common_params.yaml for correct values, here for easyness left this way
-  double robot_length = 0.3;
-  double robot_width = 0.3;
-  createFootprint(perimeter, robot_width, robot_length);
-
-  // env_.InitializeEnv(map_width_, map_height_, 0, //map data
-  //                                     0, 0, 0, // start
-  //                                     0, 0, 0, // goal
-  //                                     0, 0, 0, // goal tolerance
-  //                                     perimeter, map_resolution_,
-  //                                     0.5, // nominal vel (m/s)
-  //                                     1.0, // time to turn 45 degs in place (s)
-  //                                     20, // obstacle threshold
-  //                                     primitive_filename_.c_str());
-
-  // Planner
-  bool bsearch = false;
-  planner_ = new ADPlanner(&env_, bsearch);
-
   // Save start time
   start_time_ = ros::Time::now();
   // Wait until time is not 0
@@ -73,9 +49,7 @@ DecisionMaker::DecisionMaker(ros::NodeHandle nh, ros::NodeHandle nh_)
   return_to_start_ = false;
 }
 
-DecisionMaker::~DecisionMaker() {
-  delete planner_;
-}
+DecisionMaker::~DecisionMaker() {}
 
 geometry_msgs::PoseStamped pose2DToPoseStamped(geometry_msgs::Pose2D pose2D){
   geometry_msgs::Point pose_position;
@@ -96,118 +70,11 @@ geometry_msgs::PoseStamped pose2DToPoseStamped(geometry_msgs::Pose2D pose2D){
   return posestamped;
 }
 
-unsigned int DecisionMaker::mapToSBPLCost(int occupancy){
-  if (occupancy < 10 && occupancy != -1){
-    return 0;
-  }
-  else if (occupancy == -1){
-    return 0;
-  }
-  else{
-    return 20;
-  }
-}
-
 void DecisionMaker::idToCell(unsigned int id, unsigned int& x, unsigned int& y,
                              int width, int height){
     y = id / width;
     x = id - y * width;
   }
-
-void DecisionMaker::createFootprint(std::vector<sbpl_2Dpt_t>& perimeter,
-                                    double halfwidth, double halflength){
-  // Implementation taken from SBPL tutorial example
-  sbpl_2Dpt_t pt_m;
-  pt_m.x = -halflength;
-  pt_m.y = -halfwidth;
-  perimeter.push_back(pt_m);
-  pt_m.x = halflength;
-  pt_m.y = -halfwidth;
-  perimeter.push_back(pt_m);
-  pt_m.x = halflength;
-  pt_m.y = halfwidth;
-  perimeter.push_back(pt_m);
-  pt_m.x = -halflength;
-  pt_m.y = halfwidth;
-  perimeter.push_back(pt_m);
-}
-
-nav_msgs::Path DecisionMaker::planPathSBPL(geometry_msgs::Pose2D start_pose,
-                                       geometry_msgs::Pose2D goal_pose){
-  // Service call for latest occupancy grid map
-  crowdbot_active_slam::get_map get_map_srv;
-
-  if (get_map_client_.call(get_map_srv))
-  {
-   ROS_INFO("OccupancyGrid map call successfull");
-  }
-  else
-  {
-   ROS_ERROR("Failed to call OccupancyGrid map");
-  }
-
-  latest_map_msg_ = get_map_srv.response.map_msg;
-
-  // Update cost
-  unsigned int ix, iy;
-  for (unsigned int i = 0; i < latest_map_msg_.data.size(); i++){
-    idToCell(i, ix, iy, map_width_, map_height_);
-    env_.UpdateCost(ix, iy, mapToSBPLCost(latest_map_msg_.data[i]));
-  }
-
-  int start_id, goal_id;
-
-  double x_origin = latest_map_msg_.info.origin.position.x;
-  double y_origin = latest_map_msg_.info.origin.position.y;
-
-  ROS_INFO("start point (%g,%g), goal point (%g,%g) ", start_pose.x - x_origin,
-   start_pose.y - y_origin, goal_pose.x - x_origin, goal_pose.y - y_origin);
-
-  start_id = env_.SetStart(start_pose.x - x_origin, start_pose.y - y_origin, start_pose.theta);
-  goal_id = env_.SetGoal(goal_pose.x - x_origin, goal_pose.y - y_origin, goal_pose.theta);
-
-  // Planner
-  planner_->set_start(start_id);
-  planner_->set_goal(goal_id);
-  planner_->set_initialsolution_eps(3.0);
-  planner_->set_search_mode(false);
-
-  // plan
-  std::vector<int> solution_state_ids;
-  double allocated_time_secs = 10.0;
-  int res = planner_->replan(allocated_time_secs, &solution_state_ids);
-
-  if (res){
-    ROS_INFO("planPath: Solution found!");
-  }
-  else{
-    ROS_INFO("planPath: Solution does not exist!");
-  }
-
-  std::vector<EnvNAVXYTHETALAT3Dpt_t> sbpl_path;
-  env_.ConvertStateIDPathintoXYThetaPath(&solution_state_ids, &sbpl_path);
-
-  // Create a path msg of the graph node estimates
-  nav_msgs::Path plan;
-  plan_path_ = plan;
-  plan_path_.header.frame_id = "/map";
-
-  for(unsigned int i=0; i<sbpl_path.size(); i++){
-    geometry_msgs::PoseStamped pose;
-
-    pose.pose.position.x = sbpl_path[i].x + x_origin;
-    pose.pose.position.y = sbpl_path[i].y + y_origin;
-    pose.pose.position.z = 0;
-
-    tf::Quaternion temp;
-    temp.setRPY(0,0,sbpl_path[i].theta);
-    quaternionTFToMsg(temp, pose.pose.orientation);
-
-    plan_path_.poses.push_back(pose);
-  }
-  plan_pub_.publish(plan_path_);
-  return plan_path_;
-}
 
 void DecisionMaker::startExploration(){
   // Get frontiers

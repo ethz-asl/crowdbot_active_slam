@@ -11,7 +11,6 @@
 #include <nav_msgs/OccupancyGrid.h>
 #include <nav_msgs/Path.h>
 #include <tf/tf.h>
-#include <sbpl/headers.h>
 
 #include <crowdbot_active_slam/service_call.h>
 #include <crowdbot_active_slam/get_frontier_list.h>
@@ -37,26 +36,10 @@ public:
   ~DecisionMaker();
 
   /**
-   *  Transform map probabilties to costs for SBPL planner
-   */
-  unsigned int mapToSBPLCost(int occupancy);
-
-  /**
    *  Calculate cell ids from map id
    */
   void idToCell(unsigned int id, unsigned int& x, unsigned int& y,
                 int width, int height);
-
-  /**
-   *  Creates the robot footprint for SBPL planner
-   */
-  void createFootprint(std::vector<sbpl_2Dpt_t>& perimeter, double halfwidth,
-                                                            double halflength);
-  /**
-   *  Calculates plan with SBPL planner and returns a path
-   */
-  nav_msgs::Path planPathSBPL(geometry_msgs::Pose2D start_pose,
-                              geometry_msgs::Pose2D goal_pose);
 
   /**
    *  Function which starts the exploration task when starting or ariving at goal
@@ -110,10 +93,7 @@ private:
   double node_dist_angular_;
   double lc_radius_;
 
-  std::string primitive_filename_;
   std::string exploration_type_;
-  SBPLPlanner* planner_;
-  EnvironmentNAVXYTHETALAT env_;
   ros::Time start_time_;
   ros::Time end_time_;
   std::string save_directory_path_;

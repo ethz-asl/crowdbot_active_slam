@@ -47,8 +47,6 @@
 #include <gtsam/inference/Symbol.h>
 #include <gtsam/nonlinear/ISAM2.h>
 
-#include <pointmatcher/PointMatcher.h>
-
 #include <csm/csm_all.h>
 #undef min
 #undef max
@@ -228,15 +226,6 @@ private:
   float front_scan_crop_angle_max_;
   float front_scan_crop_angle_min_;
 
-  // Scan matcher libpointmatcher
-  PointMatcher<float>::DataPoints laser_ref_;
-  PointMatcher<float>::DataPoints laser_sens_;
-  PointMatcher<float>::DataPoints::Labels feature_labels_;
-  PointMatcher<float>::ICP icp_;
-  Eigen::MatrixXf current_scan_eigen_;
-  tf::Transform estimated_tf_;
-  tf::Transform keyframe_tf_;
-
   // Other variables
   double node_dist_linear_;
   double node_dist_angular_;
@@ -257,8 +246,8 @@ private:
   double sigma_norm_;
   std::vector<gtsam::Matrix> uncertainty_matrices_path_;
   std::string scan_callback_topic_;
-  double time_thershold_frontend_;
-  double time_thershold_loopclosing_;
+  double time_threshold_frontend_;
+  double time_threshold_loopclosing_;
 };
 
 #endif  // GRAPH_OPTIMISATION_H
