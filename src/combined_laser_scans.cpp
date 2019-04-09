@@ -1,3 +1,10 @@
+/**
+ *  Adapted from:
+ *  https://github.com/ethz-asl/asl_pepper/blob/devel/
+ *  asl_pepper_sensor_preprocessing/src/combine_laser_scans.cpp
+ *  author was: Daniel Dugas
+ */
+
 #include <thread>
 #include <chrono>
 #include <string>
