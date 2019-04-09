@@ -5,6 +5,8 @@ sudo apt-get install -y ros-kinetic-grid-map-ros
 sudo apt-get install -y ros-kinetic-gazebo-ros-control
 sudo apt-get install -y ros-kinetic-diff-drive-controller
 sudo apt-get install -y ros-kinetic-costmap-2d
+sudo apt-get install -y ros-kinetic-laser-geometry
+sudo apt-get install -y ros-kinetic-filters
 
 # Install all pepper dependent packages
 sudo apt-get install -y ros-kinetic-driver-base

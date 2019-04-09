@@ -1,4 +1,4 @@
-<package>
+<package format="2">
   <name>crowdbot_active_slam</name>
   <version>0.1.0</version>
   <description>crowdbot_active_slam</description>
@@ -9,42 +9,26 @@
   <author email="dmammolo@student.ethz.ch">Dario Mammolo</author>
 
   <buildtool_depend>catkin</buildtool_depend>
-  <build_depend>roscpp</build_depend>
-  <build_depend>roslib</build_depend>
-  <build_depend>tf</build_depend>
-  <build_depend>std_msgs</build_depend>
-  <build_depend>sensor_msgs</build_depend>
-  <build_depend>geometry_msgs</build_depend>
-  <build_depend>nav_msgs</build_depend>
-  <build_depend>gazebo_msgs</build_depend>
-  <build_depend>gazebo_ros</build_depend>
-  <build_depend>csm</build_depend>
-  <build_depend>cmake_modules</build_depend>
+  <depend>roscpp</depend>
+  <depend>roslib</depend>
+  <depend>tf</depend>
+  <depend>std_msgs</depend>
+  <depend>sensor_msgs</depend>
+  <depend>geometry_msgs</depend>
+  <depend>nav_msgs</depend>
+  <depend>gazebo_msgs</depend>
+  <depend>gazebo_ros</depend>
+  <depend>csm</depend>
+  <depend>cmake_modules</depend>
   <build_depend>message_generation</build_depend>
-  <build_depend>plotty</build_depend>
-  <build_depend>pcl_ros</build_depend>
-  <build_depend>glog_catkin</build_depend>
-  <build_depend>grid_map_ros</build_depend>
-  <build_depend>nodelet</build_depend>
-  <build_depend>laser_geometry</build_depend>
+  <depend>plotty</depend>
+  <depend>pcl_ros</depend>
+  <depend>glog_catkin</depend>
+  <depend>grid_map_ros</depend>
+  <depend>nodelet</depend>
+  <depend>laser_geometry</depend>
 
-  <run_depend>roscpp</run_depend>
-  <run_depend>roslib</run_depend>
-  <run_depend>tf</run_depend>
-  <run_depend>std_msgs</run_depend>
-  <run_depend>sensor_msgs</run_depend>
-  <run_depend>geometry_msgs</run_depend>
-  <run_depend>nav_msgs</run_depend>
-  <run_depend>gazebo_msgs</run_depend>
-  <run_depend>gazebo_ros</run_depend>
-  <run_depend>csm</run_depend>
-  <run_depend>message_runtime</run_depend>
-  <run_depend>plotty</run_depend>
-  <run_depend>pcl_ros</run_depend>
-  <run_depend>glog_catkin</run_depend>
-  <run_depend>grid_map_ros</run_depend>
-  <run_depend>nodelet</run_depend>
-  <run_depend>laser_geometry</run_depend>
+  <exec_depend>message_runtime</exec_depend>
 
   <export>
     <nodelet plugin="${prefix}/nodelet_plugins.xml" />
