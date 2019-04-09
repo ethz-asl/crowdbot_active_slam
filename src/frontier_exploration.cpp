@@ -95,11 +95,11 @@ bool FrontierExploration::serviceCallback(
 
   // Init with robot pose as a starting point of the search.
   // Assumption: robot pose is a free space
-  if (latest_map_msg_.data[robot_x_cell + robot_y_cell * map_width_] == -1){
-    if (latest_map_msg_.data[robot_x_cell + 10 + robot_y_cell * map_width_] == 0){
+  if (latest_map_msg_.data.at(robot_x_cell + robot_y_cell * map_width_) == -1){
+    if (latest_map_msg_.data.at(robot_x_cell + 10 + robot_y_cell * map_width_) == 0){
       breadth_first_search.push(robot_x_cell + 10 + robot_y_cell * map_width_);
     }
-    else if (latest_map_msg_.data[robot_x_cell + (robot_y_cell + 10) * map_width_] == 0) {
+    else if (latest_map_msg_.data.at(robot_x_cell + (robot_y_cell + 10) * map_width_) == 0) {
       breadth_first_search.push(robot_x_cell + (robot_y_cell + 10) * map_width_);
     }
     else {
@@ -119,14 +119,14 @@ bool FrontierExploration::serviceCallback(
     std::vector<unsigned int> neighbour_vec = neighbour4(id, map_width_, map_height_);
     for (unsigned int i = 0; i < neighbour_vec.size(); i++){
       // Check if cell is free and has not been visited, then add to queue
-      if (int(latest_map_msg_.data[neighbour_vec[i]]) == 0 &&
+      if (int(latest_map_msg_.data.at(neighbour_vec[i])) == 0 &&
           !visited_flag[neighbour_vec[i]]){
         visited_flag[neighbour_vec[i]] = true;
         breadth_first_search.push(neighbour_vec[i]);
       }
       // Check if cell is unknown and has not been marked as frontier
       else if (!frontier_flag[neighbour_vec[i]] &&
-               int(latest_map_msg_.data[neighbour_vec[i]]) == -1){
+               int(latest_map_msg_.data.at(neighbour_vec[i])) == -1){
         frontier_flag[neighbour_vec[i]] = true;
 
         // Get frontier centroid around current cell
@@ -193,14 +193,14 @@ bool FrontierExploration::getFrontierCentroid(unsigned int initial_cell,
     std::vector<unsigned int> neighbour8_vec = neighbour8(id, map_width, map_height);
     for (unsigned int i = 0; i < neighbour8_vec.size(); i++){
       // Check if cell is unknown and has not been marked as a frontier cell
-      if (int(latest_map_msg_.data[neighbour8_vec[i]]) == -1 &&
+      if (int(latest_map_msg_.data.at(neighbour8_vec[i])) == -1 &&
           !frontier_flag[neighbour8_vec[i]]){
         bool has_free_neighbour4 = false;
         std::vector<unsigned int> neighbour4_vec =
                                     neighbour4(neighbour8_vec[i], map_width, map_height);
         // Check if a neighbour is a free cell
         for (unsigned int j = 0; j < neighbour4_vec.size(); j++){
-          if (int(latest_map_msg_.data[neighbour4_vec[j]]) == 0){
+          if (int(latest_map_msg_.data.at(neighbour4_vec[j])) == 0){
             has_free_neighbour4 = true;
           }
         }
@@ -234,7 +234,7 @@ bool FrontierExploration::getFrontierCentroid(unsigned int initial_cell,
     unsigned int id = cell[0] + cell[1] * map_width;
     std::vector<unsigned int> neighbour_x_cells = neighbourXCells(id, map_width, map_height, 3);
     for (unsigned int i = 0; i < neighbour_x_cells.size(); i++){
-      if (int(latest_map_msg_.data[neighbour_x_cells[i]]) > 90){
+      if (int(latest_map_msg_.data.at(neighbour_x_cells[i])) > 90){
         return false;
       }
     }
