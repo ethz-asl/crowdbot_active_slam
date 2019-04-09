@@ -31,7 +31,7 @@ This repository contains tools for active SLAM in crowded environments. It conta
 6. Finally build this package and the fixed move_base package. We recommend to build it in Release mode to assure online behaviour:
 
   ```bash
-  catkin build crowdbot_active_slam move_base --cmake-args -DCMAKE_BUILD_TYPE=Release
+  catkin build crowdbot_active_slam move_base_fork --cmake-args -DCMAKE_BUILD_TYPE=Release
   ```
 
 ### Needed Packages

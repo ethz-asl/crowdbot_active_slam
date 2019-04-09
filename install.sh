@@ -1,6 +1,3 @@
-# Remove conflicting packages as own forks are used
-sudo apt-get remove -y ros-kinetic-move-base
-
 # Install all necessary ros packages
 sudo apt-get install -y ros-kinetic-csm
 sudo apt-get install -y ros-kinetic-teb-local-planner

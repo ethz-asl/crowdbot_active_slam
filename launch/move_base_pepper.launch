@@ -1,6 +1,6 @@
 <launch>
   <arg name="dynamic" default="dynamic"/>
-  <node pkg="move_base" type="move_base" respawn="false" name="move_base" output="screen">
+  <node pkg="move_base_fork" type="move_base" respawn="false" name="move_base" output="screen">
     <param name="base_local_planner" value="teb_local_planner/TebLocalPlannerROS"/>
     <param name="controller_frequency" value="10"/>
     <rosparam file="$(find crowdbot_active_slam)/nav/pepper_costmap_common_params_$(arg dynamic).yaml" command="load" ns="global_costmap"/>
