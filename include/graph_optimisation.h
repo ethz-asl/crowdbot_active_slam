@@ -87,9 +87,18 @@ public:
                       std::map<int, int>& subset);
 
   /**
-   *  ...
+   *  Updates the log odds array at map index (x,y) as free and if update is
+   *  true, it also updates the occupancy grid map.
    */
-  void updateLogOdsWithBresenham(int x0, int y0, int x1, int y1,
+  void updateLogOddsArrayAndMapAsFree(int x, int y,
+                               std::vector<int> end_point_index_m, bool update);
+
+  /**
+   *  Updates the log odds arrays. If the function is used while updating the
+   *  log odds array only (updateMap) the update boolean is used to update only
+   *  map cells where log odds values changed.
+   */
+  void updateLogOddsWithBresenham(int x0, int y0, int x1, int y1,
                                std::vector<int> end_point_index_m, bool update);
 
   /**

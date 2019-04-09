@@ -269,11 +269,7 @@ void GraphOptimiser::initParams(){
                               0);
   occupancy_grid_msg_.info.origin = origin_pose;
 
-  for (int i = 0; i < map_width_; i++){
-    for (int j = 0; j < map_height_; j++){
-      occupancy_grid_msg_.data.push_back(-1);
-    }
-  }
+  occupancy_grid_msg_.data.assign(map_width_ * map_height_, -1);
 
   // Init max allowed scan range
   if(robot_name_ == "pepper_real") max_range_allowed_ = 50;
@@ -495,7 +491,19 @@ void GraphOptimiser::getSubsetOfMap(nav_msgs::Path& action_path,
   }
 }
 
-void GraphOptimiser::updateLogOdsWithBresenham(int x0, int y0, int x1, int y1,
+void GraphOptimiser::updateLogOddsArrayAndMapAsFree(int x, int y,
+                              std::vector<int> end_point_index_m, bool update){
+  if (x != end_point_index_m[0] || y != end_point_index_m[1]){
+    log_odds_array_(x, y) += l_free_ - l_0_;
+    if (update){
+      unsigned int temp_id = mapIndexToId(x, y, map_width_);
+      occupancy_grid_msg_.data.at(temp_id) = 100 * (1.0 - 1.0 / (1.0 +
+                                             exp(log_odds_array_(x, y))));
+    }
+  }
+}
+
+void GraphOptimiser::updateLogOddsWithBresenham(int x0, int y0, int x1, int y1,
                                std::vector<int> end_point_index_m, bool update){
   // Bresenham's line algorithm (Get indexes between robot pose and scans)
   // starting from "https://github.com/lama-imr/lama_utilities/blob/indigo-devel/map_ray_caster/src/map_ray_caster.cpp"
@@ -526,14 +534,7 @@ void GraphOptimiser::updateLogOdsWithBresenham(int x0, int y0, int x1, int y1,
         y += ystep;
         fraction -= twodx;
       }
-      if (x != end_point_index_m[0] || y != end_point_index_m[1]){
-        log_odds_array_(x, y) += l_free_ - l_0_;
-        if (update){
-          unsigned int temp_id = mapIndexToId(x, y, map_width_);
-          occupancy_grid_msg_.data[temp_id] = 100 * (1.0 - 1.0 / (1.0 +
-                                                  exp(log_odds_array_(x, y))));
-        }
-      }
+      updateLogOddsArrayAndMapAsFree(x, y, end_point_index_m, update);
     }
   }
   else {
@@ -547,14 +548,7 @@ void GraphOptimiser::updateLogOdsWithBresenham(int x0, int y0, int x1, int y1,
         x += xstep;
         fraction -= twody;
       }
-      if (x != end_point_index_m[0] || y != end_point_index_m[1]){
-        log_odds_array_(x, y) += l_free_ - l_0_;
-        if (update){
-          unsigned int temp_id = mapIndexToId(x, y, map_width_);
-          occupancy_grid_msg_.data[temp_id] = 100 * (1.0 - 1.0 / (1.0 +
-                                                  exp(log_odds_array_(x, y))));
-        }
-      }
+      updateLogOddsArrayAndMapAsFree(x, y, end_point_index_m, update);
     }
   }
 }
@@ -709,10 +703,10 @@ void GraphOptimiser::drawMap(gtsam::Values& pose_estimates,
       }
 
       if (rear_scan){
-        updateLogOdsWithBresenham(rear_x0, rear_y0, x1, y1, end_point_index_m, false);
+        updateLogOddsWithBresenham(rear_x0, rear_y0, x1, y1, end_point_index_m, false);
       }
       else {
-        updateLogOdsWithBresenham(x0, y0, x1, y1, end_point_index_m, false);
+        updateLogOddsWithBresenham(x0, y0, x1, y1, end_point_index_m, false);
       }
     }
   }
@@ -882,10 +876,10 @@ void GraphOptimiser::updateMap(gtsam::Values& pose_estimates,
     }
 
     if (rear_scan){
-      updateLogOdsWithBresenham(rear_x0, rear_y0, x1, y1, end_point_index_m, true);
+      updateLogOddsWithBresenham(rear_x0, rear_y0, x1, y1, end_point_index_m, true);
     }
     else {
-      updateLogOdsWithBresenham(x0, y0, x1, y1, end_point_index_m, true);
+      updateLogOddsWithBresenham(x0, y0, x1, y1, end_point_index_m, true);
     }
   }
 }
@@ -1158,24 +1152,18 @@ void GraphOptimiser::scanCallback(
 
   // Get newest transform from odom to base_link for later use
   tf::StampedTransform odom_stamped_transform;
-  if (robot_name_ == "pioneer_sim"){
-    odom_listener_.waitForTransform("/base_link", "/odom",
-                                    ros::Time(0), ros::Duration(1.0));
-    odom_listener_.lookupTransform("/base_link", "/odom", ros::Time(0),
-                                   odom_stamped_transform);
+
+  const std::string kOdomTopic = "/odom";
+  ros::Duration kTFWait = ros::Duration(1.0);
+  std::string robot_base_topic = "/base_link";
+  if (robot_name_ == "pepper_real" || robot_name_ == "turtlebot_real"){
+    robot_base_topic = "/base_footprint";
   }
-  else if (robot_name_ == "pepper_real"){
-    odom_listener_.waitForTransform("/base_footprint", "/odom",
-                                    ros::Time(0), ros::Duration(1.0));
-    odom_listener_.lookupTransform("/base_footprint", "/odom", ros::Time(0),
-                                   odom_stamped_transform);
-  }
-  else if (robot_name_ == "turtlebot_real"){
-    odom_listener_.waitForTransform("/base_footprint", "/odom",
-                                    ros::Time(0), ros::Duration(1.0));
-    odom_listener_.lookupTransform("/base_footprint", "/odom", ros::Time(0),
-                                   odom_stamped_transform);
-  }
+  odom_listener_.waitForTransform(robot_base_topic, kOdomTopic,
+                                  ros::Time(0), kTFWait);
+  odom_listener_.lookupTransform(robot_base_topic, kOdomTopic, ros::Time(0),
+                                 odom_stamped_transform);
+
 
   tf::Transform odom_transform;
   odom_transform = static_cast<tf::Transform>(odom_stamped_transform);
