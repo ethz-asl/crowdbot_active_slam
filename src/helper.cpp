@@ -13,7 +13,7 @@ using namespace gtsam;
 /**
  *  A helper function which creates PoseStamped msg from Pose2.
  */
-geometry_msgs::PoseStamped pose2ToPoseStamped(Pose2 pose2){
+geometry_msgs::PoseStamped pose2ToPoseStamped(const Pose2& pose2){
   geometry_msgs::Point pose_position;
   pose_position.x = pose2.x();
   pose_position.y = pose2.y();
