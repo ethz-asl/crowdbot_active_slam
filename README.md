@@ -12,11 +12,14 @@ This repository contains tools for active SLAM in crowded environments. It conta
 
   This script will also remove a move_base installation, if there is one installed, as there has been found a bug, which is fixed in this [navigation](https://github.com/dmammolo/navigation) fork.
 
-2. Clone all packages listed in **Needed Packages**.
+2. Clone all packages listed in **Needed Packages**. You can do this using wstool.
 
-  - Make sure to checkout on devel branch for [naoqi_driver](https://github.com/danieldugas/naoqi_driver).
-  - Make sure to checkout on devel branch for [asl_pepper](https://github.com/ethz-asl/asl_pepper).
-  - Make sure to checkout on kinetic-devel branch for [navigation](https://github.com/dmammolo/navigation).
+  ```bash
+  cd src
+  wstool init
+  wstool merge crowdbot_active_slam/dependencies.rosinstall
+  wstool update
+  ```
 
 3. Install GTSAM library following the steps here [GTSAM 3.2.1](https://borg.cc.gatech.edu/download.html). (Only version 3.2.1 has been tested)
 

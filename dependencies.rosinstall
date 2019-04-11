@@ -1,0 +1,40 @@
+- git:
+   local-name: glog_catkin
+   uri: https://github.com/ethz-asl/glog_catkin.git
+   version: dcb4559
+- git:
+   local-name: plotty
+   uri: https://github.com/ethz-asl/plotty.git
+   version: 19d7e22
+- git:
+   local-name: gazebo_ros_2Dmap_plugin
+   uri: https://github.com/dmammolo/gazebo_ros_2Dmap_plugin.git
+   version: ed88bb7
+- git:
+   local-name: pioneer_description
+   uri: https://github.com/dmammolo/pioneer_description.git
+   version: abd0633
+- git:
+   local-name: navigation
+   uri: https://github.com/dmammolo/navigation.git
+   version: d60c02d
+- git:
+   local-name: naoqi_driver
+   uri: https://github.com/danieldugas/naoqi_driver.git
+   version: 4e03fa2
+- git:
+   local-name: asl_pepper
+   uri: https://github.com/ethz-asl/asl_pepper.git
+   version: 67fb4ff
+- git:
+   local-name: sick_scan
+   uri: https://github.com/SICKAG/sick_scan.git
+   version: a28cd18
+- git:
+   local-name: eigen_catkin
+   uri: https://github.com/ethz-asl/eigen_catkin.git
+   version: 00b5eb2
+- git:
+   local-name: catkin_simple
+   uri: https://github.com/catkin/catkin_simple.git
+   version: 0e62848
