@@ -1,0 +1,26 @@
+<?xml version="1.0"?>
+<launch>
+
+  <node pkg="laser_filters" type="scan_to_scan_filter_chain"
+      name="laser_filter_rear">
+    <rosparam command="load" file="$(find crowdbot_active_slam)/config/laser_filter.yaml" />
+    <remap from="scan" to="/sick_laser_rear/scan" />
+    <remap from="scan_filtered" to="/sick_laser_rear/scan_filtered" />
+  </node>
+
+  <node pkg="laser_filters" type="scan_to_scan_filter_chain"
+      name="laser_filter_front">
+    <rosparam command="load" file="$(find crowdbot_active_slam)/config/laser_filter.yaml" />
+    <remap from="scan" to="/sick_laser_front/scan" />
+    <remap from="scan_filtered" to="/sick_laser_front/scan_filtered" />
+  </node>
+
+  <node pkg="crowdbot_active_slam" type="combined_laser_scans" name="combined_laser_scans" output="screen">
+    <param name="front_scan_crop_angle_min" type="double" value="-1.75" />
+    <param name="front_scan_crop_angle_max" type="double" value="1.87" />
+    <param name="rear_scan_crop_angle_min" type="double" value="-2.2" />
+    <param name="rear_scan_crop_angle_max" type="double" value="2.2" />
+    <remap from="scan1" to="/sick_laser_front/scan_filtered"/>
+    <remap from="scan2" to="/sick_laser_rear/scan_filtered"/>
+  </node>
+</launch>

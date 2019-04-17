@@ -1,0 +1,17 @@
+<launch>
+  <arg name="dynamic" default="dynamic"/>
+  <node pkg="move_base_fork" type="move_base" respawn="false" name="move_base" output="screen">
+    <param name="base_local_planner" value="teb_local_planner/TebLocalPlannerROS"/>
+    <param name="controller_frequency" value="10"/>
+    <rosparam file="$(find crowdbot_active_slam)/nav/costmap_common_params_$(arg dynamic).yaml" command="load" ns="global_costmap"/>
+    <rosparam file="$(find crowdbot_active_slam)/nav/costmap_common_params_$(arg dynamic).yaml" command="load" ns="local_costmap"/>
+    <rosparam file="$(find crowdbot_active_slam)/nav/local_costmap_params.yaml" command="load"/>
+    <rosparam file="$(find crowdbot_active_slam)/nav/global_costmap_params.yaml" command="load"/>
+    <rosparam file="$(find crowdbot_active_slam)/nav/base_local_planner_params.yaml" command="load"/>
+    <remap from="map" to="occupancy_map"/>
+    <remap from="cmd_vel" to="mobile_base_controller/cmd_vel"/>
+    <remap from="odom" to="mobile_base_controller/odom"/>
+    <remap from="scan" to="base_scan"/>
+    <remap from="move_base/TebLocalPlannerROS/obstacles" to="static_scan_extractor/dyn_obstacles"/>
+  </node>
+</launch>

@@ -1,0 +1,17 @@
+<library path="lib/libgraph_optimisation_nodelet">
+  <class name="GraphOptimisationNodelet" type="GraphOptimisationNodelet"
+    base_class_type="nodelet::Nodelet">
+    <description>
+      Nodelet for graph optimisation.
+    </description>
+  </class>
+</library>
+
+<library path="lib/libstatic_scan_extractor_nodelet">
+  <class name="StaticScanExtractorNodelet" type="StaticScanExtractorNodelet"
+    base_class_type="nodelet::Nodelet">
+    <description>
+      Nodelet for static scan extractor.
+    </description>
+  </class>
+</library>

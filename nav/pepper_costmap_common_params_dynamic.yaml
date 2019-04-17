@@ -1,0 +1,7 @@
+obstacle_range: 14.5
+raytrace_range: 15.0
+robot_radius: 0.31
+inflation_radius: 1.55
+
+observation_sources: laser_scan_sensor
+laser_scan_sensor: {sensor_frame: sick_laser_front, data_type: LaserScan, topic: static_scan_extractor/static_scan, marking: true, clearing: true}
