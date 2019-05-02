@@ -232,17 +232,21 @@ void GraphOptimiser::initParams(){
   // Initialise noise on scan matching nodes for action path
   // Values are chosen empirical at noise std 0.01 of scans with adding some
   // safety margin (pepper at noise std 0.03)
+  Vector vec(3);
+  vec << 0.0000006, 0.0000006, 0.000000012;
   if (robot_name_ == "pioneer_sim"){
     average_scan_match_noise_ = noiseModel::Diagonal::Variances(
-                              (Vector(3) << 0.0000006, 0.0000006, 0.000000012));
+        vec);
   }
   else if (robot_name_ == "pepper_real"){
+    Vector vec(3);
+    vec << 0.00002, 0.00002, 0.0000002;
     average_scan_match_noise_ = noiseModel::Diagonal::Variances(
-                              (Vector(3) << 0.00002, 0.00002, 0.0000002));
+        vec);
   }
   else {
     average_scan_match_noise_ = noiseModel::Diagonal::Variances(
-                              (Vector(3) << 0.0000006, 0.0000006, 0.000000012));
+        vec);
   }
 
   // Parameter for utility computation of action path
@@ -1223,61 +1227,68 @@ void GraphOptimiser::scanCallback(
   }
 
   // Save scan match covariance for new node
+  Matrix mat(3,3);
+  mat <<
+       gsl_matrix_get(sm_frontend_output_.cov_x_m, 0, 0),
+       gsl_matrix_get(sm_frontend_output_.cov_x_m, 0, 1),
+       gsl_matrix_get(sm_frontend_output_.cov_x_m, 0, 2),
+       gsl_matrix_get(sm_frontend_output_.cov_x_m, 1, 0),
+       gsl_matrix_get(sm_frontend_output_.cov_x_m, 1, 1),
+       gsl_matrix_get(sm_frontend_output_.cov_x_m, 1, 2),
+       gsl_matrix_get(sm_frontend_output_.cov_x_m, 2, 0),
+       gsl_matrix_get(sm_frontend_output_.cov_x_m, 2, 1),
+       gsl_matrix_get(sm_frontend_output_.cov_x_m, 2, 2);
   noiseModel::Gaussian::shared_ptr temp_scan_match_noise =
     noiseModel::Gaussian::Covariance(
-       (Matrix(3, 3) << gsl_matrix_get(sm_frontend_output_.cov_x_m, 0, 0),
-                        gsl_matrix_get(sm_frontend_output_.cov_x_m, 0, 1),
-                        gsl_matrix_get(sm_frontend_output_.cov_x_m, 0, 2),
-                        gsl_matrix_get(sm_frontend_output_.cov_x_m, 1, 0),
-                        gsl_matrix_get(sm_frontend_output_.cov_x_m, 1, 1),
-                        gsl_matrix_get(sm_frontend_output_.cov_x_m, 1, 2),
-                        gsl_matrix_get(sm_frontend_output_.cov_x_m, 2, 0),
-                        gsl_matrix_get(sm_frontend_output_.cov_x_m, 2, 1),
-                        gsl_matrix_get(sm_frontend_output_.cov_x_m, 2, 2)));
+      mat);
 
-  // Check if it is the first scan
-  if (first_scan_pose_){
-    // if robot is in gazebo, take gazebo init pose for map
-    if (robot_name_ == "pioneer_sim") {
-      gazebo_msgs::GetModelState ground_truth_msg;
-      ground_truth_msg.request.model_name = "pioneer";
-      get_ground_truth_client_.call(ground_truth_msg);
-      tf::Quaternion ground_truth_orientation;
-      quaternionMsgToTF(ground_truth_msg.response.pose.orientation,
-                        ground_truth_orientation);
-      init_pose2_map_ = Pose2(ground_truth_msg.response.pose.position.x,
-                              ground_truth_msg.response.pose.position.y,
-                              tf::getYaw(ground_truth_orientation));
-    }
-    else if (robot_name_ == "pepper_real"){
-      init_pose2_map_ = Pose2(0.0, 0.0, 0.0);
-    }
-    else if (robot_name_ == "turtlebot_real"){
-      init_pose2_map_ = Pose2(0.0, 0.0, 0.0);
-    }
+// Check if it is the first scan
+if (first_scan_pose_){
+  // if robot is in gazebo, take gazebo init pose for map
+  if (robot_name_ == "pioneer_sim") {
+    gazebo_msgs::GetModelState ground_truth_msg;
+    ground_truth_msg.request.model_name = "pioneer";
+    get_ground_truth_client_.call(ground_truth_msg);
+    tf::Quaternion ground_truth_orientation;
+    quaternionMsgToTF(ground_truth_msg.response.pose.orientation,
+                      ground_truth_orientation);
+    init_pose2_map_ = Pose2(ground_truth_msg.response.pose.position.x,
+                            ground_truth_msg.response.pose.position.y,
+                            tf::getYaw(ground_truth_orientation));
+  }
+  else if (robot_name_ == "pepper_real"){
+    init_pose2_map_ = Pose2(0.0, 0.0, 0.0);
+  }
+  else if (robot_name_ == "turtlebot_real"){
+    init_pose2_map_ = Pose2(0.0, 0.0, 0.0);
+  }
 
-    // Initialise map to odom tf
-    tf::Transform init_tf;
-    init_tf.setOrigin(tf::Vector3(init_pose2_map_.x(), init_pose2_map_.y(), 0.0));
-    tf::Quaternion init_q;
-    init_q.setRPY(0.0, 0.0, init_pose2_map_.theta());
-    init_tf.setRotation(init_q);
-    map_to_odom_tf_ = init_tf;
-    map_br_.sendTransform(tf::StampedTransform(map_to_odom_tf_, ros::Time::now(),
-                          "map", "odom"));
+  // Initialise map to odom tf
+  tf::Transform init_tf;
+  init_tf.setOrigin(tf::Vector3(init_pose2_map_.x(), init_pose2_map_.y(), 0.0));
+  tf::Quaternion init_q;
+  init_q.setRPY(0.0, 0.0, init_pose2_map_.theta());
+  init_tf.setRotation(init_q);
+  map_to_odom_tf_ = init_tf;
+  map_br_.sendTransform(tf::StampedTransform(map_to_odom_tf_, ros::Time::now(),
+                        "map", "odom"));
 
-    // Create graph with first node
-    pose_estimates_.insert(node_counter_, init_pose2_map_);
-    new_estimates_ = pose_estimates_;
-    noiseModel::Diagonal::shared_ptr prior_noise =
-      noiseModel::Diagonal::Sigmas((Vector(3) << 0.001, 0.001, 0.0001));
-    graph_.add(PriorFactor<Pose2>(node_counter_, init_pose2_map_, prior_noise));
+  // Create graph with first node
+  pose_estimates_.insert(node_counter_, init_pose2_map_);
+  new_estimates_ = pose_estimates_;
+  Vector vec(3);
+  vec(0) = 0.001;
+  vec(1) = 0.001;
+  vec(2) = 0.0001;
+  noiseModel::Diagonal::shared_ptr prior_noise =
+    noiseModel::Diagonal::Sigmas(vec);
+  graph_.add(PriorFactor<Pose2>(node_counter_, init_pose2_map_, prior_noise));
 
-    // Save scan as keyframe scan
-    keyframe_ldp_vec_.push_back(current_ldp_);
+  // Save scan as keyframe scan
+  keyframe_ldp_vec_.push_back(current_ldp_);
 
-    Matrix initial_covariance(3, 3);
-    initial_covariance << 0.0000006, 0.0, 0.0,
+  Matrix initial_covariance(3, 3);
+  initial_covariance << 0.0000006, 0.0, 0.0,
                           0.0, 0.0000006, 0.0,
                           0.0, 0.0, 0.000000012;
     uncertainty_matrices_path_.push_back(initial_covariance);
@@ -1381,11 +1392,13 @@ void GraphOptimiser::scanCallback(
                               pose_diff_tf.getOrigin().getY(),
                               tf::getYaw(pose_diff_tf.getRotation()));
 
+                Vector vec(3);
+                vec <<
+                     gsl_matrix_get(sm_icp_result_.cov_x_m, 0, 0),
+                     gsl_matrix_get(sm_icp_result_.cov_x_m, 1, 1),
+                     gsl_matrix_get(sm_icp_result_.cov_x_m, 2, 2);
                 noiseModel::Diagonal::shared_ptr scan_match_noise =
-                  noiseModel::Diagonal::Variances(
-                      (Vector(3) << gsl_matrix_get(sm_icp_result_.cov_x_m, 0, 0),
-                                    gsl_matrix_get(sm_icp_result_.cov_x_m, 1, 1),
-                                    gsl_matrix_get(sm_icp_result_.cov_x_m, 2, 2)));
+                  noiseModel::Diagonal::Variances(vec);
 
                 // Add new factor between current_pose2_ and node i
                 graph_.add(BetweenFactor<Pose2>(node_counter_, i, lc_mean,
