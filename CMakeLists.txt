@@ -3,33 +3,9 @@ project(crowdbot_active_slam)
 
 find_package(catkin_simple 0.1.0 REQUIRED)
 catkin_simple(ALL_DEPS_REQUIRED)
-# find_package(catkin REQUIRED COMPONENTS
-#   roscpp
-#   roslib
-#   tf
-#   std_msgs
-#   sensor_msgs
-#   geometry_msgs
-#   gazebo_msgs
-#   nav_msgs
-#   cmake_modules
-#   message_generation
-#   pcl_ros
-#   laser_geometry)
-
-#find_package(GTSAM REQUIRED)
-# find_package(gtsam_catkin REQUIRED)
-# find_package(PCL REQUIRED QUIET)
-# find_package(PkgConfig REQUIRED)
-# find_package(Eigen3 REQUIRED)
-# find_package(plotty REQUIRED)
-# find_package(glog_catkin REQUIRED)
-include(FindPkgConfig)
-pkg_check_modules(csm REQUIRED csm)
-# find_package(OpenCV REQUIRED)
-# find_package(grid_map_ros REQUIRED)
 
 add_compile_options(-std=c++11)
+
 
 # let cmake find OpenMP and set some variables
 find_package(OpenMP REQUIRED)
@@ -39,36 +15,13 @@ if(OPENMP_FOUND)
   set(OpenMP_LIBRARIES gomp)
 endif()
 
+# csm is too old for catkin_simple
+include(FindPkgConfig)
+pkg_check_modules(csm REQUIRED csm)
 # csm libraries are installed in /opt/ros/kinetic , how to find them otherwise?
 link_directories(${csm_LIBRARY_DIRS})
-
-# add_service_files(
-#   FILES
-#   get_frontier_list.srv
-#   get_map.srv
-#   current_pose.srv
-#   service_call.srv
-#   utility_calc.srv
-# )
-# 
-# generate_messages(
-#   DEPENDENCIES
-#   std_msgs
-#   geometry_msgs
-#   nav_msgs
-# )
-
-# catkin_package(
-# INCLUDE_DIRS include
-# CATKIN_DEPENDS roscpp roslib tf std_msgs sensor_msgs geometry_msgs nav_msgs gazebo_ros pcl_ros nodelet message_runtime
-# DEPENDS EIGEN3 plotty OpenMP grid_map_ros)
-
-# include_directories(include ${catkin_INCLUDE_DIRS} ${csm_INCLUDE_DIRS}
-#                             ${EIGEN3_INCLUDE_DIRS} ${plotty_INCLUDE_DIRS}
-#                             ${GTSAM_INCLUDE_DIRS} 
-#                             ${OpenCV_INCLUDE_DIRS}
-#                             ${pcl_ros_INCLUDE_DIRS} ${glog_catkin_INCLUDE_DIRS}
-#                             ${grid_map_ros_INCLUDE_DIRS})
+# this adds /opt/ros/kinetic to the library directories, which might cause problems
+# as long as the catkin config extends /opt/ros/kinetic, should be ok.
 
 
 # Libraries
@@ -85,10 +38,6 @@ target_link_libraries(static_scan_extractor_lib ${csm_LIBRARIES} ObjectDetector 
 target_link_libraries(graph_optimisation_lib ${csm_LIBRARIES} )
 target_link_libraries(graph_optimisation_nodelet graph_optimisation_lib)
 target_link_libraries(static_scan_extractor_nodelet  static_scan_extractor_lib)
-
-# add dependencies to make sure that srv files are generated before used
-# add_dependencies(graph_optimisation_lib crowdbot_active_slam_generate_messages_cpp ${catkin_EXPORTED_TARGETS})
-# add_dependencies(static_scan_extractor_lib crowdbot_active_slam_generate_messages_cpp ${catkin_EXPORTED_TARGETS})
 
 
 # Executables
@@ -119,19 +68,6 @@ add_dependencies(frontier_exploration crowdbot_active_slam_generate_messages_cpp
 add_dependencies(decision_maker crowdbot_active_slam_generate_messages_cpp )
 
 
-
 cs_install()
 cs_export()
 
-# # Install
-# install(TARGETS graph_optimisation_nodelet static_scan_extractor_nodelet
-#         DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION})
-# 
-# #Install nodelet description
-# install(FILES nodelet_plugins.xml
-#     DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION})
-# 
-# install(DIRECTORY
-#   launch
-#   urdf
-#   DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION})
