@@ -14,12 +14,6 @@ pid="$pid $!"
 
 sleep 10s
 
-echo "Launching laser scan matcher..."
-roslaunch crowdbot_active_slam scan_matcher.launch &
-pid="$pid $!"
-
-sleep 2s
-
 echo "Launching factor graph SLAM system..."
 roslaunch crowdbot_active_slam graph_optimisation.launch &
 pid="$pid $!"
