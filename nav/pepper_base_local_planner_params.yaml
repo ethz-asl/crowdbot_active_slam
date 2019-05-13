@@ -42,7 +42,7 @@ TebLocalPlannerROS:
   # visualize_with_time_as_z_axis_scale: 0.1
   costmap_obstacles_behind_robot_dist: 3.0
   obstacle_poses_affected: 10
-  costmap_converter_plugin: ""
+  costmap_converter_plugin: "costmap_converter::CostmapToPolygonsDBSConcaveHull"
   costmap_converter_spin_thread: True
   costmap_converter_rate: 5
 
