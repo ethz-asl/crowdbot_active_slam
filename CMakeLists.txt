@@ -95,6 +95,7 @@ add_executable(decision_maker src/decision_maker.cpp)
 add_executable(combined_laser_scans src/combined_laser_scans.cpp)
 add_executable(pedestrian_simulator src/pedestrian_simulator.cpp)
 add_executable(static_scan_extractor src/static_scan_extractor.cpp)
+add_executable(remove_people_from_pcl src/remove_people_from_pcl)
 
 # add dependencies to make sure that srv files are generated before used
 add_dependencies(frontier_exploration crowdbot_active_slam_generate_messages_cpp ${catkin_EXPORTED_TARGETS})
@@ -109,6 +110,7 @@ target_link_libraries(combined_laser_scans ${catkin_LIBRARIES} ${pcl_ros_LIBRARI
 target_link_libraries(pedestrian_simulator ${catkin_LIBRARIES}
                       ${grid_map_ros_LIBRARIES} pedestrian utils)
 target_link_libraries(static_scan_extractor static_scan_extractor_lib)
+target_link_libraries(remove_people_from_pcl ${catkin_LIBRARIES} ${pcl_ros})
 
 # test scripts
 add_executable(plot_SDF test_results/scripts/plot_SDF.cpp)

@@ -1,0 +1,8 @@
+<launch>
+  <node name="remove_people_from_pcl" pkg="crowdbot_active_slam"
+        type="remove_people_from_pcl" output="screen">
+    <param name="pcl_callback_topic" value="/camera/depth/color/points"/>
+    <param name="obstacle_callback_topic" value="/static_scan_extractor/dyn_obstacles"/>
+    <param name="max_dist_from_robot" value="3.5"/>
+  </node>
+</launch>

@@ -830,9 +830,9 @@ void StaticScanExtractor::scanCallback
     costmap_converter::ObstacleArrayMsg dyn_obstacles;
     costmap_converter::ObstacleMsg obstacle;
     dyn_obstacles.header.frame_id = "map";
-    dyn_obstacles.header.stamp = ros::Time::now();
+    dyn_obstacles.header.stamp = scan_msg->header.stamp;
     obstacle.header.frame_id = "map";
-    obstacle.header.stamp = ros::Time::now();
+    obstacle.header.stamp = scan_msg->header.stamp;
 
     // Init obstacle values which stay constant
     tf::Quaternion quaternion;
