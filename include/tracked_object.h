@@ -30,6 +30,8 @@ public:
 
   void saveCluster(std::vector<geometry_msgs::Point> cluster);
 
+  void computeAverageSpeed(int averaging_size);
+
   // bool check_if_dynamic();
 
   // Variables
@@ -43,10 +45,14 @@ public:
   int velocity_counter;
   double x_vel_sum;
   double y_vel_sum;
+  double x_vel_av;
+  double y_vel_av;
 
 private:
   // State
   double x_, y_, x_vel_, y_vel_, x_acc_, y_acc_;
+  std::vector<double> x_vel_vec_;
+  std::vector<double> y_vel_vec_;
   std::vector<geometry_msgs::Point> prev_cluster_;
   std::vector<geometry_msgs::Point> current_cluster_;
 

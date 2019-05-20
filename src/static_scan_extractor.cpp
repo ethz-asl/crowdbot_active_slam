@@ -154,6 +154,7 @@ StaticScanExtractor::StaticScanExtractor
   unknown_objects_pub_ = nh_.advertise<nav_msgs::GridCells>("unknown_objects", 1);
   debug_scan_pub_ = nh_.advertise<nav_msgs::GridCells>("debug_scans", 1);
   dyn_obstacles_pub_ = nh_.advertise<costmap_converter::ObstacleArrayMsg>("dyn_obstacles", 1);
+  vel_ellipse_pub_ = nh_.advertise<visualization_msgs::MarkerArray>("velocity_ellipses", 1);
 
   // Service
   get_current_pose_client_ = nh_.serviceClient<crowdbot_active_slam::current_pose>
@@ -497,6 +498,14 @@ void StaticScanExtractor::scanCallback
 
     // Check if cluster already tracked, if not new track
     if (!tracked_objects_.empty()){
+      // Init MarkerArray for visulaization of velocity ellipses
+      visualization_msgs::MarkerArray velocity_ellipses;
+
+      // First delete old markers
+      visualization_msgs::Marker velocity_ellipse;
+      velocity_ellipse.action = 3;
+      velocity_ellipses.markers.push_back(velocity_ellipse);
+
       for (int i = 0; i < tracked_objects_.size(); i++){
         // Init leg merge vector
         std::vector<int> leg_merge_ids;
@@ -512,6 +521,17 @@ void StaticScanExtractor::scanCallback
         double distance = 10;
         std::vector<geometry_msgs::Point> all_means = free_means_;
         all_means.insert(all_means.end(), occluded_means_.begin(), occluded_means_.end());
+
+        // Init velocity depndent ellipse
+        double b = 0.35;
+        double v_norm = 0.5;
+        double angle_temp = atan(tracked_objects_[i].y_vel_av /
+                                 tracked_objects_[i].x_vel_av);
+        double v = sqrt(pow(tracked_objects_[i].x_vel_av, 2) +
+                        pow(tracked_objects_[i].y_vel_av, 2));
+        double a = b * (1 + v / v_norm);
+        b = b * (1 + v / (5 * v_norm));
+
         for (size_t j = 0; j < all_means.size(); j++){
           // Check distance (later try mahalanobis)
           double temp_distance =
@@ -524,18 +544,10 @@ void StaticScanExtractor::scanCallback
           }
           if (tracked_objects_[i].dynamic_or_static == "dynamic" && temp_distance < 1){
             // Check if cluster is in velocity dependent ellipse
-            double b = 0.35;
-            double v_norm = 0.8;
-            double angle_temp = atan(tracked_objects_[i].state_mean[3] /
-                                     tracked_objects_[i].state_mean[2]);
-            double v = sqrt(pow(tracked_objects_[i].state_mean[2], 2) +
-                            pow(tracked_objects_[i].state_mean[3], 2));
-            double a = b * (1 + v / v_norm);
-            b = b * (1 + v / (10 * v_norm));
             tf::Transform cluster_temp = xythetaToTF(all_means[j].x - tracked_objects_[i].state_mean[0],
                                                      all_means[j].y - tracked_objects_[i].state_mean[1],
                                                      0);
-            tf::Transform rotation_tf = xythetaToTF(0, 0, angle_temp);
+            tf::Transform rotation_tf = xythetaToTF(0, 0, -angle_temp);
             cluster_temp = rotation_tf * cluster_temp;
 
             double value = pow(cluster_temp.getOrigin().getX(), 2) / pow(a, 2) +
@@ -543,8 +555,35 @@ void StaticScanExtractor::scanCallback
 
             if (value <= 1){
               leg_merge_ids.push_back(j);
+              id = j; // For the case the first check fails
             }
           }
+        }
+
+        // Publish velocity depndent ellipse
+        if (tracked_objects_[i].dynamic_or_static == "dynamic"){
+          visualization_msgs::Marker velocity_ellipse;
+          velocity_ellipse.header.frame_id = "map";
+          velocity_ellipse.header.stamp = ros::Time();
+          velocity_ellipse.ns = "velocity_ellipse";
+          velocity_ellipse.id = i;
+          velocity_ellipse.type = visualization_msgs::Marker::CYLINDER;
+          velocity_ellipse.action = visualization_msgs::Marker::ADD;
+          velocity_ellipse.pose.position.x = tracked_objects_[i].state_mean[0];
+          velocity_ellipse.pose.position.y = tracked_objects_[i].state_mean[1];
+          velocity_ellipse.pose.position.z = 0;
+          geometry_msgs::Quaternion pose_orientation;
+          quaternionTFToMsg(tf::createQuaternionFromRPY(0, 0, angle_temp),
+                            pose_orientation);
+          velocity_ellipse.pose.orientation = pose_orientation;
+          velocity_ellipse.scale.x = 2 * a;
+          velocity_ellipse.scale.y = 2 * b;
+          velocity_ellipse.scale.z = 0.05;
+          velocity_ellipse.color.a = 0.2;
+          velocity_ellipse.color.r = 0.5;
+          velocity_ellipse.color.g = 0.5;
+          velocity_ellipse.color.b = 0.0;
+          velocity_ellipses.markers.push_back(velocity_ellipse);
         }
 
         // Check size of leg clusters to merge and merge then
@@ -742,6 +781,8 @@ void StaticScanExtractor::scanCallback
             free_cluster_vectors_.erase(free_cluster_vectors_.begin() + id);
             free_means_.erase(free_means_.begin() + id);
           }
+          // Update velocity averages
+          tracked_objects_[i].computeAverageSpeed(10);
         } // (id != -1)
         else {
           // Remove track if untracked for longer time
@@ -752,6 +793,9 @@ void StaticScanExtractor::scanCallback
             // acceleration because of occlusion.
             tracked_objects_[i].state_mean[4] = 0;
             tracked_objects_[i].state_mean[5] = 0;
+
+            // Update velocity averages
+            tracked_objects_[i].computeAverageSpeed(10);
           }
           else {
             tracked_objects_.erase(tracked_objects_.begin() + i);
@@ -759,6 +803,8 @@ void StaticScanExtractor::scanCallback
           }
         }
       }
+      // Publish velocity ellipses
+      vel_ellipse_pub_.publish(velocity_ellipses);
     }
 
     // Generate new tracks for all unassigned measurements

@@ -31,6 +31,8 @@ TrackedObject::TrackedObject(double x, double y){
   velocity_counter = 0;
   x_vel_sum = 0;
   y_vel_sum = 0;
+  x_vel_av = 0;
+  y_vel_av = 0;
 }
 
 TrackedObject::~TrackedObject(){}
@@ -44,4 +46,23 @@ void TrackedObject::saveCluster(std::vector<geometry_msgs::Point> cluster){
     prev_cluster_ = current_cluster_;
     current_cluster_ = cluster;
   }
+}
+
+void TrackedObject::computeAverageSpeed(int averaging_size){
+  x_vel_vec_.push_back(state_mean[2]);
+  y_vel_vec_.push_back(state_mean[3]);
+  // Pop first element
+  if (x_vel_vec_.size() > averaging_size){
+    x_vel_vec_.erase(x_vel_vec_.begin());
+    y_vel_vec_.erase(y_vel_vec_.begin());
+  }
+
+  x_vel_av = 0;
+  y_vel_av = 0;
+  for (size_t i = 0; i < x_vel_vec_.size(); i++){
+    x_vel_av += x_vel_vec_[i];
+    y_vel_av += y_vel_vec_[i];
+  }
+  x_vel_av /= x_vel_vec_.size();
+  y_vel_av /= x_vel_vec_.size();
 }

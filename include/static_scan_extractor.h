@@ -22,6 +22,7 @@
 #include <costmap_converter/ObstacleMsg.h>
 #include <costmap_converter/ObstacleArrayMsg.h>
 #include <visualization_msgs/Marker.h>
+#include <visualization_msgs/MarkerArray.h>
 #include <message_filters/subscriber.h>
 #include <message_filters/time_synchronizer.h>
 #include <message_filters/sync_policies/approximate_time.h>
@@ -105,6 +106,7 @@ private:
   ros::Publisher unknown_objects_pub_;
   ros::Publisher debug_scan_pub_;
   ros::Publisher dyn_obstacles_pub_;
+  ros::Publisher vel_ellipse_pub_;
 
   // ROS msgs
   sensor_msgs::LaserScan init_scan_;

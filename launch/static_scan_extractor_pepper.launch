@@ -13,7 +13,7 @@
     <param name="association_radius" value="0.3"/>
     <param name="unknown_since_threshold" value="15"/>
     <param name="static_size_threshold" value="0.7"/>
-    <param name="dynamic_vel_threshold" value="0.1"/>
+    <param name="dynamic_vel_threshold" value="0.2"/>
     <param name="not_seen_threshold" value="5"/>
     <param name="upsampling_factor" value="3"/>
     <param name="static_cell_range" value="2"/>

@@ -88,7 +88,7 @@ void RemovePeopleFromPCL::pclCallback(const sensor_msgs::PointCloud2::ConstPtr& 
       {
         if (pow(transformed_pcl->points[j].x - obstacle_msg->obstacles[i].polygon.points[0].x, 2)
           + pow(transformed_pcl->points[j].y - obstacle_msg->obstacles[i].polygon.points[0].y, 2)
-          < 0.5 * 0.5)
+          < 0.8 * 0.8)
         {
           indices->indices.push_back(j);
         }
