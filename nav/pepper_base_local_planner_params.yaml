@@ -9,8 +9,8 @@ TebLocalPlannerROS:
   dt_hysteresis: 0.1
   global_plan_overwrite_orientation: True
   max_global_plan_lookahead_dist: 3.0
-  feasibility_check_no_poses: 2
-  global_plan_viapoint_sep: 1.0
+  feasibility_check_no_poses: 3
+  global_plan_viapoint_sep: -1.0
 
   # Robot
 
@@ -24,7 +24,7 @@ TebLocalPlannerROS:
   min_turning_radius: 0.0
   footprint_model: # types: "point", "circular", "two_circles", "line", "polygon"
     type: "circular"
-    radius: 0.33
+    radius: 0.21
 
   # GoalTolerance
 
@@ -34,15 +34,17 @@ TebLocalPlannerROS:
 
   # Obstacles
 
-  min_obstacle_dist: 0.07
-  inflation_dist: 1.0
+  min_obstacle_dist: 0.05
+  inflation_dist: 0.5
   dynamic_obstacle_inflation_dist: 0.6
   include_costmap_obstacles: True
   include_dynamic_obstacles: True
+  obstacle_association_force_inclusion_factor: 10
+  obstacle_association_cutoff_factor: 20
   # visualize_with_time_as_z_axis_scale: 0.1
   costmap_obstacles_behind_robot_dist: 3.0
   obstacle_poses_affected: 10
-  costmap_converter_plugin: "costmap_converter::CostmapToPolygonsDBSConcaveHull"
+  costmap_converter_plugin: "costmap_converter::CostmapToLinesDBSMCCH"
   costmap_converter_spin_thread: True
   costmap_converter_rate: 5
 
@@ -72,7 +74,7 @@ TebLocalPlannerROS:
   enable_homotopy_class_planning: True
   enable_multithreading: True
   simple_exploration: False
-  max_number_classes: 3
+  max_number_classes: 1
   roadmap_graph_no_samples: 15
   roadmap_graph_area_width: 5
   h_signature_prescaler: 0.5
