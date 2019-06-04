@@ -14,3 +14,10 @@ scan_filter_chain:
         params:
           number_of_observations: 5
           unused: 10
+- name: shadows
+  type: ScanShadowsFilter
+  params:
+    min_angle: 1
+    max_angle: 179
+    neighbors: 1
+    window: 1
