@@ -18,12 +18,13 @@
 #include <tf/transform_listener.h>
 #include <costmap_converter/ObstacleMsg.h>
 #include <costmap_converter/ObstacleArrayMsg.h>
+#include <nav_msgs/GridCells.h>
 
 #include <message_filters/subscriber.h>
 #include <message_filters/time_synchronizer.h>
 #include <message_filters/sync_policies/approximate_time.h>
 typedef message_filters::sync_policies::ApproximateTime
-  <sensor_msgs::PointCloud2, costmap_converter::ObstacleArrayMsg> SyncPolicy;
+  <sensor_msgs::PointCloud2, costmap_converter::ObstacleArrayMsg, nav_msgs::GridCells> SyncPolicy;
 
 
 class RemovePeopleFromPCL
@@ -43,7 +44,8 @@ public:
    *  A PointCloud2/pcl callback
    */
   void pclCallback(const sensor_msgs::PointCloud2::ConstPtr& pcl_msg,
-                   const costmap_converter::ObstacleArrayMsg::ConstPtr& obstacle_msg);
+                   const costmap_converter::ObstacleArrayMsg::ConstPtr& obstacle_msg,
+                   const nav_msgs::GridCells::ConstPtr& unknown_msg);
 
 private:
   // Node handler
@@ -53,6 +55,7 @@ private:
   // Time syncronizer subscriber
   message_filters::Subscriber<sensor_msgs::PointCloud2> *pcl_sub_;
   message_filters::Subscriber<costmap_converter::ObstacleArrayMsg> *obstacle_sub_;
+  message_filters::Subscriber<nav_msgs::GridCells> *unknown_sub_;
   message_filters::Synchronizer<SyncPolicy> *sync_;
 
   // Publisher
@@ -61,6 +64,7 @@ private:
   // Parameters
   std::string pcl_callback_topic_;
   std::string obstacle_callback_topic_;
+  std::string unknown_callback_topic_;
   float max_dist_from_robot_;
   float sq_max_dist_from_robot_;
 

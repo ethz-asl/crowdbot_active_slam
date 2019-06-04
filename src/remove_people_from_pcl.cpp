@@ -17,6 +17,8 @@ RemovePeopleFromPCL::RemovePeopleFromPCL(ros::NodeHandle nh, ros::NodeHandle nh_
                                                   "/camera/depth/color/points");
   nh_private_.param<std::string>("obstacle_callback_topic",
               obstacle_callback_topic_, "/static_scan_extractor/dyn_obstacles");
+  nh_private_.param<std::string>("unknown_callback_topic",
+              unknown_callback_topic_, "/static_scan_extractor/unknown_objects");
   nh_private_.param<float>("max_dist_from_robot", max_dist_from_robot_, 3.5);
   sq_max_dist_from_robot_ = pow(max_dist_from_robot_, 2);
 
@@ -28,9 +30,11 @@ RemovePeopleFromPCL::RemovePeopleFromPCL(ros::NodeHandle nh, ros::NodeHandle nh_
                                                 (nh_, pcl_callback_topic_, 10);
   obstacle_sub_ = new message_filters::Subscriber<costmap_converter::ObstacleArrayMsg>
                                             (nh_, obstacle_callback_topic_, 10);
+  unknown_sub_ = new message_filters::Subscriber<nav_msgs::GridCells>
+                                            (nh_, unknown_callback_topic_, 10);
   int q = 10; // queue size
-  sync_ = new message_filters::Synchronizer<SyncPolicy>(SyncPolicy(q), *pcl_sub_, *obstacle_sub_);
-  sync_->registerCallback(boost::bind(&RemovePeopleFromPCL::pclCallback, this, _1, _2));
+  sync_ = new message_filters::Synchronizer<SyncPolicy>(SyncPolicy(q), *pcl_sub_, *obstacle_sub_, *unknown_sub_);
+  sync_->registerCallback(boost::bind(&RemovePeopleFromPCL::pclCallback, this, _1, _2, _3));
   ros::Duration(1.0).sleep();
 }
 
@@ -38,11 +42,13 @@ RemovePeopleFromPCL::~RemovePeopleFromPCL()
 {
   delete pcl_sub_;
   delete obstacle_sub_;
+  delete unknown_sub_;
   delete sync_;
 }
 
 void RemovePeopleFromPCL::pclCallback(const sensor_msgs::PointCloud2::ConstPtr& pcl_msg,
-                                      const costmap_converter::ObstacleArrayMsg::ConstPtr& obstacle_msg)
+                                      const costmap_converter::ObstacleArrayMsg::ConstPtr& obstacle_msg,
+                                      const nav_msgs::GridCells::ConstPtr& unknown_msg)
 {
   sensor_msgs::PointCloud2 transformed_pcl2;
   const std::string map_frame = "/map";
@@ -88,6 +94,35 @@ void RemovePeopleFromPCL::pclCallback(const sensor_msgs::PointCloud2::ConstPtr& 
       {
         if (pow(transformed_pcl->points[j].x - obstacle_msg->obstacles[i].polygon.points[0].x, 2)
           + pow(transformed_pcl->points[j].y - obstacle_msg->obstacles[i].polygon.points[0].y, 2)
+          < 0.8 * 0.8)
+        {
+          indices->indices.push_back(j);
+        }
+      }
+      extract.setInputCloud(transformed_pcl);
+      extract.setIndices(indices);
+      extract.setNegative(true);
+      extract.filter(*transformed_pcl);
+    }
+  }
+  for (size_t i = 0; i < unknown_msg->cells.size(); i++)
+  {
+    float sq_dist_to_robot = pow(map_to_cam_tf.getOrigin().getX() -
+                              unknown_msg->cells[i].x, 2)
+                           + pow(map_to_cam_tf.getOrigin().getY() -
+                              unknown_msg->cells[i].y, 2);
+
+    // Check if obstacle is close enough to be considered
+    if (sq_dist_to_robot < sq_max_dist_from_robot_)
+    {
+      // Extract indices
+      pcl::PointIndices::Ptr indices(new pcl::PointIndices());
+      pcl::ExtractIndices<pcl::PointXYZ> extract;
+
+      for (size_t j = 0; j < (*transformed_pcl).size(); j++)
+      {
+        if (pow(transformed_pcl->points[j].x - unknown_msg->cells[i].x, 2)
+          + pow(transformed_pcl->points[j].y - unknown_msg->cells[i].y, 2)
           < 0.8 * 0.8)
         {
           indices->indices.push_back(j);
