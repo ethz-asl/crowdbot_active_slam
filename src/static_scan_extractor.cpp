@@ -891,14 +891,17 @@ void StaticScanExtractor::scanCallback
 
     // Publish means of tracked objects as grid cells
     nav_msgs::GridCells moving_objects_msg;
+    moving_objects_msg.header.stamp = scan_msg->header.stamp;
     moving_objects_msg.header.frame_id = "map";
     moving_objects_msg.cell_width = 0.2;
     moving_objects_msg.cell_height = 0.2;
     nav_msgs::GridCells static_objects_msg;
+    static_objects_msg.header.stamp = scan_msg->header.stamp;
     static_objects_msg.header.frame_id = "map";
     static_objects_msg.cell_width = 0.2;
     static_objects_msg.cell_height = 0.2;
     nav_msgs::GridCells unknown_objects_msg;
+    unknown_objects_msg.header.stamp = scan_msg->header.stamp;
     unknown_objects_msg.header.frame_id = "map";
     unknown_objects_msg.cell_width = 0.2;
     unknown_objects_msg.cell_height = 0.2;
