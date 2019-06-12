@@ -921,8 +921,8 @@ void StaticScanExtractor::scanCallback
         point.z = temp_point.z;
         obstacle.polygon.points.push_back(point);
 
-        obstacle.velocities.twist.linear.x = tracked_objects_[i].state_mean[2];
-        obstacle.velocities.twist.linear.y = tracked_objects_[i].state_mean[3];
+        obstacle.velocities.twist.linear.x = tracked_objects_[i].x_vel_av;
+        obstacle.velocities.twist.linear.y = tracked_objects_[i].y_vel_av;
 
         dyn_obstacles.obstacles.push_back(obstacle);
         obstacle.polygon.points.pop_back();
