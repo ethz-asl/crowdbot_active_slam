@@ -17,7 +17,7 @@
     <param name="not_seen_threshold" value="5"/>
     <param name="upsampling_factor" value="3"/>
     <param name="static_cell_range" value="2"/>
-    <param name="min_cluster_size_for_moving" value="5"/>
+    <param name="min_cluster_size_for_moving" value="4"/>
     <param name="min_velocity_count" value="8"/>
     <param name="scan_callback_topic" value="$(arg scan_topic)"/>
   </node>

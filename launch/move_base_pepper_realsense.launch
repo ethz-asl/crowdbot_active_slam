@@ -2,7 +2,7 @@
   <arg name="dynamic" default="dynamic"/>
   <node pkg="move_base_fork" type="move_base" respawn="false" name="move_base" output="screen">
     <param name="base_local_planner" value="teb_local_planner/TebLocalPlannerROS"/>
-    <param name="controller_frequency" value="10"/>
+    <param name="controller_frequency" value="5"/>
     <rosparam file="$(find crowdbot_active_slam)/nav/pepper_realsense_costmap_common_params_$(arg dynamic).yaml" command="load" ns="global_costmap"/>
     <rosparam file="$(find crowdbot_active_slam)/nav/pepper_realsense_costmap_common_params_$(arg dynamic).yaml" command="load" ns="local_costmap"/>
     <rosparam file="$(find crowdbot_active_slam)/nav/pepper_local_costmap_params.yaml" command="load"/>
