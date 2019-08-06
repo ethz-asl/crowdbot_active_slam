@@ -118,6 +118,17 @@ void GraphOptimiser::initParams(){
         ROS_WARN("Could not get initial transform from base to laser frame, %s", ex.what());
       }
     }
+    else if (robot_name_ == "scientifica"){
+      try {
+        got_transform = base_to_laser_listener_.waitForTransform("robot_1/base_link",
+                          "robot_1/laser", ros::Time(0), ros::Duration(1.0));
+        base_to_laser_listener_.lookupTransform("robot_1/base_link", "robot_1/laser",
+                                               ros::Time(0), base_to_laser_tf_);
+      }
+      catch (tf::TransformException ex){
+        ROS_WARN("Could not get initial transform from base to laser frame, %s", ex.what());
+      }
+    }
   }
 
   base_to_laser_ = base_to_laser_tf_;
@@ -237,6 +248,10 @@ void GraphOptimiser::initParams(){
                               (Vector(3) << 0.0000006, 0.0000006, 0.000000012));
   }
   else if (robot_name_ == "pepper_real"){
+    average_scan_match_noise_ = noiseModel::Diagonal::Variances(
+                              (Vector(3) << 0.00002, 0.00002, 0.0000002));
+  }
+  else if (robot_name_ == "scientifica"){
     average_scan_match_noise_ = noiseModel::Diagonal::Variances(
                               (Vector(3) << 0.00002, 0.00002, 0.0000002));
   }
@@ -613,6 +628,11 @@ void GraphOptimiser::drawMap(gtsam::Values& pose_estimates,
     for (int j = 0; j < keyframe_ldp_vec[i]->nrays; j++){
       double reading = keyframe_ldp_vec[i]->readings[j];
 
+      if (robot_name_ == "scientifica" && reading == -1)
+      {
+        reading = 0;
+      }
+
       if (reading == 0) {
         continue;
       }
@@ -775,6 +795,11 @@ void GraphOptimiser::updateMap(gtsam::Values& pose_estimates,
   // Loop over each ray of the scan
   for (int j = 0; j < keyframe_ldp_vec[i]->nrays; j++){
     double reading = keyframe_ldp_vec[i]->readings[j];
+
+    if (robot_name_ == "scientifica" && reading == -1)
+    {
+      reading = 0;
+    }
 
     if (reading == 0) {
       continue;
@@ -1128,8 +1153,14 @@ void GraphOptimiser::scanCallback(
     ROS_WARN("Static_scan_extractor took too long, skipping this scan!");
     std::cout << ros::Time::now() << std::endl;
     std::cout << scan_msg->header.stamp << std::endl;
-    map_br_.sendTransform(tf::StampedTransform(map_to_odom_tf_, scan_msg->header.stamp,
-                        "map", "odom"));
+    if (robot_name_ != "scientifica"){
+      map_br_.sendTransform(tf::StampedTransform(map_to_odom_tf_, scan_msg->header.stamp,
+                          "map", "odom"));
+    }
+    else {
+      map_br_.sendTransform(tf::StampedTransform(map_to_odom_tf_, scan_msg->header.stamp,
+                          "map", "robot_1/odom"));
+    }
     return;
   }
   // First scan intialisation
@@ -1153,11 +1184,16 @@ void GraphOptimiser::scanCallback(
   // Get newest transform from odom to base_link for later use
   tf::StampedTransform odom_stamped_transform;
 
-  const std::string kOdomTopic = "/odom";
+  std::string kOdomTopic;
   ros::Duration kTFWait = ros::Duration(1.0);
   std::string robot_base_topic = "/base_link";
   if (robot_name_ == "pepper_real" || robot_name_ == "turtlebot_real"){
+    kOdomTopic = "odom";
     robot_base_topic = "/base_footprint";
+  }
+  else if (robot_name_ == "scientifica"){
+    kOdomTopic = "robot_1/odom";
+    robot_base_topic = "robot_1/base_link";
   }
   odom_listener_.waitForTransform(robot_base_topic, kOdomTopic,
                                   ros::Time(0), kTFWait);
@@ -1255,6 +1291,9 @@ void GraphOptimiser::scanCallback(
     else if (robot_name_ == "turtlebot_real"){
       init_pose2_map_ = Pose2(0.0, 0.0, 0.0);
     }
+    else if (robot_name_ == "scientifica"){
+      init_pose2_map_ = Pose2(0.0, 0.4, 0.0);
+    }
 
     // Initialise map to odom tf
     tf::Transform init_tf;
@@ -1263,8 +1302,14 @@ void GraphOptimiser::scanCallback(
     init_q.setRPY(0.0, 0.0, init_pose2_map_.theta());
     init_tf.setRotation(init_q);
     map_to_odom_tf_ = init_tf;
-    map_br_.sendTransform(tf::StampedTransform(map_to_odom_tf_, ros::Time::now(),
+    if (robot_name_ != "scientifica"){
+      map_br_.sendTransform(tf::StampedTransform(map_to_odom_tf_, scan_msg->header.stamp,
                           "map", "odom"));
+    }
+    else {
+      map_br_.sendTransform(tf::StampedTransform(map_to_odom_tf_, scan_msg->header.stamp,
+                          "map", "robot_1/odom"));
+    }
 
     // Create graph with first node
     pose_estimates_.insert(node_counter_, init_pose2_map_);
@@ -1478,8 +1523,14 @@ void GraphOptimiser::scanCallback(
 
   // Update map to odom tf
   if (new_node_){
-    map_br_.sendTransform(tf::StampedTransform(map_to_odom_tf_, scan_msg->header.stamp,
-                        "map", "odom"));
+    if (robot_name_ != "scientifica"){
+      map_br_.sendTransform(tf::StampedTransform(map_to_odom_tf_, scan_msg->header.stamp,
+                          "map", "odom"));
+    }
+    else {
+      map_br_.sendTransform(tf::StampedTransform(map_to_odom_tf_, scan_msg->header.stamp,
+                          "map", "robot_1/odom"));
+    }
     corr_ch_l_ = xythetaToTF(0, 0, 0);
     new_node_ = false;
 
@@ -1513,8 +1564,14 @@ void GraphOptimiser::scanCallback(
 
     map_to_odom_tf_ = last_pose_tf * odom_transform;
 
-    map_br_.sendTransform(tf::StampedTransform(map_to_odom_tf_, scan_msg->header.stamp,
-                        "map", "odom"));
+    if (robot_name_ != "scientifica"){
+      map_br_.sendTransform(tf::StampedTransform(map_to_odom_tf_, scan_msg->header.stamp,
+                          "map", "odom"));
+    }
+    else {
+      map_br_.sendTransform(tf::StampedTransform(map_to_odom_tf_, scan_msg->header.stamp,
+                          "map", "robot_1/odom"));
+    }
   }
 
   // Calculate first Map
