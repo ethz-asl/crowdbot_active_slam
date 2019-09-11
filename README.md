@@ -82,6 +82,14 @@ This package contains a nodelet implementation, but is currently not running wit
 
 The [gazebo_ros_2Dmap_plugin](https://github.com/dmammolo/gazebo_ros_2Dmap_plugin) is a plugin, which can be used to extract the groundtruth map of asimulation world.
 
+## Stable Branches and Extensions
+
+- A stable version of this repository can be found on the master branch.
+
+- There exists a branch **feature/realsense_integration** where the software has been extended to be used with an Intel Realsense D435\. You might need to install additional software such as the camera drivers to use this branch. This branch might be unstable and might need some adaptations. Although these facts, this branch has some essential improvements such as a better behavior of the local planner. It might be worth it to build on top of this branch if you plan to use this repository in future.
+
+- Branch **feature/scientifica_map_generation** has some adaptations to the code such that it could be used for the robots used at the Scientifica 2019 to generate a map only using 2D laser scans. This branch might still have some bugs and is not recommended to be used if not needed.
+
 ## Known issues
 
 - GTSAM 3.2.1 boost issue. If you have an issue building or using GTSAM, you may need to adapt some files:
@@ -101,5 +109,3 @@ The [gazebo_ros_2Dmap_plugin](https://github.com/dmammolo/gazebo_ros_2Dmap_plugi
 - Installing cartographer ros forces installing protobuf >v3.4.1\. This is not compatible with gazebo_ros and can cause problems when building this packages used here, e.g. gazebo_ros_2Dmap_plugin.
 
 - If you want to move peppers head with the joystick you will need to add the naoqi SDK to your python path.
-
-(Last update: 22.03.2019)
