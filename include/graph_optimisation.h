@@ -11,6 +11,7 @@
 #include <fstream>
 #include <ctime>
 #include <boost/thread/thread.hpp>
+#include <Eigen/Dense>
 
 #include <ros/ros.h>
 #include <ros/package.h>
